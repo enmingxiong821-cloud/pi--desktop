@@ -327,7 +327,7 @@ interface PanelApi {
   removeSkill(input: { scope: 'user' | 'project'; cwd?: string; name: string }): Promise<{ ok: boolean; path?: string; error?: string }>;
   addMcp(input: { scope: 'user' | 'project'; cwd?: string; name: string; command: string; argsText?: string; envText?: string; category?: string; tags?: string[]; source?: string }): Promise<{ ok: boolean; path?: string; error?: string }>;
   listAgents(refresh?: boolean): Promise<{ ok: boolean; agents?: AgentInfo[]; error?: string }>;
-  runTeam(input: { task: string; agentIds: string[]; mode: 'parallel' | 'supervisor'; supervisorId?: string; cwd?: string; apps?: string[]; webSearch?: boolean }): Promise<{ ok: boolean; summaries: Array<{ agentId: string; ok: boolean; text: string }>; error?: string }>;
+  runTeam(input: { task: string; agentIds: string[]; mode: 'parallel' | 'supervisor'; supervisorId?: string; cwd?: string; apps?: string[]; webSearch?: boolean }): Promise<{ ok: boolean; supervisorId?: string; summaries: Array<{ agentId: string; ok: boolean; text: string }>; error?: string }>;
   suggestTeam(task: string, cwd?: string): Promise<{ taskKind: string; members: string[]; supervisorId: string; reason: string }>;
   installAgent(agentId: string): Promise<{ ok: boolean; agentId: string; output: string; error?: string }>;
   openAgentApp(agentId: string, cwd?: string): Promise<{ ok: boolean; error?: string }>;
@@ -2357,6 +2357,13 @@ export function initPanels(deps: PanelDeps): PanelsController {
   const teamAgents = $('team-agents');
   const teamStatus = $('team-status');
   const teamLog = $('team-log-live');
+  const teamVisual = $('team-visual');
+  const teamVisualState = $('team-visual-state');
+  const teamSupervisorNode = $('team-supervisor-node');
+  const teamWorkerNodes = $('team-worker-nodes');
+  const teamFlow = $('team-flow');
+  const teamPlan = $('team-plan');
+  const teamPlanText = $<HTMLPreElement>('team-plan-text');
   const teamTask = $<HTMLTextAreaElement>('team-task');
   const teamEmpty = $('team-log-empty');
   const supervisorSelect = $<HTMLSelectElement>('team-supervisor');
@@ -2366,6 +2373,113 @@ export function initPanels(deps: PanelDeps): PanelsController {
   let selectedAgents = new Set<string>();
   let agentsLoaded = false;
   let teamRunning = false;
+  let chartSupervisorId = '';
+  let chartSupervisorDone = 0;
+  let chartPlan = '';
+  let chartPhase: 'idle' | 'plan' | 'dispatch' | 'execute' | 'summary' | 'done' | 'failed' = 'idle';
+
+  function teamAgent(id: string): AgentInfo | undefined {
+    return agentCache.find((agent) => agent.id === id);
+  }
+
+  function teamFlowStep(phase: typeof chartPhase): void {
+    chartPhase = phase;
+    const order = ['plan', 'dispatch', 'execute', 'summary'];
+    const reached = order.indexOf(phase === 'done' || phase === 'failed' ? 'summary' : phase);
+    teamFlow.querySelectorAll<HTMLLIElement>('li').forEach((item) => {
+      const index = order.indexOf(item.dataset.teamStep ?? '');
+      item.classList.toggle('done', phase === 'done' || index < reached);
+      item.classList.toggle('active', phase === 'failed' ? index === reached : index === reached && phase !== 'done');
+    });
+    teamVisualState.textContent = phase === 'done'
+      ? t('协作完成')
+      : phase === 'failed'
+        ? t('协作失败')
+        : phase === 'idle'
+          ? t('待开始')
+          : t('进行中');
+  }
+
+  function teamNodeState(id: string, state: 'idle' | 'running' | 'done' | 'failed', label?: string): void {
+    const node = id === chartSupervisorId
+      ? teamSupervisorNode
+      : teamWorkerNodes.querySelector<HTMLElement>(`[data-agent-id="${CSS.escape(id)}"]`);
+    if (!node) return;
+    node.classList.remove('running', 'done', 'failed');
+    if (state !== 'idle') node.classList.add(state);
+    const stateLabel = node.querySelector('.team-node-state');
+    if (stateLabel) {
+      stateLabel.textContent = label ?? (state === 'running'
+        ? t('执行中…')
+        : state === 'done'
+          ? t('已完成')
+          : state === 'failed'
+            ? t('失败')
+            : t('待开始'));
+    }
+  }
+
+  function renderTeamChart(supervisorId: string, memberIds: string[]): void {
+    chartSupervisorId = supervisorId;
+    chartSupervisorDone = 0;
+    chartPlan = '';
+    teamVisual.hidden = false;
+    teamPlan.hidden = true;
+    teamPlanText.textContent = '';
+    const supervisor = teamAgent(supervisorId);
+    const name = teamSupervisorNode.querySelector('strong');
+    const duty = teamSupervisorNode.querySelector('.team-node-duty');
+    if (name) name.textContent = supervisor?.name ?? t('自动选择');
+    if (duty) duty.textContent = supervisor
+      ? t('负责：规划、分工与汇总')
+      : t('按任务与项目评分决定');
+    teamSupervisorNode.classList.remove('running', 'done', 'failed');
+
+    teamWorkerNodes.replaceChildren();
+    const workers = memberIds.filter((id) => id !== supervisorId);
+    if (!workers.length) {
+      const empty = document.createElement('p');
+      empty.className = 'note';
+      empty.dataset.i18n = '暂无其他成员；主管将独立完成';
+      empty.textContent = t('暂无其他成员；主管将独立完成');
+      teamWorkerNodes.append(empty);
+    }
+    for (const id of workers) {
+      const agent = teamAgent(id);
+      const node = document.createElement('div');
+      node.className = 'team-node';
+      node.dataset.agentId = id;
+      const role = document.createElement('span');
+      role.className = 'team-node-role';
+      role.textContent = t('成员');
+      const strong = document.createElement('strong');
+      strong.textContent = agent?.name ?? id;
+      const dutyLine = document.createElement('span');
+      dutyLine.className = 'team-node-duty';
+      dutyLine.textContent = agent?.roles.length ? t('负责：{roles}', { roles: agent.roles.join(' / ') }) : t('按主管安排执行');
+      const state = document.createElement('span');
+      state.className = 'team-node-state';
+      state.textContent = t('待开始');
+      node.append(role, strong, dutyLine, state);
+      teamWorkerNodes.append(node);
+    }
+    teamFlowStep('plan');
+  }
+
+  function applyChartPlan(plan: string): void {
+    chartPlan = plan.trim();
+    if (!chartPlan) return;
+    teamPlan.hidden = false;
+    teamPlanText.textContent = chartPlan;
+    for (const node of teamWorkerNodes.querySelectorAll<HTMLElement>('[data-agent-id]')) {
+      const agent = teamAgent(node.dataset.agentId ?? '');
+      if (!agent) continue;
+      const line = chartPlan.split(/\r?\n/).find((entry) => entry.includes(agent.name) || entry.includes(agent.id));
+      if (!line) continue;
+      const duty = node.querySelector('.team-node-duty');
+      if (duty) duty.textContent = line.replace(/^[\s#*\-–—0-9.、)）]+/, '').slice(0, 110);
+    }
+  }
 
   const customPresets = [
     { id: 'claude', name: 'Claude Code', command: 'claude', roles: ['实现', '审查'], description: 'Claude Code CLI', args: ['-p', '{prompt}', '--output-format', 'text'] },
@@ -2596,6 +2710,32 @@ export function initPanels(deps: PanelDeps): PanelsController {
     row.append(who, text);
     teamLog.append(row);
     teamLog.scrollTop = teamLog.scrollHeight;
+
+    if (!teamVisual.hidden) {
+      if (event.phase === 'start') {
+        if (event.agentId === chartSupervisorId) {
+          if (chartSupervisorDone === 0) {
+            teamNodeState(event.agentId, 'running', t('规划中…'));
+            teamFlowStep('plan');
+          } else {
+            teamNodeState(event.agentId, 'running', t('汇总中…'));
+            teamFlowStep('summary');
+          }
+        } else {
+          teamNodeState(event.agentId, 'running');
+          if (chartPhase === 'plan' || chartPhase === 'dispatch') teamFlowStep('execute');
+        }
+      } else if (event.phase === 'done') {
+        const ok = event.code === 0 || event.code == null;
+        teamNodeState(event.agentId, ok ? 'done' : 'failed');
+        if (event.agentId === chartSupervisorId) {
+          chartSupervisorDone += 1;
+          if (chartSupervisorDone === 1 && chartPhase === 'plan') teamFlowStep('dispatch');
+        }
+      } else if (event.phase === 'error') {
+        teamNodeState(event.agentId, 'failed');
+      }
+    }
   }
 
   api.onAgentEvent(logRow);
@@ -2737,6 +2877,9 @@ export function initPanels(deps: PanelDeps): PanelsController {
     teamStatus.textContent = t('协作进行中…');
     teamLog.replaceChildren();
     teamEmpty.hidden = true;
+    const plannedSupervisor = explicitSupervisor || supervisorSelect.value;
+    renderTeamChart(plannedSupervisor, [...selectedAgents]);
+    activateWorkspace('tab-ws-collab');
     try {
       const result = await api.runTeam({
         task,
@@ -2747,6 +2890,32 @@ export function initPanels(deps: PanelDeps): PanelsController {
         apps: [...roomApps.values()],
         webSearch: $<HTMLInputElement>('team-web-search').checked,
       });
+      if (!chartSupervisorId) {
+        const resolved = result.supervisorId || result.summaries[0]?.agentId;
+        if (resolved) {
+          chartSupervisorId = resolved;
+          const actual = teamAgent(resolved);
+          const name = teamSupervisorNode.querySelector('strong');
+          const duty = teamSupervisorNode.querySelector('.team-node-duty');
+          if (name) name.textContent = actual?.name ?? resolved;
+          if (duty) duty.textContent = t('负责：规划、分工与汇总');
+          // 自动模式下主管在运行结束后才确定，需从成员区移除重复节点
+          teamWorkerNodes.querySelector(`[data-agent-id="${CSS.escape(resolved)}"]`)?.remove();
+          if (!teamWorkerNodes.querySelector('[data-agent-id]') && !teamWorkerNodes.querySelector('.note')) {
+            const empty = document.createElement('p');
+            empty.className = 'note';
+            empty.dataset.i18n = '暂无其他成员；主管将独立完成';
+            empty.textContent = t('暂无其他成员；主管将独立完成');
+            teamWorkerNodes.append(empty);
+          }
+        }
+      }
+      const supervisorSummary = result.summaries.find((item) => item.agentId === chartSupervisorId);
+      applyChartPlan(supervisorSummary?.text ?? '');
+      for (const summary of result.summaries) {
+        teamNodeState(summary.agentId, summary.ok ? 'done' : 'failed');
+      }
+      teamFlowStep(result.ok ? 'done' : 'failed');
       teamStatus.textContent = result.ok
         ? t('协作完成，共 {count} 份回报。', { count: result.summaries.length })
         : t('协作失败：{error}', { error: result.error ?? '' });
@@ -2764,6 +2933,7 @@ export function initPanels(deps: PanelDeps): PanelsController {
       teamLog.scrollTop = teamLog.scrollHeight;
     } catch (error) {
       teamStatus.textContent = String(error);
+      teamFlowStep('failed');
     } finally {
       teamRunning = false;
       run.disabled = false;

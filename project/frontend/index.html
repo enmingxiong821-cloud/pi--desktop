@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: pi-media:; media-src pi-media:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title data-i18n="Pi 工作台 · PoC">Pi 工作台 · PoC</title>
+  <title data-i18n="Pi 工作台">Pi 工作台</title>
   <link rel="stylesheet" href="main.css">
 </head>
 <body>
@@ -30,13 +30,11 @@
       <nav class="panel-tabs nav-list" role="tablist" aria-label="功能导航" data-i18n-aria-label="功能导航">
         <button role="tab" id="tab-project" aria-controls="pane-project" aria-selected="true" data-i18n="项目">项目</button>
         <button role="tab" id="tab-model" aria-controls="pane-model" aria-selected="false" data-i18n="模型">模型</button>
-        <button role="tab" id="tab-market" aria-controls="pane-market" aria-selected="false" data-i18n="市场">市场</button>
         <button role="tab" id="tab-automation" aria-controls="pane-automation" aria-selected="false" data-i18n="自动化">自动化</button>
         <button role="tab" id="tab-team" aria-controls="pane-team" aria-selected="false" data-i18n="协作">协作</button>
         <button role="tab" id="tab-capability" aria-controls="pane-capability" aria-selected="false" data-i18n="能力">能力</button>
         <button role="tab" id="tab-session" aria-controls="pane-session" aria-selected="false" data-i18n="会话">会话</button>
         <button role="tab" id="tab-search" aria-controls="pane-search" aria-selected="false" data-i18n="搜索">搜索</button>
-        <button role="tab" id="tab-settings" aria-controls="pane-settings" aria-selected="false" data-i18n="设置">设置</button>
       </nav>
 
       <div class="pane-stack">
@@ -200,33 +198,6 @@
           </details>
         </section>
 
-        <section id="pane-market" role="tabpanel" class="pane" hidden>
-          <div class="pane-head">
-            <span class="summary" data-i18n="能力市场">能力市场</span>
-            <button id="refresh-market" class="ghost" data-i18n="刷新">刷新</button>
-          </div>
-          <input id="market-search" type="search" placeholder="搜索插件 / 技能 / MCP，例如 浏览器、审查" data-i18n-placeholder="搜索插件 / 技能 / MCP，例如 浏览器、审查" autocomplete="off" spellcheck="false">
-          <div class="market-tabs" role="tablist" aria-label="市场分类" data-i18n-aria-label="市场分类">
-            <button type="button" class="market-tab active" data-market="all" data-i18n="全部">全部</button>
-            <button type="button" class="market-tab" data-market="extensions" data-i18n="插件">插件</button>
-            <button type="button" class="market-tab" data-market="skills" data-i18n="技能">技能</button>
-            <button type="button" class="market-tab" data-market="mcps" data-i18n="MCP">MCP</button>
-          </div>
-          <div id="market-chips" class="market-chips"></div>
-          <div id="market-custom" class="market-custom">
-            <input id="market-custom-input" type="text" autocomplete="off" spellcheck="false" placeholder="输入 npm 包名，例如 pi-web-access" data-i18n-placeholder="输入 npm 包名，例如 pi-web-access">
-            <button id="market-custom-add" class="ghost" data-i18n="下载并安装">下载并安装</button>
-          </div>
-          <div class="market-scope">
-            <select id="market-scope" aria-label="安装范围" data-i18n-aria-label="安装范围">
-              <option value="project" data-i18n="安装到当前项目">安装到当前项目</option>
-              <option value="user" data-i18n="安装到用户配置">安装到用户配置</option>
-            </select>
-          </div>
-          <p id="market-status" class="summary" data-i18n="选择要添加的能力。">选择要添加的能力。</p>
-          <div id="market-list" class="market-list"></div>
-          <p class="note" data-i18n="安装前会显示启动命令与所需密钥；系统控制类能力会二次确认。已写入的配置不会自动执行。">安装前会显示启动命令与所需密钥；系统控制类能力会二次确认。已写入的配置不会自动执行。</p>
-        </section>
 
         <section id="pane-automation" role="tabpanel" class="pane" hidden>
           <div class="pane-head">
@@ -536,116 +507,6 @@
           </details>
         </section>
 
-        <section id="pane-settings" role="tabpanel" class="pane" hidden>
-          <div class="pane-head">
-            <span class="summary" data-i18n="外观">外观</span>
-            <button id="reset-appearance" class="ghost" data-i18n="恢复默认">恢复默认</button>
-          </div>
-          <label class="field">
-            <span data-i18n="主题">主题</span>
-            <select id="theme-mode">
-              <option value="dark" data-i18n="深色">深色</option>
-              <option value="light" data-i18n="浅色">浅色</option>
-              <option value="system" data-i18n="跟随系统">跟随系统</option>
-            </select>
-          </label>
-          <label class="field">
-            <span data-i18n="强调色">强调色</span>
-            <select id="accent-color">
-              <option value="mint" data-i18n="薄荷绿">薄荷绿</option>
-              <option value="blue" data-i18n="海雾蓝">海雾蓝</option>
-              <option value="violet" data-i18n="暮光紫">暮光紫</option>
-              <option value="amber" data-i18n="琥珀金">琥珀金</option>
-              <option value="rose" data-i18n="玫瑰粉">玫瑰粉</option>
-              <option value="custom" data-i18n="自定义…">自定义…</option>
-            </select>
-          </label>
-          <label class="field" id="accent-custom-row" hidden>
-            <span data-i18n="自定义颜色">自定义颜色</span>
-            <input id="accent-custom" type="color" value="#a4e6cc">
-          </label>
-          <label class="toggle"><input type="checkbox" id="compact-density"> <span data-i18n="紧凑布局">紧凑布局</span></label>
-          <label class="field">
-            <span data-i18n="启动动画">启动动画</span>
-            <select id="startup-animation">
-              <option value="dynamic" data-i18n="动态 π">动态 π</option>
-              <option value="fade" data-i18n="淡入">淡入</option>
-              <option value="off" data-i18n="关闭">关闭</option>
-            </select>
-          </label>
-          <button id="preview-startup" class="ghost" data-i18n="预览启动动画">预览启动动画</button>
-          <div class="group-label"><span data-i18n="默认调控">默认调控</span></div>
-          <label class="field">
-            <span data-i18n="推理度">推理度</span>
-            <select id="settings-reasoning" aria-label="默认推理度" data-i18n-aria-label="默认推理度">
-              <option value="auto" data-i18n="自动">自动</option>
-              <option value="off" data-i18n="关闭（最快）">关闭（最快）</option>
-              <option value="minimal" data-i18n="极低">极低</option>
-              <option value="low" data-i18n="低">低</option>
-              <option value="medium" data-i18n="中">中</option>
-              <option value="high" data-i18n="高">高</option>
-              <option value="xhigh" data-i18n="极高">极高</option>
-              <option value="max" data-i18n="最高（最慢）">最高（最慢）</option>
-            </select>
-          </label>
-          <label class="field">
-            <span data-i18n="聪明程度">聪明程度</span>
-            <select id="settings-smart" aria-label="默认聪明程度" data-i18n-aria-label="默认聪明程度">
-              <option value="auto" data-i18n="自动">自动</option>
-              <option value="fast" data-i18n="快速">快速</option>
-              <option value="balanced" data-i18n="均衡">均衡</option>
-              <option value="max" data-i18n="最强">最强</option>
-            </select>
-          </label>
-          <p class="note" data-i18n="推理度越高，思考越深，响应越慢、消耗越多；聪明程度越高，越偏向旗舰模型。两者默认「自动」，由 Pi 与当前模型决定。">推理度越高，思考越深，响应越慢、消耗越多；聪明程度越高，越偏向旗舰模型。两者默认「自动」，由 Pi 与当前模型决定。</p>
-          <p class="summary" data-i18n="本机软件与网页">本机软件与网页</p>
-          <div class="tool-grid">
-            <button class="ghost" data-open-app="vscode" data-i18n="VS Code">VS Code</button>
-            <button class="ghost" data-open-app="explorer" data-i18n="资源管理器">资源管理器</button>
-            <button class="ghost" data-open-app="terminal" data-i18n="终端">终端</button>
-            <button class="ghost" data-open-app="notepad" data-i18n="记事本">记事本</button>
-            <button class="ghost" data-open-app="calculator" data-i18n="计算器">计算器</button>
-            <button class="ghost" data-open-app="mspaint" data-i18n="画图">画图</button>
-          </div>
-          <p class="summary" data-i18n="配置与数据">配置与数据</p>
-          <div class="tool-grid">
-            <button id="open-pi-config" class="ghost" data-i18n="Pi 配置目录">Pi 配置目录</button>
-            <button id="open-project-pi" class="ghost" data-i18n="项目 .pi 目录">项目 .pi 目录</button>
-            <button id="open-user-data" class="ghost" data-i18n="数据目录">数据目录</button>
-          </div>
-          <p class="summary" data-i18n="快捷方式">快捷方式</p>
-          <div class="env-actions">
-            <button id="create-shortcut" class="ghost" data-i18n="创建桌面快捷方式">创建桌面快捷方式</button>
-          </div>
-          <p class="note" data-i18n="首次安装或配置完成后会自动生成桌面快捷方式；如果被误删，可以在这里补建。">首次安装或配置完成后会自动生成桌面快捷方式；如果被误删，可以在这里补建。</p>
-          <label class="field">
-            <span data-i18n="用浏览器打开">用浏览器打开</span>
-            <input id="tool-url" type="url" placeholder="https://…" spellcheck="false">
-          </label>
-          <button id="tool-open-url" class="primary" data-i18n="打开网页">打开网页</button>
-          <label class="field">
-            <span data-i18n="打开本地文件或目录">打开本地文件或目录</span>
-            <input id="tool-path" type="text" placeholder="绝对路径" data-i18n-placeholder="绝对路径" spellcheck="false">
-          </label>
-          <button id="tool-open-path" class="ghost" data-i18n="打开路径">打开路径</button>
-          <p class="note" data-i18n="只调用系统默认程序，不执行任意脚本；Agent 需要更复杂的控制时通过 MCP 扩展。">只调用系统默认程序，不执行任意脚本；Agent 需要更复杂的控制时通过 MCP 扩展。</p>
-          <div class="group-label"><span data-i18n="更新">更新</span></div>
-          <div class="settings-updates">
-            <div class="dock-toolbar">
-              <span id="update-status" class="dock-summary" data-i18n="尚未检查更新">尚未检查更新</span>
-              <span class="dock-spacer"></span>
-              <button id="update-check" class="ghost" data-i18n="检查更新">检查更新</button>
-              <button id="update-download" class="primary" hidden data-i18n="下载安装包">下载安装包</button>
-              <button id="update-pi-btn" class="ghost" data-i18n="更新 Pi">更新 Pi</button>
-            </div>
-            <div class="dock-toolbar">
-              <label class="toggle"><input type="checkbox" id="update-auto-check" checked> <span data-i18n="启动时自动检查更新">启动时自动检查更新</span></label>
-              <label class="toggle"><input type="checkbox" id="update-auto-download"> <span data-i18n="自动下载工作台安装包">自动下载工作台安装包</span></label>
-            </div>
-            <div id="update-list" class="update-list"></div>
-            <p class="note" data-i18n="工作台更新来自 GitHub Releases，Pi 更新来自 npm。下载与安装都需要你点击确认；自动下载只在发现新版本时把安装包存到 Downloads/Pi-Workbench-updates。">工作台更新来自 GitHub Releases，Pi 更新来自 npm。下载与安装都需要你点击确认；自动下载只在发现新版本时把安装包存到 Downloads/Pi-Workbench-updates。</p>
-          </div>
-        </section>
       </div>
 
       <section id="project-dock" class="project-dock sidebar-tools" aria-label="项目工具" data-i18n-aria-label="项目工具">
@@ -899,6 +760,32 @@
       </section>
 
       <section id="pane-ws-collab" role="tabpanel" class="pane" hidden>
+        <div id="team-visual" class="team-visual" hidden>
+          <div class="team-visual-head">
+            <span class="summary" data-i18n="协作结构">协作结构</span>
+            <span id="team-visual-state" class="team-visual-state"></span>
+          </div>
+          <div class="team-chart">
+            <div id="team-supervisor-node" class="team-node supervisor">
+              <span class="team-node-role" data-i18n="主管 · 规划与汇总">主管 · 规划与汇总</span>
+              <strong data-i18n="自动选择">自动选择</strong>
+              <span class="team-node-duty" data-i18n="按任务与项目评分决定">按任务与项目评分决定</span>
+              <span class="team-node-state" data-i18n="待开始">待开始</span>
+            </div>
+            <div class="team-branch" aria-hidden="true"></div>
+            <div id="team-worker-nodes" class="team-workers"></div>
+          </div>
+          <ol id="team-flow" class="team-flow">
+            <li data-team-step="plan"><span class="team-flow-dot"></span><span data-i18n="主管规划">主管规划</span></li>
+            <li data-team-step="dispatch"><span class="team-flow-dot"></span><span data-i18n="分配任务">分配任务</span></li>
+            <li data-team-step="execute"><span class="team-flow-dot"></span><span data-i18n="并行执行">并行执行</span></li>
+            <li data-team-step="summary"><span class="team-flow-dot"></span><span data-i18n="汇总结果">汇总结果</span></li>
+          </ol>
+          <div id="team-plan" class="team-plan" hidden>
+            <div class="group-label"><span data-i18n="主管计划">主管计划</span></div>
+            <pre id="team-plan-text"></pre>
+          </div>
+        </div>
         <div class="pane-head">
           <span class="summary" data-i18n="协作实时日志">协作实时日志</span>
           <button id="clear-team-log" class="ghost" data-i18n="清空">清空</button>
@@ -1028,6 +915,160 @@
         </details>
       </section>
     </aside>
+  </div>
+
+  <div id="settings-overlay" class="settings-overlay" hidden>
+    <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="settings-head">
+        <span class="summary" id="settings-title" data-i18n="设置">设置</span>
+        <button id="settings-close" class="icon-button" aria-label="关闭设置" data-i18n-aria-label="关闭设置" title="关闭设置" data-i18n-title="关闭设置">×</button>
+      </header>
+      <div class="settings-layout">
+        <nav class="settings-nav" role="tablist" aria-label="设置分类" data-i18n-aria-label="设置分类">
+          <button role="tab" id="settings-tab-general" aria-controls="pane-settings" aria-selected="true" data-i18n="通用">通用</button>
+          <button role="tab" id="settings-tab-market" aria-controls="pane-market" aria-selected="false" data-i18n="市场">市场</button>
+        </nav>
+        <div class="settings-content">
+  <section id="pane-settings" role="tabpanel" class="pane" hidden>
+    <div class="pane-head">
+      <span class="summary" data-i18n="外观">外观</span>
+      <button id="reset-appearance" class="ghost" data-i18n="恢复默认">恢复默认</button>
+    </div>
+    <label class="field">
+      <span data-i18n="主题">主题</span>
+      <select id="theme-mode">
+        <option value="dark" data-i18n="深色">深色</option>
+        <option value="light" data-i18n="浅色">浅色</option>
+        <option value="system" data-i18n="跟随系统">跟随系统</option>
+      </select>
+    </label>
+    <label class="field">
+      <span data-i18n="强调色">强调色</span>
+      <select id="accent-color">
+        <option value="mint" data-i18n="薄荷绿">薄荷绿</option>
+        <option value="blue" data-i18n="海雾蓝">海雾蓝</option>
+        <option value="violet" data-i18n="暮光紫">暮光紫</option>
+        <option value="amber" data-i18n="琥珀金">琥珀金</option>
+        <option value="rose" data-i18n="玫瑰粉">玫瑰粉</option>
+        <option value="custom" data-i18n="自定义…">自定义…</option>
+      </select>
+    </label>
+    <label class="field" id="accent-custom-row" hidden>
+      <span data-i18n="自定义颜色">自定义颜色</span>
+      <input id="accent-custom" type="color" value="#a4e6cc">
+    </label>
+    <label class="toggle"><input type="checkbox" id="compact-density"> <span data-i18n="紧凑布局">紧凑布局</span></label>
+    <label class="field">
+      <span data-i18n="启动动画">启动动画</span>
+      <select id="startup-animation">
+        <option value="dynamic" data-i18n="动态 π">动态 π</option>
+        <option value="fade" data-i18n="淡入">淡入</option>
+        <option value="off" data-i18n="关闭">关闭</option>
+      </select>
+    </label>
+    <button id="preview-startup" class="ghost" data-i18n="预览启动动画">预览启动动画</button>
+    <div class="group-label"><span data-i18n="默认调控">默认调控</span></div>
+    <label class="field">
+      <span data-i18n="推理度">推理度</span>
+      <select id="settings-reasoning" aria-label="默认推理度" data-i18n-aria-label="默认推理度">
+        <option value="auto" data-i18n="自动">自动</option>
+        <option value="off" data-i18n="关闭（最快）">关闭（最快）</option>
+        <option value="minimal" data-i18n="极低">极低</option>
+        <option value="low" data-i18n="低">低</option>
+        <option value="medium" data-i18n="中">中</option>
+        <option value="high" data-i18n="高">高</option>
+        <option value="xhigh" data-i18n="极高">极高</option>
+        <option value="max" data-i18n="最高（最慢）">最高（最慢）</option>
+      </select>
+    </label>
+    <label class="field">
+      <span data-i18n="聪明程度">聪明程度</span>
+      <select id="settings-smart" aria-label="默认聪明程度" data-i18n-aria-label="默认聪明程度">
+        <option value="auto" data-i18n="自动">自动</option>
+        <option value="fast" data-i18n="快速">快速</option>
+        <option value="balanced" data-i18n="均衡">均衡</option>
+        <option value="max" data-i18n="最强">最强</option>
+      </select>
+    </label>
+    <p class="note" data-i18n="推理度越高，思考越深，响应越慢、消耗越多；聪明程度越高，越偏向旗舰模型。两者默认「自动」，由 Pi 与当前模型决定。">推理度越高，思考越深，响应越慢、消耗越多；聪明程度越高，越偏向旗舰模型。两者默认「自动」，由 Pi 与当前模型决定。</p>
+    <p class="summary" data-i18n="本机软件与网页">本机软件与网页</p>
+    <div class="tool-grid">
+      <button class="ghost" data-open-app="vscode" data-i18n="VS Code">VS Code</button>
+      <button class="ghost" data-open-app="explorer" data-i18n="资源管理器">资源管理器</button>
+      <button class="ghost" data-open-app="terminal" data-i18n="终端">终端</button>
+      <button class="ghost" data-open-app="notepad" data-i18n="记事本">记事本</button>
+      <button class="ghost" data-open-app="calculator" data-i18n="计算器">计算器</button>
+      <button class="ghost" data-open-app="mspaint" data-i18n="画图">画图</button>
+    </div>
+    <p class="summary" data-i18n="配置与数据">配置与数据</p>
+    <div class="tool-grid">
+      <button id="open-pi-config" class="ghost" data-i18n="Pi 配置目录">Pi 配置目录</button>
+      <button id="open-project-pi" class="ghost" data-i18n="项目 .pi 目录">项目 .pi 目录</button>
+      <button id="open-user-data" class="ghost" data-i18n="数据目录">数据目录</button>
+    </div>
+    <p class="summary" data-i18n="快捷方式">快捷方式</p>
+    <div class="env-actions">
+      <button id="create-shortcut" class="ghost" data-i18n="创建桌面快捷方式">创建桌面快捷方式</button>
+    </div>
+    <p class="note" data-i18n="首次安装或配置完成后会自动生成桌面快捷方式；如果被误删，可以在这里补建。">首次安装或配置完成后会自动生成桌面快捷方式；如果被误删，可以在这里补建。</p>
+    <label class="field">
+      <span data-i18n="用浏览器打开">用浏览器打开</span>
+      <input id="tool-url" type="url" placeholder="https://…" spellcheck="false">
+    </label>
+    <button id="tool-open-url" class="primary" data-i18n="打开网页">打开网页</button>
+    <label class="field">
+      <span data-i18n="打开本地文件或目录">打开本地文件或目录</span>
+      <input id="tool-path" type="text" placeholder="绝对路径" data-i18n-placeholder="绝对路径" spellcheck="false">
+    </label>
+    <button id="tool-open-path" class="ghost" data-i18n="打开路径">打开路径</button>
+    <p class="note" data-i18n="只调用系统默认程序，不执行任意脚本；Agent 需要更复杂的控制时通过 MCP 扩展。">只调用系统默认程序，不执行任意脚本；Agent 需要更复杂的控制时通过 MCP 扩展。</p>
+    <div class="group-label"><span data-i18n="更新">更新</span></div>
+    <div class="settings-updates">
+      <div class="dock-toolbar">
+        <span id="update-status" class="dock-summary" data-i18n="尚未检查更新">尚未检查更新</span>
+        <span class="dock-spacer"></span>
+        <button id="update-check" class="ghost" data-i18n="检查更新">检查更新</button>
+        <button id="update-download" class="primary" hidden data-i18n="下载安装包">下载安装包</button>
+        <button id="update-pi-btn" class="ghost" data-i18n="更新 Pi">更新 Pi</button>
+      </div>
+      <div class="dock-toolbar">
+        <label class="toggle"><input type="checkbox" id="update-auto-check" checked> <span data-i18n="启动时自动检查更新">启动时自动检查更新</span></label>
+        <label class="toggle"><input type="checkbox" id="update-auto-download"> <span data-i18n="自动下载工作台安装包">自动下载工作台安装包</span></label>
+      </div>
+      <div id="update-list" class="update-list"></div>
+      <p class="note" data-i18n="工作台更新来自 GitHub Releases，Pi 更新来自 npm。下载与安装都需要你点击确认；自动下载只在发现新版本时把安装包存到 Downloads/Pi-Workbench-updates。">工作台更新来自 GitHub Releases，Pi 更新来自 npm。下载与安装都需要你点击确认；自动下载只在发现新版本时把安装包存到 Downloads/Pi-Workbench-updates。</p>
+    </div>
+  </section>
+  <section id="pane-market" role="tabpanel" class="pane" hidden>
+    <div class="pane-head">
+      <span class="summary" data-i18n="能力市场">能力市场</span>
+      <button id="refresh-market" class="ghost" data-i18n="刷新">刷新</button>
+    </div>
+    <input id="market-search" type="search" placeholder="搜索插件 / 技能 / MCP，例如 浏览器、审查" data-i18n-placeholder="搜索插件 / 技能 / MCP，例如 浏览器、审查" autocomplete="off" spellcheck="false">
+    <div class="market-tabs" role="tablist" aria-label="市场分类" data-i18n-aria-label="市场分类">
+      <button type="button" class="market-tab active" data-market="all" data-i18n="全部">全部</button>
+      <button type="button" class="market-tab" data-market="extensions" data-i18n="插件">插件</button>
+      <button type="button" class="market-tab" data-market="skills" data-i18n="技能">技能</button>
+      <button type="button" class="market-tab" data-market="mcps" data-i18n="MCP">MCP</button>
+    </div>
+    <div id="market-chips" class="market-chips"></div>
+    <div id="market-custom" class="market-custom">
+      <input id="market-custom-input" type="text" autocomplete="off" spellcheck="false" placeholder="输入 npm 包名，例如 pi-web-access" data-i18n-placeholder="输入 npm 包名，例如 pi-web-access">
+      <button id="market-custom-add" class="ghost" data-i18n="下载并安装">下载并安装</button>
+    </div>
+    <div class="market-scope">
+      <select id="market-scope" aria-label="安装范围" data-i18n-aria-label="安装范围">
+        <option value="project" data-i18n="安装到当前项目">安装到当前项目</option>
+        <option value="user" data-i18n="安装到用户配置">安装到用户配置</option>
+      </select>
+    </div>
+    <p id="market-status" class="summary" data-i18n="选择要添加的能力。">选择要添加的能力。</p>
+    <div id="market-list" class="market-list"></div>
+    <p class="note" data-i18n="安装前会显示启动命令与所需密钥；系统控制类能力会二次确认。已写入的配置不会自动执行。">安装前会显示启动命令与所需密钥；系统控制类能力会二次确认。已写入的配置不会自动执行。</p>
+  </section>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="command-palette" class="command-palette" hidden>

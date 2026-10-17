@@ -1,17 +1,15 @@
 {
   "lang": "zh-CN",
-  "title": "Pi 工作台 · PoC",
+  "title": "Pi 工作台",
   "brand": "Pi 工作台",
   "tabs": [
     "项目",
     "模型",
-    "市场",
     "自动化",
     "协作",
     "能力",
     "会话",
-    "搜索",
-    "设置"
+    "搜索"
   ],
   "state": "未启动",
   "model": "模型 —",
@@ -42,7 +40,7 @@
     "×"
   ],
   "moduleBindingLabel": "本项目模型",
-  "moduleBindingValue": "m-mvciv9u6-06r8",
+  "moduleBindingValue": "m-mvcl0rwr-bloi",
   "moduleBindingOptions": [
     "Pi 默认",
     "快速修复 · demo/mini"

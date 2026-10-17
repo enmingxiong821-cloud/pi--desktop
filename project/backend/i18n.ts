@@ -7,7 +7,7 @@ const EN: Record<string, string> = {
   '推理度无效': 'Invalid reasoning level',
   '会话文件不在 Pi 会话目录内': 'Session file is outside the Pi session directory',
   '选择项目目录': 'Choose project folder',
-  'Pi 工作台 · PoC': 'Pi Workbench · PoC',
+  'Pi 工作台': 'Pi Workbench',
   '路径无效': 'Invalid path',
   '路径不存在': 'Path does not exist',
 

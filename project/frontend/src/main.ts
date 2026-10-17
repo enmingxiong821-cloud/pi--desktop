@@ -973,6 +973,9 @@ const mediaPreviewBody = $('media-preview-body');
 const mediaPreviewExternalButton = $<HTMLButtonElement>('media-preview-external');
 const mediaPreviewCloseButton = $<HTMLButtonElement>('media-preview-close');
 const openSettingsButton = $<HTMLButtonElement>('open-settings');
+const settingsOverlay = $('settings-overlay');
+const settingsCloseButton = $<HTMLButtonElement>('settings-close');
+const settingsTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.settings-nav [role=tab]'));
 const reasoningSelect = $<HTMLSelectElement>('reasoning-level');
 const smartSelect = $<HTMLSelectElement>('smart-level');
 const tuningState = $('tuning-state');
@@ -1082,19 +1085,61 @@ function applyAppearance(): void {
   terminal.options.theme = terminalTheme();
 }
 
+function selectSettingsSection(id: string): void {
+  for (const tab of settingsTabs) {
+    const selected = tab.id === id;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    const pane = document.getElementById(tab.getAttribute('aria-controls') ?? '');
+    if (pane) pane.hidden = !selected;
+  }
+  if (id === 'settings-tab-market') panels?.refreshMarket();
+}
+
+function openSettings(section = 'settings-tab-general'): void {
+  settingsOverlay.hidden = false;
+  selectSettingsSection(section);
+  document.body.classList.add('settings-open');
+  settingsCloseButton.focus();
+}
+
+function closeSettings(): void {
+  if (settingsOverlay.hidden) return;
+  settingsOverlay.hidden = true;
+  document.body.classList.remove('settings-open');
+  openSettingsButton.focus();
+}
+
 function initAppearanceControls(): void {
   syncAppearanceControls();
   syncTuningControls();
 
-  openSettingsButton.addEventListener('click', () => {
-    activateTab('tab-settings');
-    document.getElementById('tab-settings')?.focus();
+  openSettingsButton.addEventListener('click', () => openSettings());
+  settingsCloseButton.addEventListener('click', closeSettings);
+  settingsOverlay.addEventListener('click', (event) => {
+    if (event.target === settingsOverlay) closeSettings();
   });
+  for (const tab of settingsTabs) {
+    tab.addEventListener('click', () => selectSettingsSection(tab.id));
+    tab.addEventListener('keydown', (event) => {
+      const index = settingsTabs.indexOf(tab);
+      let next: HTMLButtonElement | undefined;
+      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') next = settingsTabs[(index + 1) % settingsTabs.length];
+      if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') next = settingsTabs[(index + settingsTabs.length - 1) % settingsTabs.length];
+      if (next) {
+        event.preventDefault();
+        selectSettingsSection(next.id);
+        next.focus();
+      }
+    });
+  }
   window.addEventListener('keydown', (event) => {
     if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key === ',') {
       event.preventDefault();
-      activateTab('tab-settings');
-      document.getElementById('tab-settings')?.focus();
+      openSettings();
+    } else if (event.key === 'Escape' && !settingsOverlay.hidden) {
+      event.preventDefault();
+      closeSettings();
     }
   });
 
@@ -1317,6 +1362,10 @@ function activateTab(id: string): void {
     }
     return;
   }
+  if (id === 'tab-settings' || id === 'tab-market') {
+    openSettings(id === 'tab-market' ? 'settings-tab-market' : 'settings-tab-general');
+    return;
+  }
   document.querySelectorAll<HTMLButtonElement>('.nav-list [role=tab]').forEach((tab) => {
     const selected = tab.id === id;
     tab.setAttribute('aria-selected', String(selected));
@@ -1325,7 +1374,6 @@ function activateTab(id: string): void {
     if (pane) pane.hidden = !selected;
   });
   if (id === 'tab-model') void refreshProviders();
-  if (id === 'tab-market') panels?.refreshMarket();
   if (id === 'tab-automation') void panels?.refreshAutomation();
   if (id === 'tab-team') void panels?.refreshAgents();
   if (id === 'tab-task' || id === 'tab-ws-review') {
@@ -4644,7 +4692,7 @@ function updateModeNote(): void {
 function relocalize(): void {
   applyStaticI18n();
   syncTuningControls();
-  document.title = t('Pi 工作台 · PoC');
+  document.title = t('Pi 工作台');
   projectPathElement.textContent = currentCwd || t('尚未选择');
   cwdElement.textContent = currentCwd || t('未绑定项目');
   isolatedElement.textContent = isolatedDir || t('启动后显示');

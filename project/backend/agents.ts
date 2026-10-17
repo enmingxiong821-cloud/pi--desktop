@@ -112,6 +112,7 @@ export interface AgentInstallResult {
 
 export interface TeamResult {
   ok: boolean;
+  supervisorId?: string;
   summaries: Array<{ agentId: string; ok: boolean; text: string }>;
   error?: string;
 }
@@ -1378,7 +1379,7 @@ export async function runTeam(
     ].join('\n');
     const final = await runAgent({ agentId: supervisor.id, prompt: synthPrompt, cwd }, onEvent);
     summaries.push({ agentId: supervisor.id, ok: final.ok, text: final.summary });
-    return { ok: summaries.some((item) => item.ok), summaries, error: final.error };
+    return { ok: summaries.some((item) => item.ok), supervisorId: supervisor.id, summaries, error: final.error };
   }
 
   await pool(members, MAX_CONCURRENCY, async (agent) => {

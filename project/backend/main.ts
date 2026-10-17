@@ -654,7 +654,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#111517',
-    title: t('Pi 工作台 · PoC'),
+    title: t('Pi 工作台'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -946,6 +946,8 @@ ipcMain.handle('agents:team', async (_event, input: unknown) => {
       mode: source.mode === 'supervisor' ? 'supervisor' : 'parallel',
       supervisorId: typeof source.supervisorId === 'string' ? source.supervisorId : undefined,
       cwd: typeof source.cwd === 'string' ? source.cwd : undefined,
+      apps: Array.isArray(source.apps) ? source.apps.filter((id): id is string => typeof id === 'string') : [],
+      webSearch: source.webSearch === true,
     },
     (event) => send('agents:event', event),
   );
@@ -1375,7 +1377,7 @@ ipcMain.handle('shell:open-external', (_event, url: unknown) => {
 
 ipcMain.handle('app:set-locale', (_event, locale: unknown) => {
   const applied = setBackendLocale(locale);
-  if (win && !win.isDestroyed()) win.setTitle(t('Pi 工作台 · PoC'));
+  if (win && !win.isDestroyed()) win.setTitle(t('Pi 工作台'));
   return { ok: true, locale: applied };
 });
 

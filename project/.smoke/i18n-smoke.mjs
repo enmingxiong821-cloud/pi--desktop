@@ -368,8 +368,8 @@ async function run() {
   writeFileSync(path.join(root, '.smoke', 'i18n-back.json'), JSON.stringify(back, null, 2));
 
   expectText(zhSnap.lang === 'zh-CN', 'zh lang attribute');
-  expectText(zhSnap.title === 'Pi 工作台 · PoC', 'zh title');
-  expectText(zhSnap.tabs.join('|') === '项目|模型|市场|自动化|协作|能力|会话|搜索|设置', 'zh tabs');
+  expectText(zhSnap.title === 'Pi 工作台', 'zh title');
+  expectText(zhSnap.tabs.join('|') === '项目|模型|自动化|协作|能力|会话|搜索', 'zh tabs');
   expectText(zhSnap.modeNote.startsWith('真实配置'), 'zh mode note');
   expectText(zhSnap.preview === '选择模型后生成命令', 'zh command preview');
   expectText(zhSnap.composerPlaceholder.includes('输入消息'), 'zh composer placeholder');
@@ -377,9 +377,9 @@ async function run() {
   expectText(zhSnap.moduleRows.length === 0, 'zh starts without modules');
 
   expectText(en.lang === 'en', 'en lang attribute');
-  expectText(en.title === 'Pi Workbench · PoC', 'en title');
+  expectText(en.title === 'Pi Workbench', 'en title');
   expectText(en.brand === 'Pi Workbench', 'en brand');
-  expectText(en.tabs.join('|') === 'Project|Models|Market|Automation|Team|Capabilities|Sessions|Search|Settings', 'en tabs');
+  expectText(en.tabs.join('|') === 'Project|Models|Automation|Team|Capabilities|Sessions|Search', 'en tabs');
   expectText(en.state === 'Not started', 'en process state');
   expectText(en.modeNote.startsWith('Real config'), 'en mode note');
   expectText(en.modeNote.includes('extensions/MCP/Skills'), 'en mode note body');
@@ -404,8 +404,8 @@ async function run() {
   expectText(en.moduleRows.length === 1 && en.moduleRows[0].includes('快速修复'), 'en module row kept');
 
   expectText(back.lang === 'zh-CN', 'back lang attribute');
-  expectText(back.title === 'Pi 工作台 · PoC', 'back title');
-  expectText(back.tabs.join('|') === '项目|模型|市场|自动化|协作|能力|会话|搜索|设置', 'back tabs');
+  expectText(back.title === 'Pi 工作台', 'back title');
+  expectText(back.tabs.join('|') === '项目|模型|自动化|协作|能力|会话|搜索', 'back tabs');
   expectText(back.state === '未启动', 'back process state');
   expectText(back.cwd === root, 'back cwd label');
   expectText(back.composerPlaceholder.includes('输入消息'), 'back composer placeholder');
@@ -458,7 +458,8 @@ async function run() {
     animation.value = 'off';
     animation.dispatchEvent(new Event('change', { bubbles: true }));
     return {
-      tabSelected: document.getElementById('tab-settings').getAttribute('aria-selected'),
+      open: !document.getElementById('settings-overlay').hidden,
+      tabSelected: document.getElementById('settings-tab-general').getAttribute('aria-selected'),
       theme: document.documentElement.dataset.theme,
       accent: document.documentElement.dataset.accent,
       accentValue: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
@@ -468,7 +469,7 @@ async function run() {
     };
   })()`);
   console.log('settings:', JSON.stringify(settingsState));
-  expectText(settingsState.tabSelected === 'true' && settingsState.paneHidden === false, 'settings button opens settings pane');
+  expectText(settingsState.open === true && settingsState.tabSelected === 'true' && settingsState.paneHidden === false, 'settings button opens settings pane');
   expectText(settingsState.theme === 'light' && settingsState.storedTheme === 'light', 'theme switch applies and persists');
   expectText(settingsState.accent === 'blue' && settingsState.accentValue !== '', 'accent preset applies');
   expectText(settingsState.splashHidden === true, 'startup animation off hides splash');

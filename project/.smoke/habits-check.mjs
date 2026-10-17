@@ -22,7 +22,7 @@ var EN = {
   "\u63A8\u7406\u5EA6\u65E0\u6548": "Invalid reasoning level",
   "\u4F1A\u8BDD\u6587\u4EF6\u4E0D\u5728 Pi \u4F1A\u8BDD\u76EE\u5F55\u5185": "Session file is outside the Pi session directory",
   "\u9009\u62E9\u9879\u76EE\u76EE\u5F55": "Choose project folder",
-  "Pi \u5DE5\u4F5C\u53F0 \xB7 PoC": "Pi Workbench \xB7 PoC",
+  "Pi \u5DE5\u4F5C\u53F0": "Pi Workbench",
   "\u8DEF\u5F84\u65E0\u6548": "Invalid path",
   "\u8DEF\u5F84\u4E0D\u5B58\u5728": "Path does not exist",
   // capabilities.ts

@@ -551,8 +551,9 @@ async function run() {
   const collapsed = await js(`JSON.stringify(document.querySelector('#model-list .vendor-models').hidden)`);
   expect(collapsed === 'true', 'vendor collapses on click');
 
-  // 市场：扩展 / 技能 / MCP 三个分类 + 在线目录
-  await js(`document.getElementById('tab-market').click()`);
+  // 市场：扩展 / 技能 / MCP 三个分类 + 在线目录（已并入右上角设置）
+  await js(`document.getElementById('open-settings').click()`);
+  await js(`document.getElementById('settings-tab-market').click()`);
   await wait(500);
   const marketExtensions = await js(`JSON.stringify(document.querySelectorAll('#market-list .market-card').length)`);
   expect(marketExtensions === '3', `market lists all capabilities by default (${marketExtensions})`);
@@ -587,6 +588,7 @@ async function run() {
   })()`);
   await wait(300);
   expect(calls.some(([name, input]) => name === 'addMcp' && input.name === '-demo-mcp'), 'registry result installs through backend');
+  await js(`document.getElementById('settings-close').click()`);
 
   // 自动化：新增任务 + 通道
   await js(`document.getElementById('tab-automation').click()`);
@@ -650,6 +652,18 @@ async function run() {
   expect(teamCall?.task === '调研构建链路', 'team task payload');
   expect(teamCall?.agentIds.length === 2, 'team selects installed agents');
   expect((teamCall?.apps ?? []).includes('VS Code'), `meeting room apps passed to backend (${JSON.stringify(teamCall?.apps)})`);
+  const teamChart = JSON.parse(await js(`JSON.stringify({
+    visible: !document.getElementById('team-visual').hidden,
+    supervisor: document.querySelector('#team-supervisor-node strong').textContent,
+    workers: document.querySelectorAll('#team-worker-nodes [data-agent-id]').length,
+    flowDone: document.querySelectorAll('#team-flow li.done').length,
+    activeTab: document.getElementById('tab-ws-collab').getAttribute('aria-selected'),
+  })`));
+  expect(teamChart.visible, 'team structure chart opens');
+  expect(teamChart.supervisor.length > 0, `team chart names the supervisor (${teamChart.supervisor})`);
+  expect(teamChart.workers === 1, `team chart lists workers (${teamChart.workers})`);
+  expect(teamChart.flowDone === 4, `team workflow reaches summary (${teamChart.flowDone})`);
+  expect(teamChart.activeTab === 'true', 'team run reveals the collaboration workspace');
   try {
     const shot = await page.capturePage();
     writeFileSync(path.join(root, '.smoke', 'workbench-team.png'), shot.toPNG());
@@ -814,10 +828,11 @@ async function run() {
   expect(usageState.sessions === 1, `usage sessions listed (${usageState.sessions})`);
   expect(calls.some(([name]) => name === 'usageReport'), 'usage panel calls backend');
 
-  await js(`document.getElementById('tab-settings').click()`);
+  await js(`document.getElementById('open-settings').click()`);
   await js(`document.querySelector('[data-open-app="vscode"]').click()`);
   await wait(200);
   expect(calls.some(([name, input]) => name === 'openApp' && input.id === 'vscode'), 'local app button calls backend');
+  await js(`document.getElementById('settings-close').click()`);
 
   // 截图存档
   try {
@@ -825,10 +840,12 @@ async function run() {
     await wait(300);
     const shot = await page.capturePage();
     writeFileSync(path.join(root, '.smoke', 'workbench-model.png'), shot.toPNG());
-    await js(`document.getElementById('tab-market').click()`);
+    await js(`document.getElementById('open-settings').click()`);
+    await js(`document.getElementById('settings-tab-market').click()`);
     await wait(300);
     const shot2 = await page.capturePage();
     writeFileSync(path.join(root, '.smoke', 'workbench-market.png'), shot2.toPNG());
+    await js(`document.getElementById('settings-close').click()`);
   } catch (error) {
     console.log('screenshot skipped:', String(error));
   }

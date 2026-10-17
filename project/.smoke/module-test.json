@@ -43,21 +43,21 @@
       }
     ],
     "bindingLabel": "本项目模型",
-    "bindingValue": "m-mvciv9u6-06r8",
+    "bindingValue": "m-mvcl0rwr-bloi",
     "bindingOptions": [
       {
         "value": "",
         "text": "Pi 默认"
       },
       {
-        "value": "m-mvciv9u6-06r8",
+        "value": "m-mvcl0rwr-bloi",
         "text": "快速修复 · demo/mini"
       }
     ],
     "bindingDisabled": false,
     "storedModules": [
       {
-        "id": "m-mvciv9u6-06r8",
+        "id": "m-mvcl0rwr-bloi",
         "name": "快速修复",
         "provider": "demo",
         "model": "mini",
@@ -65,25 +65,23 @@
       }
     ],
     "storedBindings": {
-      "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project": "m-mvciv9u6-06r8"
+      "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project": "m-mvcl0rwr-bloi"
     },
     "preview": "/model demo/mini",
     "toast": "模块已暂存，启动 Pi 后发送"
   },
   "en": {
     "lang": "en",
-    "title": "Pi Workbench · PoC",
+    "title": "Pi Workbench",
     "brand": "Pi Workbench",
     "tabs": [
       "Project",
       "Models",
-      "Market",
       "Automation",
       "Team",
       "Capabilities",
       "Sessions",
-      "Search",
-      "Settings"
+      "Search"
     ],
     "state": "Not started",
     "model": "Model —",
@@ -114,7 +112,7 @@
       "×"
     ],
     "moduleBindingLabel": "Model for this project",
-    "moduleBindingValue": "m-mvciv9u6-06r8",
+    "moduleBindingValue": "m-mvcl0rwr-bloi",
     "moduleBindingOptions": [
       "Pi default",
       "快速修复 · demo/mini"
