@@ -22,6 +22,7 @@ export interface PiLaunchOptions {
   isolated: boolean;
   sessionPath?: string;
   model?: string;
+  thinking?: string;
 }
 
 export interface PiSession {
@@ -161,6 +162,7 @@ export function spawnPi(options: PiLaunchOptions): PiSession {
   }
   if (options.sessionPath) args.push('--session', options.sessionPath);
   if (options.model) args.push('--model', options.model);
+  if (options.thinking) args.push('--thinking', options.thinking);
 
   const term = pty.spawn(install.nodePath, args, {
     name: 'xterm-256color',

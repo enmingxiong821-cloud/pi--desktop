@@ -1,7 +1,12 @@
+import { spawn } from 'node:child_process';
+import { resolvePi } from './pi.js';
+import { t } from './i18n.js';
+
 export interface VendorInfo {
   key: string;
   label: string;
   tier: number;
+  region: 'cn' | 'global';
   aliases: string[];
 }
 
@@ -26,30 +31,42 @@ export interface CatalogMcp {
   needsConfig?: boolean;
 }
 
+export interface CatalogExtension {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  tags: string[];
+  builtin: boolean;
+  version?: string;
+  source: string;
+}
+
 export interface CatalogReport {
   vendors: VendorInfo[];
   skills: CatalogSkill[];
   mcps: CatalogMcp[];
+  extensions: CatalogExtension[];
 }
 
 // 顺序即推荐顺序；tier 越小越靠前。这是编辑过的常用排序，不是客观评测。
 export const VENDORS: VendorInfo[] = [
-  { key: 'openai', label: 'OpenAI', tier: 1, aliases: ['openai', 'azure-openai', 'azure'] },
-  { key: 'anthropic', label: 'Anthropic', tier: 1, aliases: ['anthropic', 'claude'] },
-  { key: 'google', label: 'Google', tier: 1, aliases: ['google', 'gemini', 'vertex'] },
-  { key: 'xai', label: 'xAI', tier: 1, aliases: ['xai', 'grok'] },
-  { key: 'deepseek', label: 'DeepSeek', tier: 2, aliases: ['deepseek'] },
-  { key: 'moonshot', label: 'Moonshot · Kimi', tier: 2, aliases: ['moonshot', 'kimi', 'moonshotai'] },
-  { key: 'alibaba', label: '阿里通义', tier: 2, aliases: ['qwen', 'alibaba', 'dashscope', 'tongyi'] },
-  { key: 'zhipu', label: '智谱 GLM', tier: 2, aliases: ['zhipu', 'glm', 'bigmodel', 'z-ai'] },
-  { key: 'bytedance', label: '字节豆包', tier: 3, aliases: ['doubao', 'volcengine', 'bytedance', 'ark'] },
-  { key: 'baidu', label: '百度文心', tier: 3, aliases: ['baidu', 'wenxin', 'ernie', 'qianfan'] },
-  { key: 'meta', label: 'Meta', tier: 3, aliases: ['meta', 'llama'] },
-  { key: 'mistral', label: 'Mistral', tier: 3, aliases: ['mistral'] },
-  { key: 'cohere', label: 'Cohere', tier: 3, aliases: ['cohere', 'command'] },
-  { key: 'amazon', label: 'Amazon', tier: 3, aliases: ['amazon', 'bedrock', 'nova'] },
-  { key: 'openrouter', label: 'OpenRouter', tier: 4, aliases: ['openrouter'] },
-  { key: 'local', label: '本地模型', tier: 4, aliases: ['ollama', 'lmstudio', 'localhost', 'local'] },
+  { key: 'openai', label: 'OpenAI', tier: 1, region: 'global', aliases: ['openai', 'azure-openai', 'azure'] },
+  { key: 'anthropic', label: 'Anthropic', tier: 1, region: 'global', aliases: ['anthropic', 'claude'] },
+  { key: 'google', label: 'Google', tier: 1, region: 'global', aliases: ['google', 'gemini', 'vertex'] },
+  { key: 'xai', label: 'xAI', tier: 1, region: 'global', aliases: ['xai', 'grok'] },
+  { key: 'deepseek', label: 'DeepSeek', tier: 2, region: 'cn', aliases: ['deepseek'] },
+  { key: 'moonshot', label: 'Moonshot · Kimi', tier: 2, region: 'cn', aliases: ['moonshot', 'kimi', 'moonshotai'] },
+  { key: 'alibaba', label: '阿里通义', tier: 2, region: 'cn', aliases: ['qwen', 'alibaba', 'dashscope', 'tongyi'] },
+  { key: 'zhipu', label: '智谱 GLM', tier: 2, region: 'cn', aliases: ['zhipu', 'glm', 'bigmodel', 'z-ai'] },
+  { key: 'bytedance', label: '字节豆包', tier: 3, region: 'cn', aliases: ['doubao', 'volcengine', 'bytedance', 'ark'] },
+  { key: 'baidu', label: '百度文心', tier: 3, region: 'cn', aliases: ['baidu', 'wenxin', 'ernie', 'qianfan'] },
+  { key: 'meta', label: 'Meta', tier: 3, region: 'global', aliases: ['meta', 'llama'] },
+  { key: 'mistral', label: 'Mistral', tier: 3, region: 'global', aliases: ['mistral'] },
+  { key: 'cohere', label: 'Cohere', tier: 3, region: 'global', aliases: ['cohere', 'command'] },
+  { key: 'amazon', label: 'Amazon', tier: 3, region: 'global', aliases: ['amazon', 'bedrock', 'nova'] },
+  { key: 'openrouter', label: 'OpenRouter', tier: 4, region: 'global', aliases: ['openrouter'] },
+  { key: 'local', label: '本地模型', tier: 4, region: 'global', aliases: ['ollama', 'lmstudio', 'localhost', 'local'] },
 ];
 
 export function vendorKeyOf(providerId: string, modelId = ''): string {
@@ -219,6 +236,45 @@ const SKILLS: CatalogSkill[] = [
     ].join('\n'),
   },
   {
+    id: 'ui-review',
+    name: 'ui-review',
+    title: '界面评审',
+    description: '按层级、对比、间距、可访问性检查界面，并给出最小修改建议。',
+    tags: ['设计', '前端'],
+    body: [
+      '# 界面评审',
+      '',
+      '先确认目标用户与使用场景，再按以下顺序检查：',
+      '',
+      '1. 信息层级：主任务是否一眼可见，次要信息是否退后。',
+      '2. 对比与可读性：文字/背景对比度、字号、状态色。',
+      '3. 间距与对齐：网格一致性、触控目标尺寸。',
+      '4. 可访问性：键盘操作、焦点样式、语义标签。',
+      '',
+      '每条建议给出位置、问题、影响与最小改动；不重做整页视觉。',
+    ].join('\n'),
+  },
+  {
+    id: 'creative-brief',
+    name: 'creative-brief',
+    title: '创意项目简报',
+    description: '把剪辑、建模、动画需求拆成分镜、素材、软件与交付清单。',
+    tags: ['视频', '3D', '设计'],
+    body: [
+      '# 创意项目简报',
+      '',
+      '输出一份可执行简报：',
+      '',
+      '- 目标与受众、成片时长/分辨率、交付格式。',
+      '- 分镜或结构：每个镜头的画面、时长、转场、音效。',
+      '- 素材清单：实拍、图片、模型、字体、音乐及授权状态。',
+      '- 工具与文件：所需软件、工程文件命名、目录结构。',
+      '- 检查点：粗剪、精剪、调色、导出各阶段的验收标准。',
+      '',
+      '不确定的创意方向给出 2 个可选方案与取舍，不擅自替用户决定风格。',
+    ].join('\n'),
+  },
+  {
     id: 'release-notes',
     name: 'release-notes',
     title: '发布说明',
@@ -322,8 +378,83 @@ const MCPS: CatalogMcp[] = [
   },
 ];
 
+const EXTENSIONS: CatalogExtension[] = [
+  {
+    id: 'pi-web-access',
+    name: 'pi-web-access',
+    title: '联网检索',
+    description: '网页搜索、抓取 URL、GitHub 仓库克隆、PDF 与视频内容提取。',
+    tags: ['联网', '搜索', '文档'],
+    builtin: true,
+    source: 'npm',
+  },
+  {
+    id: 'pi-mcp-extension',
+    name: 'pi-mcp-extension',
+    title: 'MCP 客户端',
+    description: '在 Pi 内连接 MCP 服务器，复用已配置的工具与资源。',
+    tags: ['MCP', '工具'],
+    builtin: true,
+    source: 'npm',
+  },
+  {
+    id: 'pi-subagents',
+    name: 'pi-subagents',
+    title: '子代理编排',
+    description: '单 Agent 委派与脚本化多 Agent 工作流。',
+    tags: ['协作', 'Agent'],
+    builtin: true,
+    source: 'npm',
+  },
+  {
+    id: 'pi-lens',
+    name: 'pi-lens',
+    title: '实时代码反馈',
+    description: 'LSP、Lint、格式化、类型检查与结构化代码反馈。',
+    tags: ['开发', '质量'],
+    builtin: true,
+    source: 'npm',
+  },
+  {
+    id: '@plannotator/pi-extension',
+    name: '@plannotator/pi-extension',
+    title: '计划审阅',
+    description: '带批注的交互式计划审阅，适合长任务开工前确认。',
+    tags: ['规划', '审阅'],
+    builtin: true,
+    source: 'npm',
+  },
+  {
+    id: 'pi-powerline-footer',
+    name: 'pi-powerline-footer',
+    title: 'Powerline 状态栏',
+    description: '在 Pi 底部显示模型、目录与运行状态。',
+    tags: ['界面'],
+    builtin: true,
+    source: 'npm',
+  },
+  {
+    id: '@langfuse/pi-observability-plugin',
+    name: '@langfuse/pi-observability-plugin',
+    title: 'Langfuse 可观测',
+    description: '记录提示、工具调用与耗时，便于排查与统计。',
+    tags: ['可观测', '日志'],
+    builtin: true,
+    source: 'npm',
+  },
+  {
+    id: '@juicesharp/rpiv-ask-user-question',
+    name: '@juicesharp/rpiv-ask-user-question',
+    title: '结构化提问',
+    description: '模型在关键决策点以问卷形式向用户确认。',
+    tags: ['交互'],
+    builtin: true,
+    source: 'npm',
+  },
+];
+
 export function listCatalog(): CatalogReport {
-  return { vendors: VENDORS, skills: SKILLS, mcps: MCPS };
+  return { vendors: VENDORS, skills: SKILLS, mcps: MCPS, extensions: EXTENSIONS };
 }
 
 export interface RegistryMcp {
@@ -385,5 +516,137 @@ export async function searchMcpRegistry(query: string): Promise<{ ok: boolean; r
     return { ok: true, results };
   } catch (error) {
     return { ok: false, results: [], error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export async function searchNpmExtensions(
+  query: string,
+): Promise<{ ok: boolean; results: CatalogExtension[]; error?: string }> {
+  const term = cleanText(query, 80);
+  const text = term ? `${term} keywords:pi-package` : 'keywords:pi-package';
+  const url = `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(text)}&size=25`;
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(12_000), headers: { Accept: 'application/json' } });
+    if (!response.ok) return { ok: false, results: [], error: `HTTP ${response.status}` };
+    const payload = await response.json() as { objects?: unknown };
+    if (!Array.isArray(payload.objects)) return { ok: true, results: [] };
+    const results: CatalogExtension[] = [];
+    const seen = new Set<string>();
+    for (const entry of payload.objects) {
+      if (!entry || typeof entry !== 'object') continue;
+      const pkg = (entry as Record<string, unknown>).package;
+      if (!pkg || typeof pkg !== 'object') continue;
+      const record = pkg as Record<string, unknown>;
+      const name = cleanText(record.name, 120);
+      const keywords = Array.isArray(record.keywords) ? record.keywords.filter((item): item is string => typeof item === 'string') : [];
+      if (!name || seen.has(name) || !NPM_NAME.test(name)) continue;
+      if (!keywords.some((item) => /^(pi-package|pi-extension)$/i.test(item))) continue;
+      seen.add(name);
+      results.push({
+        id: `npm:${name}`,
+        name,
+        title: name.split('/').pop() || name,
+        description: cleanText(record.description, 260) || '来自 npm 的 Pi 扩展',
+        tags: keywords.filter((item) => !/^(pi|pi-package|pi-extension|pi-coding-agent)$/i.test(item)).slice(0, 3),
+        builtin: EXTENSIONS.some((item) => item.name.toLowerCase() === name.toLowerCase()),
+        version: cleanText(record.version, 40) || undefined,
+        source: 'registry.npmjs.org',
+      });
+    }
+    return { ok: true, results };
+  } catch (error) {
+    return { ok: false, results: [], error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export async function installExtension(
+  packageName: string,
+  onEvent?: (line: string) => void,
+): Promise<{ ok: boolean; output: string; error?: string }> {
+  const name = cleanText(packageName, 160);
+  if (!name || !NPM_NAME.test(name)) return { ok: false, output: '', error: t('npm 包名无效') };
+  let install;
+  try {
+    install = resolvePi();
+  } catch (error) {
+    return { ok: false, output: '', error: error instanceof Error ? error.message : String(error) };
+  }
+  return new Promise((resolve) => {
+    let output = '';
+    let settled = false;
+    const append = (chunk: string): void => {
+      if (settled || !chunk) return;
+      output = (output + chunk).slice(-20_000);
+      onEvent?.(chunk.slice(0, 2000));
+    };
+    let child;
+    try {
+      child = spawn(install.nodePath, [install.cliPath, 'install', `npm:${name}`], {
+        cwd: install.agentDir,
+        windowsHide: true,
+        env: { ...process.env, PI_CODING_AGENT_DIR: install.agentDir },
+      });
+    } catch (error) {
+      resolve({ ok: false, output: '', error: error instanceof Error ? error.message : String(error) });
+      return;
+    }
+    const finish = (ok: boolean, error?: string): void => {
+      if (settled) return;
+      settled = true;
+      resolve({ ok, output: output.trim(), error });
+    };
+    const timer = setTimeout(() => {
+      try {
+        child.kill();
+      } catch {
+        // 已退出
+      }
+      finish(false, t('安装超时'));
+    }, 5 * 60_000);
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', append);
+    child.stderr?.on('data', append);
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      finish(false, error.message);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      finish(code === 0, code === 0 ? undefined : t('安装失败，退出码 {code}', { code: String(code) }));
+    });
+  });
+}
+
+export async function fetchSkillFromUrl(
+  rawUrl: string,
+): Promise<{ ok: boolean; name?: string; description?: string; body?: string; error?: string }> {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return { ok: false, error: t('链接无效') };
+  }
+  if (parsed.protocol !== 'https:' || !/^raw\.githubusercontent\.com$/i.test(parsed.hostname)) {
+    return { ok: false, error: t('只支持 raw.githubusercontent.com 的 SKILL.md 链接') };
+  }
+  try {
+    const response = await fetch(parsed, { signal: AbortSignal.timeout(12_000) });
+    if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
+    const text = (await response.text()).slice(0, 512_000);
+    const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
+    const meta: Record<string, string> = {};
+    if (frontmatter) {
+      for (const line of frontmatter[1].split(/\r?\n/)) {
+        const match = /^([A-Za-z_-]+):\s*(.+)$/.exec(line);
+        if (match) meta[match[1].toLowerCase()] = match[2].trim().replace(/^['"]|['"]$/g, '');
+      }
+    }
+    const body = frontmatter ? text.slice(frontmatter[0].length).trim() : text.trim();
+    const fallbackName = parsed.pathname.split('/').filter(Boolean).slice(-2, -1)[0] || 'imported-skill';
+    const name = (meta.name || fallbackName).replace(/[^\w.-]/g, '-').slice(0, 60);
+    return { ok: true, name, description: (meta.description || '').slice(0, 300), body };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }

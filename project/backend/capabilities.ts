@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { backupAndWrite, readJsonFile, realAgentDir } from './config.js';
 import { t } from './i18n.js';
@@ -82,8 +82,26 @@ export function addSkill(input: AddSkillInput): CapabilityResult {
   }
 }
 
-function parseArgs(text: string): string[] {
-  if (!text.trim()) return [];
+export function removeSkill(input: AddSkillInput): CapabilityResult {
+  try {
+    const baseDir = scopeDir(input);
+    const name = cleanName(input.name ?? '');
+    const dir = path.join(baseDir, 'skills', name);
+    const file = path.join(dir, 'SKILL.md');
+    if (!existsSync(file)) return { ok: false, error: t('未找到 Skill：{name}', { name }) };
+    rmSync(file);
+    try {
+      if (!readdirSync(dir).length) rmdirSync(dir);
+    } catch {
+      // 目录非空或已被删除，保留其余内容
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function parseArgs(text: string): string[] {  if (!text.trim()) return [];
   const args: string[] = [];
   for (const line of text.split(/\r?\n/)) {
     const value = line.trim();

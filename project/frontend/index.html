@@ -16,6 +16,12 @@
         <option value="en">English</option>
       </select>
       <span id="active-model" class="badge" role="button" tabindex="0" title="打开模型面板" data-i18n-title="打开模型面板" data-i18n="模型 —">模型 —</span><span id="pi-version" data-i18n="检测中">检测中</span><span id="process-state" class="state idle">未启动</span>
+      <button id="open-settings" class="icon-button" title="打开设置" data-i18n-title="打开设置" aria-label="打开设置" data-i18n-aria-label="打开设置">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.7 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.7h.09A1.7 1.7 0 0 0 10.12 3.14V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.3 9v.09a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z"></path>
+        </svg>
+      </button>
     </div>
   </header>
 
@@ -29,7 +35,7 @@
         <button role="tab" id="tab-team" aria-controls="pane-team" aria-selected="false" data-i18n="协作">协作</button>
         <button role="tab" id="tab-capability" aria-controls="pane-capability" aria-selected="false" data-i18n="能力">能力</button>
         <button role="tab" id="tab-session" aria-controls="pane-session" aria-selected="false" data-i18n="会话">会话</button>
-        <button role="tab" id="tab-audit" aria-controls="pane-audit" aria-selected="false" data-i18n="审计">审计</button>
+        <button role="tab" id="tab-search" aria-controls="pane-search" aria-selected="false" data-i18n="搜索">搜索</button>
         <button role="tab" id="tab-settings" aria-controls="pane-settings" aria-selected="false" data-i18n="设置">设置</button>
       </nav>
 
@@ -41,6 +47,17 @@
             <button id="open-folder" class="ghost" disabled data-i18n="打开目录">打开目录</button>
             <button id="open-vscode" class="ghost" disabled data-i18n="VS Code">VS Code</button>
           </div>
+          <details id="import-projects-drawer" class="drawer">
+            <summary data-i18n="从其他软件导入项目">从其他软件导入项目</summary>
+            <p class="note" data-i18n="读取 VS Code、Cursor、TRAE、Windsurf 与 JetBrains 等软件最近打开的项目目录；只在本机读取，不修改这些软件的配置。">读取 VS Code、Cursor、TRAE、Windsurf 与 JetBrains 等软件最近打开的项目目录；只在本机读取，不修改这些软件的配置。</p>
+            <div id="import-project-list" class="import-list">
+              <p class="note" data-i18n="展开后开始扫描。">展开后开始扫描。</p>
+            </div>
+            <div class="module-form-actions">
+              <button id="import-projects-refresh" class="ghost" type="button" data-i18n="重新扫描">重新扫描</button>
+              <button id="import-projects-apply" class="primary" type="button" data-i18n="导入选中">导入选中</button>
+            </div>
+          </details>
           <div id="recent-projects" class="recent"></div>
           <div class="group-label"><span data-i18n="会话">会话</span></div>
           <button id="start-pi" class="primary" disabled data-i18n="新会话">新会话</button>
@@ -85,6 +102,20 @@
             <input id="model-search" type="search" placeholder="搜索厂商 / 模型" data-i18n-placeholder="搜索厂商 / 模型" autocomplete="off" spellcheck="false">
             <button id="refresh-models" class="ghost" title="重新读取 Pi 配置" data-i18n-title="重新读取 Pi 配置" data-i18n="刷新">刷新</button>
           </div>
+          <div class="board-tabs" role="tablist" aria-label="模型板块" data-i18n-aria-label="模型板块">
+            <button role="tab" class="board-tab" data-board="cn" aria-selected="true" data-i18n="国内">国内</button>
+            <button role="tab" class="board-tab" data-board="global" aria-selected="false" data-i18n="国外">国外</button>
+            <button role="tab" class="board-tab" data-board="free" aria-selected="false" data-i18n="免费模型">免费模型</button>
+          </div>
+          <div class="model-quick">
+            <button id="apply-free-model" type="button" class="ghost" data-i18n="一键使用免费模型">一键使用免费模型</button>
+            <label class="toggle" title="发送前按任务自动切换模型" data-i18n-title="发送前按任务自动切换模型">
+              <input type="checkbox" id="router-toggle">
+              <span data-i18n="总控：按任务自动切换">总控：按任务自动切换</span>
+            </label>
+          </div>
+          <div id="router-map" class="router-map" hidden></div>
+          <p id="router-note" class="note" data-i18n="总控开启后，发送消息前按任务类型切换到对应模型；不改变 Pi 的全局默认。">总控开启后，发送消息前按任务类型切换到对应模型；不改变 Pi 的全局默认。</p>
           <p id="model-summary" class="summary" data-i18n="读取本机 Pi 配置…">读取本机 Pi 配置…</p>
           <select id="model-provider" class="filter-select" aria-label="按 provider 筛选" data-i18n-aria-label="按 provider 筛选" hidden>
             <option value="" data-i18n="全部 provider">全部 provider</option>
@@ -170,11 +201,16 @@
             <span class="summary" data-i18n="能力市场">能力市场</span>
             <button id="refresh-market" class="ghost" data-i18n="刷新">刷新</button>
           </div>
-          <input id="market-search" type="search" placeholder="搜索 Skill / MCP，例如 浏览器、审查" data-i18n-placeholder="搜索 Skill / MCP，例如 浏览器、审查" autocomplete="off" spellcheck="false">
+          <input id="market-search" type="search" placeholder="搜索插件 / 技能 / MCP，例如 浏览器、审查" data-i18n-placeholder="搜索插件 / 技能 / MCP，例如 浏览器、审查" autocomplete="off" spellcheck="false">
           <div class="market-tabs" role="tablist" aria-label="市场分类" data-i18n-aria-label="市场分类">
-            <button type="button" class="market-tab active" data-market="skills" data-i18n="Skills">Skills</button>
+            <button type="button" class="market-tab active" data-market="extensions" data-i18n="插件">插件</button>
+            <button type="button" class="market-tab" data-market="skills" data-i18n="技能">技能</button>
             <button type="button" class="market-tab" data-market="mcps" data-i18n="MCP">MCP</button>
-            <button type="button" class="market-tab" data-market="online" data-i18n="在线目录">在线目录</button>
+          </div>
+          <div id="market-chips" class="market-chips"></div>
+          <div id="market-custom" class="market-custom">
+            <input id="market-custom-input" type="text" autocomplete="off" spellcheck="false" placeholder="输入 npm 包名，例如 pi-web-access" data-i18n-placeholder="输入 npm 包名，例如 pi-web-access">
+            <button id="market-custom-add" class="ghost" data-i18n="下载并安装">下载并安装</button>
           </div>
           <div class="market-scope">
             <select id="market-scope" aria-label="安装范围" data-i18n-aria-label="安装范围">
@@ -291,7 +327,61 @@
             <button id="refresh-agents" class="ghost" data-i18n="重新检测">重新检测</button>
           </div>
           <p id="team-summary" class="summary" data-i18n="检测本机已安装的 Agent CLI。">检测本机已安装的 Agent CLI。</p>
+          <div class="pane-head">
+            <span class="summary" data-i18n="参与协作的 Agent">参与协作的 Agent</span>
+            <span class="pane-head-actions">
+              <button id="select-all-agents" class="ghost" data-i18n="全选">全选</button>
+              <button id="clear-agents" class="ghost" data-i18n="清空">清空</button>
+              <button id="auto-team" class="ghost" data-i18n="智能组队">智能组队</button>
+            </span>
+          </div>
+          <p id="team-suggest" class="note" data-i18n="填写任务后点「智能组队」，按项目类型自动选人并指定主管；也可以手动勾选参与者。">填写任务后点「智能组队」，按项目类型自动选人并指定主管；也可以手动勾选参与者。</p>
           <div id="agent-list" class="list agent-list"></div>
+          <details id="custom-agent-drawer" class="drawer">
+            <summary data-i18n="自定义 Agent 接入">自定义 Agent 接入</summary>
+            <p class="note" data-i18n="填写本机已安装的 CLI 命令与参数；用 {prompt} 代表任务，{cwd} 代表项目目录。凭据沿用该命令自身的登录或环境变量，工作台不保存密钥。">填写本机已安装的 CLI 命令与参数；用 {prompt} 代表任务，{cwd} 代表项目目录。凭据沿用该命令自身的登录或环境变量，工作台不保存密钥。</p>
+            <div class="field">
+              <span data-i18n="快速配置">快速配置</span>
+              <select id="custom-agent-preset">
+                <option value="" data-i18n="选择常用 CLI（自动填入）">选择常用 CLI（自动填入）</option>
+              </select>
+            </div>
+            <div class="field">
+              <span data-i18n="名称">名称</span>
+              <input id="custom-agent-name" maxlength="60" placeholder="My Agent" />
+            </div>
+            <div class="field">
+              <span data-i18n="可执行命令">可执行命令</span>
+              <div class="field-inline">
+                <input id="custom-agent-command" maxlength="240" placeholder="my-agent" />
+                <button id="pick-agent-command" class="ghost" data-i18n="选择程序">选择程序</button>
+              </div>
+            </div>
+            <div class="field">
+              <span data-i18n="角色（逗号分隔）">角色（逗号分隔）</span>
+              <input id="custom-agent-roles" placeholder="实现, 审查" />
+            </div>
+            <div class="field">
+              <span data-i18n="说明">说明</span>
+              <input id="custom-agent-desc" maxlength="200" placeholder="团队内部 CLI" />
+            </div>
+            <div class="field">
+              <span data-i18n="运行参数（每行一个，必须包含 {prompt}）">运行参数（每行一个，必须包含 {prompt}）</span>
+              <textarea id="custom-agent-args" rows="4" placeholder="-p&#10;{prompt}&#10;--output-format&#10;json"></textarea>
+            </div>
+            <div class="module-form-actions">
+              <button id="save-custom-agent" class="primary" data-i18n="保存自定义 Agent">保存自定义 Agent</button>
+            </div>
+          </details>
+          <div class="pane-head">
+            <span class="summary" data-i18n="会议室">会议室</span>
+            <button id="clear-room" class="ghost" data-i18n="清空会议室">清空会议室</button>
+          </div>
+          <p class="note" data-i18n="把可视化里的软件卡片或下方 Agent 拖进会议室；主管会把这些成员纳入计划并分配任务。">把可视化里的软件卡片或下方 Agent 拖进会议室；主管会把这些成员纳入计划并分配任务。</p>
+          <div id="meeting-room" class="meeting-room">
+            <span id="meeting-room-empty" class="room-empty" data-i18n="拖动软件或 Agent 到这里">拖动软件或 Agent 到这里</span>
+          </div>
+          <label class="toggle"><input type="checkbox" id="team-web-search"> <span data-i18n="联网检索最新信息">联网检索最新信息</span></label>
           <label class="field">
             <span data-i18n="协作任务">协作任务</span>
             <textarea id="team-task" rows="3" placeholder="例如：调研这个项目的构建链路并给出优化方案" data-i18n-placeholder="例如：调研这个项目的构建链路并给出优化方案"></textarea>
@@ -299,12 +389,18 @@
           <label class="field">
             <span data-i18n="编排方式">编排方式</span>
             <select id="team-mode">
-              <option value="parallel" data-i18n="并行独立执行">并行独立执行</option>
-              <option value="supervisor" data-i18n="主管先规划再分工">主管先规划再分工</option>
+              <option value="supervisor" selected data-i18n="主管制：先规划再分工（必需）">主管制：先规划再分工（必需）</option>
             </select>
           </label>
           <label class="field">
-            <span data-i18n="主管">主管</span>
+            <span data-i18n="主管分配">主管分配</span>
+            <select id="team-supervisor-mode">
+              <option value="auto" selected data-i18n="自动分配（按任务与项目评分）">自动分配（按任务与项目评分）</option>
+              <option value="manual" data-i18n="手动指定">手动指定</option>
+            </select>
+          </label>
+          <label id="team-supervisor-field" class="field" hidden>
+            <span data-i18n="主管（总控）">主管（总控）</span>
             <select id="team-supervisor"></select>
           </label>
           <div id="team-agents" class="agent-picker"></div>
@@ -313,7 +409,7 @@
             <button id="refresh-team" class="ghost" data-i18n="刷新状态">刷新状态</button>
           </div>
           <p id="team-status" class="note"></p>
-          <p class="note" data-i18n="每个 Agent 以本机 CLI 的无交互模式运行；会真实调用模型并产生费用。">每个 Agent 以本机 CLI 的无交互模式运行；会真实调用模型并产生费用。</p>
+          <p class="note" data-i18n="命令行 Agent 以无交互模式运行并真实调用模型，可能产生费用；桌面版 Agent 会打开应用并把任务复制到剪贴板，由你粘贴执行。">命令行 Agent 以无交互模式运行并真实调用模型，可能产生费用；桌面版 Agent 会打开应用并把任务复制到剪贴板，由你粘贴执行。</p>
         </section>
 
         <section id="pane-capability" role="tabpanel" class="pane" hidden>
@@ -348,6 +444,8 @@
             </div>
           </form>
           <p id="capability-summary" class="summary" data-i18n="尚未选择项目">尚未选择项目</p>
+          <input id="capability-search" class="list-search" type="search" placeholder="搜索能力名称或说明" data-i18n-placeholder="搜索能力名称或说明" />
+          <div id="capability-packs" class="capability-packs"></div>
           <div id="capability-list" class="list"></div>
         </section>
 
@@ -357,16 +455,123 @@
             <button id="refresh-sessions" class="ghost" data-i18n="刷新">刷新</button>
           </div>
           <p id="session-summary" class="summary" data-i18n="尚未选择项目">尚未选择项目</p>
+          <input id="session-search" class="list-search" type="search" placeholder="搜索会话 ID 或时间" data-i18n-placeholder="搜索会话 ID 或时间" />
           <div id="session-list" class="list"></div>
           <p class="note" data-i18n-html="点击会话会在停止当前 Pi 后以 <code>--session</code> 恢复；会话文件不会被修改，除非继续对话。">点击会话会在停止当前 Pi 后以 --session 恢复；会话文件不会被修改，除非继续对话。</p>
         </section>
 
-        <section id="pane-audit" role="tabpanel" class="pane" hidden>
-          <p class="summary" data-i18n="本地操作记录">本地操作记录</p>
-          <ol id="audit-log" class="audit"></ol>
+        <section id="pane-search" role="tabpanel" class="pane" hidden>
+          <div class="pane-head">
+            <span class="summary" data-i18n="全网实时检索">全网实时检索</span>
+            <button id="refresh-search" class="ghost" data-i18n="刷新">刷新</button>
+          </div>
+          <div class="field-inline">
+            <input id="search-query" type="search" placeholder="搜索最新信息、文档或新闻" data-i18n-placeholder="搜索最新信息、文档或新闻" />
+            <button id="run-web-search" class="primary" data-i18n="搜索">搜索</button>
+          </div>
+          <div id="search-results" class="list search-results"></div>
+          <p id="search-status" class="note"></p>
+          <div class="group-label"><span data-i18n="高级工具（联网搜索默认开启，抓取与逆向默认关闭）">高级工具（联网搜索默认开启，抓取与逆向默认关闭）</span></div>
+          <label class="toggle"><input type="checkbox" id="tool-web-search"> <span data-i18n="联网搜索">联网搜索</span></label>
+          <label class="toggle"><input type="checkbox" id="tool-crawl"> <span data-i18n="网页抓取（爬虫）">网页抓取（爬虫）</span></label>
+          <label class="toggle"><input type="checkbox" id="tool-reverse"> <span data-i18n="逆向分析本机文件/项目">逆向分析本机文件/项目</span></label>
+          <label class="field">
+            <span data-i18n="搜索源">搜索源</span>
+            <select id="search-provider">
+              <option value="duckduckgo" data-i18n="DuckDuckGo（免配置）">DuckDuckGo（免配置）</option>
+              <option value="searxng" data-i18n="SearXNG（自建或公共实例）">SearXNG（自建或公共实例）</option>
+            </select>
+          </label>
+          <label class="field">
+            <span data-i18n="SearXNG 地址">SearXNG 地址</span>
+            <input id="searxng-url" type="url" placeholder="https://searx.example.com" spellcheck="false" />
+          </label>
+          <button id="save-tool-settings" class="ghost" data-i18n="保存高级工具设置">保存高级工具设置</button>
+          <p class="note" data-i18n="联网搜索会向所选搜索服务发送查询词；抓取与逆向分析只在本机执行，结果不会自动上传。">联网搜索会向所选搜索服务发送查询词；抓取与逆向分析只在本机执行，结果不会自动上传。</p>
+          <details class="drawer">
+            <summary data-i18n="网页抓取">网页抓取</summary>
+            <p class="note" data-i18n="只抓取公开网页正文，限制大小与同站链接数量；需要先开启「网页抓取」。">只抓取公开网页正文，限制大小与同站链接数量；需要先开启「网页抓取」。</p>
+            <div class="field-inline">
+              <input id="crawl-url" type="url" placeholder="https://…" spellcheck="false" />
+              <button id="crawl-page" class="ghost" data-i18n="抓取正文">抓取正文</button>
+              <button id="crawl-site" class="ghost" data-i18n="抓取同站">抓取同站</button>
+            </div>
+            <pre id="crawl-output" class="analyze-output"></pre>
+          </details>
+          <details class="drawer">
+            <summary data-i18n="逆向分析（本地）">逆向分析（本地）</summary>
+            <p class="note" data-i18n="读取本机文件或项目结构，输出指纹、哈希、字符串与语言构成，便于理解设计与代码；不破解、不绕过授权。需要先开启「逆向分析」。">读取本机文件或项目结构，输出指纹、哈希、字符串与语言构成，便于理解设计与代码；不破解、不绕过授权。需要先开启「逆向分析」。</p>
+            <div class="field-inline">
+              <input id="analyze-path" type="text" placeholder="文件或项目目录" data-i18n-placeholder="文件或项目目录" spellcheck="false" />
+              <button id="pick-analyze-path" class="ghost" data-i18n="选择">选择</button>
+            </div>
+            <button id="run-analyze" class="primary" data-i18n="开始分析">开始分析</button>
+            <pre id="analyze-output" class="analyze-output"></pre>
+          </details>
         </section>
 
         <section id="pane-settings" role="tabpanel" class="pane" hidden>
+          <div class="pane-head">
+            <span class="summary" data-i18n="外观">外观</span>
+            <button id="reset-appearance" class="ghost" data-i18n="恢复默认">恢复默认</button>
+          </div>
+          <label class="field">
+            <span data-i18n="主题">主题</span>
+            <select id="theme-mode">
+              <option value="dark" data-i18n="深色">深色</option>
+              <option value="light" data-i18n="浅色">浅色</option>
+              <option value="system" data-i18n="跟随系统">跟随系统</option>
+            </select>
+          </label>
+          <label class="field">
+            <span data-i18n="强调色">强调色</span>
+            <select id="accent-color">
+              <option value="mint" data-i18n="薄荷绿">薄荷绿</option>
+              <option value="blue" data-i18n="海雾蓝">海雾蓝</option>
+              <option value="violet" data-i18n="暮光紫">暮光紫</option>
+              <option value="amber" data-i18n="琥珀金">琥珀金</option>
+              <option value="rose" data-i18n="玫瑰粉">玫瑰粉</option>
+              <option value="custom" data-i18n="自定义…">自定义…</option>
+            </select>
+          </label>
+          <label class="field" id="accent-custom-row" hidden>
+            <span data-i18n="自定义颜色">自定义颜色</span>
+            <input id="accent-custom" type="color" value="#a4e6cc">
+          </label>
+          <label class="toggle"><input type="checkbox" id="compact-density"> <span data-i18n="紧凑布局">紧凑布局</span></label>
+          <label class="field">
+            <span data-i18n="启动动画">启动动画</span>
+            <select id="startup-animation">
+              <option value="dynamic" data-i18n="动态 π">动态 π</option>
+              <option value="fade" data-i18n="淡入">淡入</option>
+              <option value="off" data-i18n="关闭">关闭</option>
+            </select>
+          </label>
+          <button id="preview-startup" class="ghost" data-i18n="预览启动动画">预览启动动画</button>
+          <div class="group-label"><span data-i18n="默认调控">默认调控</span></div>
+          <label class="field">
+            <span data-i18n="推理度">推理度</span>
+            <select id="settings-reasoning" aria-label="默认推理度" data-i18n-aria-label="默认推理度">
+              <option value="auto" data-i18n="自动">自动</option>
+              <option value="off" data-i18n="关闭（最快）">关闭（最快）</option>
+              <option value="minimal" data-i18n="极低">极低</option>
+              <option value="low" data-i18n="低">低</option>
+              <option value="medium" data-i18n="中">中</option>
+              <option value="high" data-i18n="高">高</option>
+              <option value="xhigh" data-i18n="极高">极高</option>
+              <option value="max" data-i18n="最高（最慢）">最高（最慢）</option>
+            </select>
+          </label>
+          <label class="field">
+            <span data-i18n="聪明程度">聪明程度</span>
+            <select id="settings-smart" aria-label="默认聪明程度" data-i18n-aria-label="默认聪明程度">
+              <option value="auto" data-i18n="自动">自动</option>
+              <option value="fast" data-i18n="快速">快速</option>
+              <option value="balanced" data-i18n="均衡">均衡</option>
+              <option value="max" data-i18n="最强">最强</option>
+            </select>
+          </label>
+          <p class="note" data-i18n="推理度越高，思考越深，响应越慢、消耗越多；聪明程度越高，越偏向旗舰模型。两者默认「自动」，由 Pi 与当前模型决定。">推理度越高，思考越深，响应越慢、消耗越多；聪明程度越高，越偏向旗舰模型。两者默认「自动」，由 Pi 与当前模型决定。</p>
           <p class="summary" data-i18n="本机软件与网页">本机软件与网页</p>
           <div class="tool-grid">
             <button class="ghost" data-open-app="vscode" data-i18n="VS Code">VS Code</button>
@@ -375,6 +580,12 @@
             <button class="ghost" data-open-app="notepad" data-i18n="记事本">记事本</button>
             <button class="ghost" data-open-app="calculator" data-i18n="计算器">计算器</button>
             <button class="ghost" data-open-app="mspaint" data-i18n="画图">画图</button>
+          </div>
+          <p class="summary" data-i18n="配置与数据">配置与数据</p>
+          <div class="tool-grid">
+            <button id="open-pi-config" class="ghost" data-i18n="Pi 配置目录">Pi 配置目录</button>
+            <button id="open-project-pi" class="ghost" data-i18n="项目 .pi 目录">项目 .pi 目录</button>
+            <button id="open-user-data" class="ghost" data-i18n="数据目录">数据目录</button>
           </div>
           <label class="field">
             <span data-i18n="用浏览器打开">用浏览器打开</span>
@@ -390,6 +601,8 @@
         </section>
       </div>
     </aside>
+
+    <div id="resizer-left" class="resizer" role="separator" aria-orientation="vertical" tabindex="0" aria-label="调整左侧栏宽度" data-i18n-aria-label="调整左侧栏宽度" title="拖动调整左侧栏宽度，双击恢复默认" data-i18n-title="拖动调整左侧栏宽度，双击恢复默认"></div>
 
     <main class="terminal-column">
       <div class="terminal-head">
@@ -434,9 +647,36 @@
       <footer class="statusbar">
         <span id="cwd-label" data-i18n="未绑定项目">未绑定项目</span>
         <span id="cols-rows">—</span>
+        <div class="tuning" role="group" aria-label="模型调控" data-i18n-aria-label="模型调控">
+          <label class="tune-field" title="思考越深，响应越慢、消耗越多；自动交给 Pi 决定" data-i18n-title="思考越深，响应越慢、消耗越多；自动交给 Pi 决定">
+            <span data-i18n="推理度">推理度</span>
+            <select id="reasoning-level" aria-label="推理度" data-i18n-aria-label="推理度">
+              <option value="auto" data-i18n="自动">自动</option>
+              <option value="off" data-i18n="关闭（最快）">关闭（最快）</option>
+              <option value="minimal" data-i18n="极低">极低</option>
+              <option value="low" data-i18n="低">低</option>
+              <option value="medium" data-i18n="中">中</option>
+              <option value="high" data-i18n="高">高</option>
+              <option value="xhigh" data-i18n="极高">极高</option>
+              <option value="max" data-i18n="最高（最慢）">最高（最慢）</option>
+            </select>
+          </label>
+          <label class="tune-field" title="越高越偏向旗舰模型，响应更慢、费用更高；自动沿用当前模型" data-i18n-title="越高越偏向旗舰模型，响应更慢、费用更高；自动沿用当前模型">
+            <span data-i18n="聪明程度">聪明程度</span>
+            <select id="smart-level" aria-label="聪明程度" data-i18n-aria-label="聪明程度">
+              <option value="auto" data-i18n="自动">自动</option>
+              <option value="fast" data-i18n="快速">快速</option>
+              <option value="balanced" data-i18n="均衡">均衡</option>
+              <option value="max" data-i18n="最强">最强</option>
+            </select>
+          </label>
+          <span id="tuning-state" class="tune-state"></span>
+        </div>
         <span class="hint" data-i18n="Ctrl+F 搜索 · Ctrl+C 复制选区 · 右键复制/粘贴 · Ctrl+V 粘贴">Ctrl+F 搜索 · Ctrl+C 复制选区 · 右键复制/粘贴 · Ctrl+V 粘贴</span>
       </footer>
     </main>
+
+    <div id="resizer-right" class="resizer" role="separator" aria-orientation="vertical" tabindex="0" aria-label="调整右侧栏宽度" data-i18n-aria-label="调整右侧栏宽度" title="拖动调整右侧栏宽度，双击恢复默认" data-i18n-title="拖动调整右侧栏宽度，双击恢复默认"></div>
 
     <aside class="panel workspace">
       <div class="panel-tabs workspace-tabs" role="tablist" aria-label="工作区" data-i18n-aria-label="工作区">
@@ -444,6 +684,7 @@
         <button role="tab" id="tab-ws-review" aria-controls="pane-ws-review" aria-selected="false" data-i18n="审查">审查</button>
         <button role="tab" id="tab-ws-interact" aria-controls="pane-ws-interact" aria-selected="false" data-i18n="交互">交互</button>
         <button role="tab" id="tab-ws-collab" aria-controls="pane-ws-collab" aria-selected="false" data-i18n="协作日志">协作日志</button>
+        <button role="tab" id="tab-ws-visual" aria-controls="pane-ws-visual" aria-selected="false" data-i18n="可视化">可视化</button>
       </div>
 
       <section id="pane-ws-edit" role="tabpanel" class="pane">
@@ -500,6 +741,88 @@
         <div id="team-log-live" class="team-log"></div>
         <p id="team-log-empty" class="note" data-i18n="还没有协作输出。在左侧「协作」启动任务。">还没有协作输出。在左侧「协作」启动任务。</p>
       </section>
+
+      <section id="pane-ws-visual" role="tabpanel" class="pane" hidden>
+        <div class="pane-head">
+          <span class="summary" data-i18n="可视化与创作软件">可视化与创作软件</span>
+          <span class="group-tools">
+            <button id="visual-scan-all" class="ghost" data-i18n="扫描全部软件">扫描全部软件</button>
+            <button id="visual-refresh" class="ghost" data-i18n="重新检测">重新检测</button>
+          </span>
+        </div>
+        <div id="visual-stage" class="visual-stage">
+          <p class="note" data-i18n="选择图片或视频，在这里预览；软件工程文件用对应创作软件打开。">选择图片或视频，在这里预览；软件工程文件用对应创作软件打开。</p>
+        </div>
+        <div class="visual-actions">
+          <button id="visual-pick" class="ghost" data-i18n="选择图片/视频">选择图片/视频</button>
+          <button id="visual-open-file" class="ghost" disabled data-i18n="外部打开">外部打开</button>
+        </div>
+        <div class="group-label">
+          <span data-i18n="本机创作软件">本机创作软件</span>
+          <span class="group-tools">
+            <span id="visual-app-count" class="count"></span>
+            <button id="visual-add-app" class="ghost small" data-i18n="+ 自定义">+ 自定义</button>
+          </span>
+        </div>
+        <input id="visual-app-search" class="list-search" type="search" placeholder="搜索软件或分类" data-i18n-placeholder="搜索软件或分类" autocomplete="off" spellcheck="false">
+        <div id="visual-apps" class="app-groups"></div>
+        <div class="group-label"><span data-i18n="自定义网站">自定义网站</span></div>
+        <div id="custom-links" class="app-grid"></div>
+        <details id="custom-link-drawer" class="drawer">
+          <summary data-i18n="添加网站">添加网站</summary>
+          <p class="note" data-i18n="填写名称与 http/https 地址，点击后在系统浏览器打开；只保存名称和网址，不保存账号或 Cookie。">填写名称与 http/https 地址，点击后在系统浏览器打开；只保存名称和网址，不保存账号或 Cookie。</p>
+          <label class="field">
+            <span data-i18n="名称">名称</span>
+            <input id="custom-link-name" maxlength="40" placeholder="例如 站酷" data-i18n-placeholder="例如 站酷" />
+          </label>
+          <label class="field">
+            <span data-i18n="网址">网址</span>
+            <input id="custom-link-url" maxlength="300" placeholder="https://..." spellcheck="false" />
+          </label>
+          <div class="module-form-actions">
+            <button id="custom-link-cancel" class="ghost" type="button" data-i18n="取消">取消</button>
+            <button id="custom-link-save" class="primary" type="button" data-i18n="保存网站">保存网站</button>
+          </div>
+        </details>
+        <details id="custom-app-drawer" class="drawer">
+          <summary data-i18n="导入自定义软件">导入自定义软件</summary>
+          <p class="note" data-i18n="选择本机 .exe 并归类；启动时以当前项目目录作为工作目录，不会上传或复制程序。">选择本机 .exe 并归类；启动时以当前项目目录作为工作目录，不会上传或复制程序。</p>
+          <label class="field">
+            <span data-i18n="名称">名称</span>
+            <input id="custom-app-name" maxlength="60" placeholder="My Tool" />
+          </label>
+          <label class="field">
+            <span data-i18n="分类">分类</span>
+            <select id="custom-app-kind">
+              <option value="video" data-i18n="视频">视频</option>
+              <option value="audio" data-i18n="音频">音频</option>
+              <option value="design" data-i18n="设计">设计</option>
+              <option value="3d" data-i18n="建模">建模</option>
+              <option value="engine" data-i18n="引擎">引擎</option>
+              <option value="dev" data-i18n="开发">开发</option>
+              <option value="office" data-i18n="办公">办公</option>
+              <option value="browser" data-i18n="浏览器">浏览器</option>
+              <option value="system" data-i18n="系统">系统</option>
+            </select>
+          </label>
+          <label class="field">
+            <span data-i18n="可执行文件">可执行文件</span>
+            <span class="field-row">
+              <input id="custom-app-path" readonly placeholder="C:\\Program Files\\App\\App.exe" />
+              <button id="custom-app-pick" class="ghost" type="button" data-i18n="选择">选择</button>
+            </span>
+          </label>
+          <label class="field">
+            <span data-i18n="说明">说明</span>
+            <input id="custom-app-hint" maxlength="80" placeholder="可选" data-i18n-placeholder="可选" />
+          </label>
+          <div class="module-form-actions">
+            <button id="custom-app-cancel" class="ghost" type="button" data-i18n="取消">取消</button>
+            <button id="custom-app-save" class="primary" type="button" data-i18n="保存自定义软件">保存自定义软件</button>
+          </div>
+        </details>
+        <p class="note" data-i18n="内置目录检测常见安装位置与注册表；未安装的应用可通过 winget 一键安装（需用户点击确认）；扫描全部软件读取开始菜单快捷方式。启动时以当前项目目录作为工作目录。">内置目录检测常见安装位置与注册表；未安装的应用可通过 winget 一键安装（需用户点击确认）；扫描全部软件读取开始菜单快捷方式。启动时以当前项目目录作为工作目录。</p>
+      </section>
     </aside>
   </div>
 
@@ -521,6 +844,14 @@
     </div>
     <div id="media-preview-body" class="media-preview-body"></div>
     <p class="media-preview-hint" data-i18n="滚轮缩放图片 · 拖动平移 · Esc 关闭">滚轮缩放图片 · 拖动平移 · Esc 关闭</p>
+  </div>
+
+  <div id="startup-splash" class="startup-splash" aria-hidden="true">
+    <div class="splash-inner">
+      <span class="splash-mark">π</span>
+      <strong class="splash-title" data-i18n="Pi 工作台">Pi 工作台</strong>
+      <span class="splash-sub" data-i18n="本地 AI 工作台">本地 AI 工作台</span>
+    </div>
   </div>
 
   <div id="toast" role="status" aria-live="polite"></div>

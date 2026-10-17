@@ -4,6 +4,8 @@ import path from 'node:path';
 import { readJson, readJsonFile, realAgentDir } from './config.js';
 import { t } from './i18n.js';
 
+export type FreeReason = 'local' | 'openrouter' | 'zero-cost' | 'whitelist';
+
 export interface ModelEntry {
   provider: string;
   id: string;
@@ -12,6 +14,8 @@ export interface ModelEntry {
   contextWindow?: number;
   relay: boolean;
   current: boolean;
+  free: boolean;
+  freeReason?: FreeReason;
 }
 
 export interface ModelReport {
@@ -43,9 +47,24 @@ function objectOf(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function modelEntries(provider: string, value: unknown): Array<{ id: string; name?: string; reasoning?: boolean; contextWindow?: number }> {
+interface ModelMeta {
+  id: string;
+  name?: string;
+  reasoning?: boolean;
+  contextWindow?: number;
+  baseUrl?: string;
+  cost?: Record<string, unknown>;
+}
+
+const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio', 'lm-studio', 'llama.cpp', 'llamacpp', 'vllm', 'sglang', 'local']);
+const FREE_WHITELIST: Record<string, string[]> = {
+  groq: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'],
+};
+const FREE_FLASH_PREFIX = /^(gemini-(?:3\.8|3\.6)-flash|gemini-(?:3\.5|3\.1)-flash-lite|gemini-2\.5-flash)$/;
+
+function modelEntries(provider: string, value: unknown): ModelMeta[] {
   if (!Array.isArray(value)) return [];
-  const out: Array<{ id: string; name?: string; reasoning?: boolean; contextWindow?: number }> = [];
+  const out: ModelMeta[] = [];
   for (const item of value) {
     if (typeof item === 'string') {
       out.push({ id: item });
@@ -58,9 +77,41 @@ function modelEntries(provider: string, value: unknown): Array<{ id: string; nam
       name: typeof model.name === 'string' ? model.name : undefined,
       reasoning: Boolean(model.reasoning),
       contextWindow: typeof model.contextWindow === 'number' ? model.contextWindow : undefined,
+      baseUrl: typeof model.baseUrl === 'string' ? model.baseUrl : undefined,
+      cost: typeof model.cost === 'object' && model.cost !== null ? model.cost as Record<string, unknown> : undefined,
     });
   }
   return out;
+}
+
+function isLocalEndpoint(provider: string, baseUrl?: string): boolean {
+  if (LOCAL_PROVIDERS.has(provider.toLowerCase())) return true;
+  if (!baseUrl) return false;
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
+function detectFree(provider: string, model: ModelMeta): FreeReason | undefined {
+  const id = model.id.toLowerCase();
+  if (isLocalEndpoint(provider, model.baseUrl)) return 'local';
+  if (provider.toLowerCase().includes('openrouter') && (id.endsWith(':free') || id === 'openrouter/free')) {
+    return 'openrouter';
+  }
+  const cost = model.cost;
+  if (cost) {
+    const keys = ['input', 'output', 'cacheRead', 'cacheWrite'];
+    const declared = keys.filter((key) => typeof cost[key] === 'number');
+    if (declared.length && declared.every((key) => Number(cost[key]) === 0)) return 'zero-cost';
+  }
+  const whitelist = FREE_WHITELIST[provider.toLowerCase()];
+  if (whitelist?.includes(id)) return 'whitelist';
+  if ((provider.toLowerCase() === 'google' || provider.toLowerCase().includes('gemini'))
+    && FREE_FLASH_PREFIX.test(id)) return 'whitelist';
+  return undefined;
 }
 
 export function inspectModels(): ModelReport {
@@ -74,10 +125,11 @@ export function inspectModels(): ModelReport {
 
   const entries: ModelEntry[] = [];
   const seen = new Set<string>();
-  const push = (provider: string, model: { id: string; name?: string; reasoning?: boolean; contextWindow?: number }): void => {
+  const push = (provider: string, model: ModelMeta): void => {
     const key = `${provider}\u0000${model.id}`;
     if (seen.has(key)) return;
     seen.add(key);
+    const freeReason = detectFree(provider, model);
     entries.push({
       provider,
       id: model.id,
@@ -86,6 +138,8 @@ export function inspectModels(): ModelReport {
       contextWindow: model.contextWindow,
       relay: relayProviders.includes(provider),
       current: provider === defaultProvider && model.id === defaultModel,
+      free: Boolean(freeReason),
+      freeReason,
     });
   };
 
@@ -158,10 +212,22 @@ function scanSkills(dir: string, scope: 'user' | 'project', out: CapabilityEntry
   }
 }
 
-function scanExtensions(dir: string, scope: 'user' | 'project', out: CapabilityEntry[]): void {
-  if (!existsSync(dir)) return;
+function scanExtensions(dir: string, scope: 'user' | 'project', out: CapabilityEntry[], depth = 0): void {
+  if (!existsSync(dir) || depth > 2) return;
   try {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+        const manifest = path.join(full, 'package.json');
+        if (existsSync(manifest)) {
+          const pkg = objectOf(readJson(manifest));
+          const name = typeof pkg.name === 'string' && pkg.name.trim() ? pkg.name : entry.name;
+          out.push({ kind: 'extension', name, detail: path.relative(dir, full) || entry.name, scope });
+        }
+        scanExtensions(full, scope, out, depth + 1);
+        continue;
+      }
       if (!entry.isFile() || !/\.(?:c|m)?[jt]s$/i.test(entry.name)) continue;
       out.push({ kind: 'extension', name: entry.name.replace(/\.(?:c|m)?[jt]s$/i, ''), detail: entry.name, scope });
     }
@@ -185,7 +251,15 @@ export function inspectCapabilities(cwd: string): { capabilities: CapabilityEntr
   const capabilities: CapabilityEntry[] = [];
 
   for (const entry of Array.isArray(settings.packages) ? settings.packages : []) {
-    if (typeof entry === 'string') capabilities.push({ kind: 'package', name: entry, scope: 'user' });
+    if (typeof entry === 'string') {
+      capabilities.push({ kind: 'package', name: entry, scope: 'user' });
+      continue;
+    }
+    const record = objectOf(entry);
+    const name = typeof record.source === 'string' ? record.source
+      : typeof record.name === 'string' ? record.name
+        : typeof record.package === 'string' ? record.package : '';
+    if (name) capabilities.push({ kind: 'package', name, scope: 'user' });
   }
 
   scanExtensions(path.join(agentDir, 'extensions'), 'user', capabilities);

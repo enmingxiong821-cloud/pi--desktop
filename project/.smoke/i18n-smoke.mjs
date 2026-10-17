@@ -118,6 +118,7 @@ ipcMain.handle('automation:save-channel', () => ({ ok: false, error: 'stub' }));
 ipcMain.handle('automation:delete-channel', () => ({ ok: true }));
 ipcMain.handle('automation:test-channel', () => ({ ok: false, error: 'stub' }));
 ipcMain.handle('tools:open-app', () => ({ ok: true }));
+ipcMain.handle('tools:list-links', () => ({ ok: true, links: [] }));
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -177,7 +178,8 @@ async function run() {
       storedLocale: localStorage.getItem('pi-locale'),
       preview: text('command-preview'),
       modelSummary: text('model-summary'),
-      modelNote: document.querySelector('#pane-model .note')?.textContent,
+      modelNote: [...document.querySelectorAll('#pane-model .note')]
+        .find((node) => /按常用度排序|Sorted by popularity/.test(node.textContent ?? ''))?.textContent,
       providerNote: document.querySelector('#provider-drawer > .note')?.textContent,
       paletteHint: document.querySelector('#command-palette .note')?.textContent,
       mediaHint: document.querySelector('#media-preview .media-preview-hint')?.textContent,
@@ -340,7 +342,7 @@ async function run() {
 
   expectText(zhSnap.lang === 'zh-CN', 'zh lang attribute');
   expectText(zhSnap.title === 'Pi 工作台 · PoC', 'zh title');
-  expectText(zhSnap.tabs.join('|') === '项目|模型|市场|自动化|协作|能力|会话|审计|设置', 'zh tabs');
+  expectText(zhSnap.tabs.join('|') === '项目|模型|市场|自动化|协作|能力|会话|搜索|设置', 'zh tabs');
   expectText(zhSnap.modeNote.startsWith('真实配置'), 'zh mode note');
   expectText(zhSnap.preview === '选择模型后生成命令', 'zh command preview');
   expectText(zhSnap.composerPlaceholder.includes('输入消息'), 'zh composer placeholder');
@@ -350,7 +352,7 @@ async function run() {
   expectText(en.lang === 'en', 'en lang attribute');
   expectText(en.title === 'Pi Workbench · PoC', 'en title');
   expectText(en.brand === 'Pi Workbench', 'en brand');
-  expectText(en.tabs.join('|') === 'Project|Models|Market|Automation|Team|Capabilities|Sessions|Audit|Settings', 'en tabs');
+  expectText(en.tabs.join('|') === 'Project|Models|Market|Automation|Team|Capabilities|Sessions|Search|Settings', 'en tabs');
   expectText(en.state === 'Not started', 'en process state');
   expectText(en.modeNote.startsWith('Real config'), 'en mode note');
   expectText(en.modeNote.includes('extensions/MCP/Skills'), 'en mode note body');
@@ -376,7 +378,7 @@ async function run() {
 
   expectText(back.lang === 'zh-CN', 'back lang attribute');
   expectText(back.title === 'Pi 工作台 · PoC', 'back title');
-  expectText(back.tabs.join('|') === '项目|模型|市场|自动化|协作|能力|会话|审计|设置', 'back tabs');
+  expectText(back.tabs.join('|') === '项目|模型|市场|自动化|协作|能力|会话|搜索|设置', 'back tabs');
   expectText(back.state === '未启动', 'back process state');
   expectText(back.cwd === root, 'back cwd label');
   expectText(back.composerPlaceholder.includes('输入消息'), 'back composer placeholder');
@@ -390,11 +392,79 @@ async function run() {
   expectText(reloaded.rows.length === 1, 'module persists across reload');
   expectText(reloaded.bindingValue === moduleId, 'project binding persists across reload');
 
+  // bottom tuning + appearance settings
+  const tuning = await page.executeJavaScript(`(() => {
+    const reasoning = document.getElementById('reasoning-level');
+    const smart = document.getElementById('smart-level');
+    const defaults = { reasoning: reasoning.value, smart: smart.value };
+    reasoning.value = 'high';
+    reasoning.dispatchEvent(new Event('change', { bubbles: true }));
+    smart.value = 'fast';
+    smart.dispatchEvent(new Event('change', { bubbles: true }));
+    return {
+      defaults,
+      reasoning: reasoning.value,
+      smart: smart.value,
+      storedReasoning: localStorage.getItem('pi-reasoning-level'),
+      storedSmart: localStorage.getItem('pi-smart-level'),
+      settingsReasoning: document.getElementById('settings-reasoning').value,
+      settingsSmart: document.getElementById('settings-smart').value,
+      state: document.getElementById('tuning-state').textContent,
+    };
+  })()`);
+  console.log('tuning:', JSON.stringify(tuning));
+  expectText(tuning.defaults.reasoning === 'auto' && tuning.defaults.smart === 'auto', `tuning defaults auto (${JSON.stringify(tuning.defaults)})`);
+  expectText(tuning.storedReasoning === 'high' && tuning.storedSmart === 'fast', 'tuning persisted');
+  expectText(tuning.settingsReasoning === 'high' && tuning.settingsSmart === 'fast', 'settings selects stay in sync');
+  expectText(tuning.state.includes('启动生效'), `tuning state label (${tuning.state})`);
+
+  await page.executeJavaScript(`document.getElementById('open-settings').click()`);
+  await wait(150);
+  const settingsState = await page.executeJavaScript(`(() => {
+    const theme = document.getElementById('theme-mode');
+    const accent = document.getElementById('accent-color');
+    theme.value = 'light';
+    theme.dispatchEvent(new Event('change', { bubbles: true }));
+    accent.value = 'blue';
+    accent.dispatchEvent(new Event('change', { bubbles: true }));
+    const animation = document.getElementById('startup-animation');
+    animation.value = 'off';
+    animation.dispatchEvent(new Event('change', { bubbles: true }));
+    return {
+      tabSelected: document.getElementById('tab-settings').getAttribute('aria-selected'),
+      theme: document.documentElement.dataset.theme,
+      accent: document.documentElement.dataset.accent,
+      accentValue: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+      storedTheme: localStorage.getItem('pi-theme-mode'),
+      splashHidden: document.getElementById('startup-splash').hidden,
+      paneHidden: document.getElementById('pane-settings').hidden,
+    };
+  })()`);
+  console.log('settings:', JSON.stringify(settingsState));
+  expectText(settingsState.tabSelected === 'true' && settingsState.paneHidden === false, 'settings button opens settings pane');
+  expectText(settingsState.theme === 'light' && settingsState.storedTheme === 'light', 'theme switch applies and persists');
+  expectText(settingsState.accent === 'blue' && settingsState.accentValue !== '', 'accent preset applies');
+  expectText(settingsState.splashHidden === true, 'startup animation off hides splash');
+
+  const resetState = await page.executeJavaScript(`(() => {
+    document.getElementById('reset-appearance').click();
+    return {
+      theme: document.documentElement.dataset.theme,
+      accent: document.documentElement.dataset.accent,
+      storedTheme: localStorage.getItem('pi-theme-mode'),
+      storedAccent: localStorage.getItem('pi-accent'),
+      storedAnimation: localStorage.getItem('pi-startup-animation'),
+    };
+  })()`);
+  expectText(resetState.theme === 'dark' && resetState.accent === 'mint', `appearance reset (${JSON.stringify(resetState)})`);
+  expectText(resetState.storedAnimation === 'dynamic', 'startup animation reset');
+
   // start session: bound module becomes --model
   await page.executeJavaScript(`document.getElementById('start-pi').click()`);
   await wait(400);
   console.log('step: started', JSON.stringify(startOptions));
   expectText(startOptions?.model === 'demo/mini', `start passes bound model (${startOptions?.model})`);
+  expectText(startOptions?.thinking === 'high', `start passes reasoning level (${startOptions?.thinking})`);
   page.send('pi:state', { status: 'running', cwd: root });
   await wait(250);
   console.log('rows before apply:', await page.executeJavaScript(`document.querySelectorAll('#module-list .module-item').length`));

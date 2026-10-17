@@ -6,5 +6,7 @@ poc-*.log
 *.tsbuildinfo
 .smoke/user-data/
 .smoke/user-data-workbench/
+.smoke/live-user-data/
+.smoke/live-app.log
 .smoke/workbench-test.json
 .smoke/**/*.bak-*

@@ -11,8 +11,8 @@ app.setPath('userData', path.join(root, '.smoke', 'user-data-workbench'));
 app.disableHardwareAcceleration();
 
 const vendors = [
-  { key: 'demo', label: 'Demo Labs', tier: 1, aliases: ['demo'] },
-  { key: 'other', label: 'Other AI', tier: 2, aliases: ['other'] },
+  { key: 'demo', label: 'Demo Labs', tier: 1, region: 'cn', aliases: ['demo'] },
+  { key: 'other', label: 'Other AI', tier: 2, region: 'global', aliases: ['other'] },
 ];
 const skills = [{
   id: 'demo-skill', name: 'demo-skill', title: '演示技能', description: '用于界面冒烟的技能',
@@ -26,10 +26,41 @@ const registry = [{
   id: 'registry:@demo/mcp', name: '@demo/mcp', title: 'Registry Demo',
   description: 'registry result', command: 'npx', args: ['-y', '@demo/mcp'], source: 'registry.modelcontextprotocol.io',
 }];
+const extensions = [{
+  id: 'demo-ext', name: 'demo-ext', title: '演示扩展', description: '用于界面冒烟的 Pi 扩展',
+  tags: ['demo'], builtin: true, source: 'npm',
+}];
+const localApps = [
+  { id: 'premiere', name: 'Premiere Pro', kind: 'video', installed: true, path: 'C:\\Adobe\\Premiere Pro.exe', hint: 'Adobe Premiere Pro' },
+  { id: 'blender', name: 'Blender', kind: '3d', installed: false, hint: 'Blender Foundation' },
+  { id: 'word', name: 'Word', kind: 'office', installed: true, path: 'C:\\Office\\WINWORD.EXE', hint: 'Microsoft Word' },
+  { id: 'custom-app-demo', name: 'My Tool', kind: 'dev', installed: true, path: 'C:\\Tools\\MyTool.exe', hint: 'custom', custom: true },
+];
 const agents = [
-  { id: 'claude', name: 'Claude Code', command: 'claude', description: '', roles: ['实现', '审查'], authHint: '', installHint: '', versionArgs: ['--version'], installed: true, version: '1.2.3' },
-  { id: 'codex', name: 'Codex', command: 'codex', description: '', roles: ['蓝图'], authHint: '', installHint: '', versionArgs: ['--version'], installed: true, version: '0.9.0' },
-  { id: 'grok', name: 'Grok', command: 'grok', description: '', roles: ['调研'], authHint: '', installHint: 'install grok', versionArgs: ['--version'], installed: false },
+  {
+    id: 'claude', name: 'Claude Code', command: 'claude', description: '', roles: ['实现', '审查'],
+    strengths: ['长上下文'], weaknesses: ['成本高'], specialties: ['重构'], limitations: ['需要网络'],
+    authHint: '设置 API Key', installHint: '', versionArgs: ['--version'], installed: true, runnable: true,
+    cliInstalled: true, desktopInstalled: false, version: '1.2.3',
+  },
+  {
+    id: 'codex', name: 'Codex', command: 'codex', description: '', roles: ['蓝图'],
+    strengths: ['结构化'], weaknesses: ['慢'], specialties: ['规划'], limitations: ['上下文短'],
+    authHint: '登录 ChatGPT', installHint: '', versionArgs: ['--version'], installed: true, runnable: true,
+    cliInstalled: true, desktopInstalled: false, version: '0.9.0',
+  },
+  {
+    id: 'trae', name: 'TRAE', command: 'traecli', description: '', roles: ['实现'],
+    strengths: ['中文界面'], weaknesses: ['无 CLI'], specialties: ['中文任务'], limitations: ['仅桌面'],
+    authHint: '沿用客户端登录', installHint: '', versionArgs: ['--version'], installed: true, runnable: false,
+    cliInstalled: false, desktopInstalled: true, desktopPath: 'C:\\Program Files\\Trae\\Trae.exe',
+  },
+  {
+    id: 'grok', name: 'Grok', command: 'grok', description: '', roles: ['调研'],
+    strengths: ['实时信息'], weaknesses: ['工具少'], specialties: ['检索'], limitations: ['区域限制'],
+    authHint: '设置 xAI Key', installHint: 'install grok', versionArgs: ['--version'], installed: false,
+    runnable: false, cliInstalled: false, desktopInstalled: false,
+  },
 ];
 
 const state = { jobs: [], channels: [] };
@@ -44,8 +75,22 @@ const channel = (input, id = 'ch-1') => ({
 });
 
 ipcMain.handle('app:locate', () => ({ ok: true, install: { version: '1.3.0', cliPath: 'stub-pi', nodePath: 'node', agentDir: path.join(root, '.smoke', 'agent') } }));
-ipcMain.handle('app:projects', () => ({ ok: true, projects: [] }));
+ipcMain.handle('app:projects', () => ({
+  ok: true,
+  projects: [
+    { path: 'C:\\src\\demo', name: 'Demo', lastUsed: Date.now() - 3600e3, exists: true },
+    { path: 'C:\\old\\missing', name: '旧项目', lastUsed: Date.now() - 86400e3, exists: false },
+  ],
+}));
 ipcMain.handle('app:set-locale', () => ({ ok: true, locale: 'zh-CN' }));
+ipcMain.handle('project:import-candidates', () => ({
+  ok: true,
+  projects: [
+    { source: 'VS Code', name: 'Imported Demo', path: 'C:\\src\\imported', lastUsed: Date.now() - 7200e3 },
+    { source: 'Cursor', name: 'Cursor Demo', path: 'C:\\src\\cursor-demo', lastUsed: Date.now() - 86400e3 },
+  ],
+}));
+ipcMain.handle('project:remember', (_e, paths) => { record('rememberProjects', paths); return { ok: true, added: paths.length }; });
 ipcMain.handle('app:open-path', (_e, target) => { record('openPath', target); return { ok: true }; });
 ipcMain.handle('app:open-vscode', () => ({ ok: true }));
 ipcMain.handle('tools:open-app', (_e, id, target) => { record('openApp', { id, target }); return { ok: true }; });
@@ -62,21 +107,100 @@ ipcMain.handle('pi:inspect-models', () => ({
   report: {
     settingsPath: '', modelsPath: '', storePath: '', defaultProvider: 'demo', defaultModel: 'demo-model',
     relayProviders: [], providers: [], models: [
-      { provider: 'demo', id: 'demo-model', name: 'Demo Model', reasoning: false, contextWindow: 128000, relay: false, current: true },
-      { provider: 'demo', id: 'demo-mini', name: 'Demo Mini', reasoning: true, contextWindow: 32000, relay: false, current: false },
-      { provider: 'other', id: 'other-max', name: 'Other Max', reasoning: true, contextWindow: 200000, relay: false, current: false },
+      { provider: 'demo', id: 'demo-model', name: 'Demo Model', reasoning: false, contextWindow: 128000, relay: false, current: true, free: false },
+      { provider: 'demo', id: 'demo-mini', name: 'Demo Mini', reasoning: true, contextWindow: 32000, relay: false, current: false, free: false },
+      { provider: 'other', id: 'other-max', name: 'Other Max', reasoning: true, contextWindow: 200000, relay: false, current: false, free: false },
+      { provider: 'local', id: 'local-free', name: 'Local Free', reasoning: false, contextWindow: 32000, relay: false, current: false, free: true, freeReason: 'local' },
     ], warnings: [],
   },
 }));
 ipcMain.handle('pi:providers', () => ({ ok: true, report: { providers: [], warnings: [] } }));
 ipcMain.handle('pi:inspect-capabilities', () => ({ ok: true, report: { capabilities: [], warnings: [] } }));
-ipcMain.handle('pi:sessions', () => ({ ok: true, sessions: [] }));
+ipcMain.handle('pi:sessions', () => ({
+  ok: true,
+  sessions: [
+    { id: 'session-today-0001', path: path.join(root, '.smoke', 'session-today.jsonl'), timestamp: new Date().toISOString(), cwd: root, size: 2048 },
+    { id: 'session-old-0002', path: path.join(root, '.smoke', 'session-old.jsonl'), timestamp: new Date(Date.now() - 10 * 86400e3).toISOString(), cwd: root, size: 4096 },
+  ],
+}));
 ipcMain.handle('project:git-status', () => ({ ok: true, repo: true, branch: 'main', ahead: 0, behind: 0, changes: [] }));
 ipcMain.handle('pi:add-skill', (_e, input) => { record('addSkill', input); return { ok: true, path: '.pi/skills/demo/SKILL.md' }; });
 ipcMain.handle('pi:add-mcp', (_e, input) => { record('addMcp', input); return { ok: true, path: '.pi/mcp.json' }; });
-ipcMain.handle('catalog:list', () => ({ ok: true, catalog: { vendors, skills, mcps } }));
+ipcMain.handle('catalog:list', () => ({ ok: true, catalog: { vendors, skills, mcps, extensions } }));
 ipcMain.handle('catalog:search-mcp', (_e, query) => { record('searchMcp', query); return { ok: true, results: registry }; });
+ipcMain.handle('catalog:search-extensions', (_e, query) => { record('searchExtensions', query); return { ok: true, results: extensions }; });
+ipcMain.handle('catalog:install-extension', (_e, name) => { record('installExtension', name); return { ok: true, output: 'ok' }; });
+ipcMain.handle('catalog:import-skill-url', (_e, input) => { record('importSkill', input); return { ok: true, path: '.pi/skills/demo/SKILL.md' }; });
+ipcMain.handle('pi:remove-skill', (_e, input) => { record('removeSkill', input); return { ok: true, path: '.pi/skills/demo/SKILL.md' }; });
+ipcMain.handle('tools:list-apps', (_e, refresh) => { record('listApps', refresh); return { ok: true, apps: localApps }; });
+ipcMain.handle('tools:scan-apps', (_e, refresh) => {
+  record('scanApps', refresh);
+  return { ok: true, apps: [
+    { id: 'scan-demo', name: 'Scanned Tool', kind: 'dev', installed: true, path: 'C:\\Tools\\Scanned.exe', hint: '开始菜单扫描', discovered: true },
+    { id: 'discord', name: 'Discord', kind: 'office', installed: false, hint: '开始菜单扫描', discovered: true, installId: 'Discord.Discord' },
+  ] };
+});
+ipcMain.handle('tools:install-app', (_e, id) => { record('installApp', id); return { ok: true, output: 'installed' }; });
+ipcMain.handle('tools:list-links', () => ({ ok: true, links: [{ id: 'custom-link-demo', name: '站酷', url: 'https://www.zcool.com.cn' }] }));
+ipcMain.handle('tools:save-link', (_e, input) => {
+  record('saveLink', input);
+  return { ok: true, link: { id: 'custom-link-new', name: input.name, url: input.url } };
+});
+ipcMain.handle('tools:remove-link', (_e, id) => { record('removeLink', id); return { ok: true }; });
+ipcMain.handle('tools:pick-app-exe', () => ({ ok: true, path: 'C:\\Tools\\NewTool.exe' }));
+ipcMain.handle('tools:save-app', (_e, input) => {
+  record('saveApp', input);
+  return {
+    ok: true,
+    app: {
+      id: 'custom-app-new', name: input.name, kind: input.kind, installed: true,
+      path: input.path, hint: input.hint ?? '', custom: true,
+    },
+  };
+});
+ipcMain.handle('tools:remove-app', (_e, id) => { record('removeApp', id); return { ok: true }; });
+ipcMain.handle('tools:get-settings', () => ({
+  ok: true,
+  settings: { webSearch: true, crawl: false, reverse: false, searchProvider: 'duckduckgo', searxngUrl: '' },
+}));
+ipcMain.handle('tools:save-settings', (_e, input) => { record('saveToolSettings', input); return { ok: true, settings: input }; });
+ipcMain.handle('tools:search', (_e, query) => {
+  record('searchWeb', query);
+  return {
+    ok: true,
+    results: [
+      { title: 'Pi Workbench release notes', url: 'https://example.com/pi', snippet: 'Latest desktop client changes.' },
+      { title: 'Agent orchestration guide', url: 'https://example.com/agents', snippet: 'How supervisors assign work.' },
+    ],
+  };
+});
+ipcMain.handle('tools:fetch-page', (_e, url) => {
+  record('fetchPage', url);
+  return { ok: true, page: { url, title: 'Example page', text: 'Example body text' } };
+});
+ipcMain.handle('tools:crawl', (_e, url) => {
+  record('crawlWeb', url);
+  return { ok: true, pages: [{ url, title: 'Example page', text: 'Example body text' }], links: [] };
+});
+ipcMain.handle('tools:analyze', (_e, target) => {
+  record('analyzePath', target);
+  return { ok: true, lines: ['类型：目录', `路径：${target}`, '文件数：12'] };
+});
+ipcMain.handle('tools:pick-analyze-path', () => ({ ok: true, path: 'C:\\src\\demo' }));
+ipcMain.handle('app:open-user-data', () => ({ ok: true }));
 ipcMain.handle('agents:list', () => ({ ok: true, agents }));
+ipcMain.handle('agents:suggest-team', (_e, task) => {
+  record('suggestTeam', task);
+  return { taskKind: 'general', members: ['claude', 'codex'], supervisorId: 'codex', reason: '冒烟自动组队' };
+});
+ipcMain.handle('agents:install', (_e, agentId) => { record('installAgent', agentId); return { ok: true, agentId, output: 'installed' }; });
+ipcMain.handle('agents:open-app', (_e, agentId, cwd) => { record('openAgentApp', { agentId, cwd }); return { ok: true }; });
+ipcMain.handle('agents:pick-command', () => ({ ok: true, path: 'C:\\Tools\\agent.exe' }));
+ipcMain.handle('agents:save-custom', (_e, input) => {
+  record('saveCustomAgent', input);
+  return { ok: true, agent: { ...agents[0], id: 'custom-demo', name: input.name, custom: true } };
+});
+ipcMain.handle('agents:remove-custom', (_e, id) => { record('removeCustomAgent', id); return { ok: true }; });
 ipcMain.handle('agents:run', () => ({ ok: false, runId: '', summary: '', error: 'stub' }));
 ipcMain.handle('agents:stop', () => ({ ok: true }));
 ipcMain.handle('agents:team', (_e, input) => {
@@ -140,8 +264,48 @@ async function run() {
   await window.loadFile(path.join(root, 'dist', 'renderer', 'index.html'), { query: { smokeCwd: root } });
   await wait(1200);
 
-  // 模型面板：厂商分组 + 展开/收起
-  const modelView = JSON.parse(await js(`JSON.stringify((() => { try { return ({
+  const projectState = JSON.parse(await js(`JSON.stringify({
+    items: document.querySelectorAll('#recent-projects button').length,
+    missing: document.querySelectorAll('#recent-projects button.missing').length,
+    times: [...document.querySelectorAll('#recent-projects .recent-time')].map((el) => el.textContent),
+  })`));
+  expect(projectState.missing >= 1, `invalid project path marked (${projectState.missing})`);
+  expect(projectState.times.every((value) => value), 'recent projects show last-used time');
+
+  // 从其他编辑器导入最近项目
+  await js(`document.getElementById('import-projects-drawer').open = true`);
+  await wait(400);
+  const importState = JSON.parse(await js(`JSON.stringify({
+    items: document.querySelectorAll('#import-project-list .import-item').length,
+    sources: [...document.querySelectorAll('#import-project-list .app-tag')].map((el) => el.textContent),
+  })`));
+  expect(importState.items === 2, `import candidates rendered (${importState.items})`);
+  expect(importState.sources.includes('VS Code'), 'import candidate keeps source label');
+  await js(`(() => {
+    document.querySelectorAll('#import-project-list input[type=checkbox]').forEach((box) => { box.checked = true; });
+    document.getElementById('import-projects-apply').click();
+    return true;
+  })()`);
+  await wait(300);
+  expect(
+    calls.some(([name, input]) => name === 'rememberProjects' && input.length === 2),
+    'import selected projects calls backend',
+  );
+
+  // 会话：按今天/更早分组
+  await js(`document.getElementById('tab-session').click()`);
+  await wait(500);
+  const sessionState = JSON.parse(await js(`JSON.stringify({
+    groups: document.querySelectorAll('#session-list .session-group').length,
+    labels: [...document.querySelectorAll('#session-list .session-group .app-group-head span:first-child')].map((el) => el.textContent),
+    items: document.querySelectorAll('#session-list .session-items .item').length,
+  })`));
+  expect(sessionState.groups === 2, `sessions grouped by date (${sessionState.groups})`);
+  expect(sessionState.labels.filter(Boolean).length === 2, `session groups labeled (${sessionState.labels.join(',')})`);
+  expect(sessionState.items === 2, `session items rendered (${sessionState.items})`);
+
+  // 模型面板：国内 / 国外 / 免费三板块 + 厂商分组
+  const readGroups = async () => JSON.parse(await js(`JSON.stringify((() => { try { return ({
     groups: [...document.querySelectorAll('#model-list .vendor-group')].map((group) => ({
       name: group.querySelector('.vendor-name')?.textContent,
       count: group.querySelector('.vendor-count')?.textContent,
@@ -149,43 +313,65 @@ async function run() {
       models: [...group.querySelectorAll('.vendor-models .item strong')].map((el) => el.textContent),
     })),
   }); } catch (error) { return { error: String(error), stack: error && error.stack }; } })())`));
-  expect(modelView.groups.length === 2, `model groups rendered (${modelView.groups.length})`);
-  expect(modelView.groups[0]?.name === 'Demo Labs', `strongest vendor first (${modelView.groups[0]?.name})`);
+  const modelView = await readGroups();
+  expect(modelView.groups.length === 1, `cn board shows only domestic vendors (${modelView.groups.length})`);
+  expect(modelView.groups[0]?.name === 'Demo Labs', `domestic vendor first (${modelView.groups[0]?.name})`);
   expect(modelView.groups[0]?.models.length === 2, 'vendor group lists its models');
-  expect(modelView.groups[1]?.name === 'Other AI', 'second vendor follows');
 
+  await js(`document.querySelector('.board-tab[data-board="global"]').click()`);
+  await wait(150);
+  const globalView = await readGroups();
+  expect(globalView.groups.length === 1 && globalView.groups[0]?.name === 'Other AI', `global board isolates overseas models (${globalView.groups.map((group) => group.name).join(',')})`);
+
+  await js(`document.querySelector('.board-tab[data-board="free"]').click()`);
+  await wait(150);
+  const freeView = await readGroups();
+  expect(freeView.groups.length === 1, `free board renders free models (${freeView.groups.length})`);
+  expect(freeView.groups[0]?.models.some((name) => String(name).includes('local-free')), 'free model listed on free board');
+
+  await js(`document.querySelector('.board-tab[data-board="cn"]').click()`);
+  await wait(150);
   await js(`document.querySelector('#model-list .vendor-head').click()`);
   await wait(100);
   const collapsed = await js(`JSON.stringify(document.querySelector('#model-list .vendor-models').hidden)`);
   expect(collapsed === 'true', 'vendor collapses on click');
 
-  // 市场：Skill / MCP / 在线目录
+  // 市场：扩展 / 技能 / MCP 三个分类 + 在线目录
   await js(`document.getElementById('tab-market').click()`);
-  await wait(400);
+  await wait(500);
+  const marketExtensions = await js(`JSON.stringify(document.querySelectorAll('#market-list .market-card').length)`);
+  expect(marketExtensions === '1', `market lists extensions by default (${marketExtensions})`);
+
+  await js(`document.querySelector('.market-tab[data-market="skills"]').click()`);
+  await wait(300);
   const marketSkills = await js(`JSON.stringify(document.querySelectorAll('#market-list .market-card').length)`);
   expect(marketSkills === '1', `market lists skills (${marketSkills})`);
   await js(`document.querySelector('#market-list .market-card .primary').click()`);
   await wait(300);
   expect(calls.some(([name, input]) => name === 'addSkill' && input.name === 'demo-skill'), 'skill install calls backend');
 
-  await js(`document.querySelector('[data-market="mcps"]').click()`);
-  await wait(150);
+  await js(`document.querySelector('.market-tab[data-market="mcps"]').click()`);
+  await wait(200);
   await js(`document.querySelector('#market-list .market-card .primary').click()`);
   await wait(300);
   expect(calls.some(([name, input]) => name === 'addMcp' && input.name === 'demo-mcp'), 'mcp install calls backend');
 
   await js(`(() => {
-    document.querySelector('[data-market="online"]').click();
     const input = document.getElementById('market-search');
     input.value = 'demo';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   })()`);
   await wait(400);
   const onlineCards = await js(`JSON.stringify(document.querySelectorAll('#market-list .market-card').length)`);
-  expect(onlineCards === '1', `registry search renders results (${onlineCards})`);
-  await js(`document.querySelector('#market-list .market-card .primary').click()`);
-  await wait(300);
+  expect(onlineCards === '2', `registry search merges results (${onlineCards})`);
   expect(calls.some(([name]) => name === 'searchMcp'), 'registry search calls backend');
+  await js(`(() => {
+    const buttons = [...document.querySelectorAll('#market-list .market-card .primary')];
+    buttons[buttons.length - 1].click();
+  })()`);
+  await wait(300);
+  expect(calls.some(([name, input]) => name === 'addMcp' && input.name === '-demo-mcp'), 'registry result installs through backend');
 
   // 自动化：新增任务 + 通道
   await js(`document.getElementById('tab-automation').click()`);
@@ -223,9 +409,21 @@ async function run() {
   await js(`document.getElementById('tab-team').click()`);
   await wait(400);
   const agentRows = await js(`JSON.stringify(document.querySelectorAll('#agent-list .item').length)`);
-  expect(agentRows === '3', `agent list rendered (${agentRows})`);
+  expect(agentRows === '4', `agent list rendered (${agentRows})`);
   const summary = await js(`JSON.stringify(document.getElementById('team-summary').textContent)`);
-  expect(summary.includes('2 / 3'), `agent summary counts installed (${summary})`);
+  expect(summary.includes('3 / 4'), `agent summary counts installed (${summary})`);
+  const desktopTag = await js(`JSON.stringify(document.getElementById('agent-list').textContent.includes('桌面版'))`);
+  expect(desktopTag === 'true', 'desktop-only agent is labelled');
+  const supervisorOptions = await js(`JSON.stringify(document.querySelectorAll('#team-supervisor option').length)`);
+  expect(supervisorOptions === '3', `supervisor lists runnable agents only (${supervisorOptions})`);
+  await js(`(() => {
+    const dt = new DataTransfer();
+    dt.setData('application/x-pi-room', JSON.stringify({ type: 'app', id: 'vscode', name: 'VS Code' }));
+    document.getElementById('meeting-room').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  })()`);
+  await wait(100);
+  const roomChips = await js(`JSON.stringify(document.querySelectorAll('#meeting-room .room-chip').length)`);
+  expect(roomChips === '1', `meeting room accepts dropped app (${roomChips})`);
   await js(`(() => {
     document.getElementById('team-task').value = '调研构建链路';
     document.getElementById('run-team').click();
@@ -236,6 +434,64 @@ async function run() {
   const teamCall = calls.find(([name]) => name === 'runTeam')?.[1];
   expect(teamCall?.task === '调研构建链路', 'team task payload');
   expect(teamCall?.agentIds.length === 2, 'team selects installed agents');
+  expect((teamCall?.apps ?? []).includes('VS Code'), `meeting room apps passed to backend (${JSON.stringify(teamCall?.apps)})`);
+  try {
+    const shot = await page.capturePage();
+    writeFileSync(path.join(root, '.smoke', 'workbench-team.png'), shot.toPNG());
+  } catch (error) {
+    console.log('team screenshot skipped:', String(error));
+  }
+
+  await js(`(() => {
+    const mode = document.getElementById('team-supervisor-mode');
+    mode.value = 'manual';
+    mode.dispatchEvent(new Event('change', { bubbles: true }));
+    const select = document.getElementById('team-supervisor');
+    select.value = 'claude';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('team-task').value = '复核构建脚本';
+    document.getElementById('run-team').click();
+  })()`);
+  await wait(700);
+  const manualCalls = calls.filter(([name]) => name === 'runTeam');
+  const manualCall = manualCalls[manualCalls.length - 1]?.[1];
+  expect(manualCalls.length === 2, `manual supervisor run starts a second team run (${manualCalls.length})`);
+  expect(manualCall?.supervisorId === 'claude', `manual supervisor passes through (${manualCall?.supervisorId})`);
+
+  // 搜索与高级工具
+  await js(`document.getElementById('tab-search').click()`);
+  await wait(200);
+  await js(`(() => {
+    document.getElementById('search-query').value = 'pi workbench';
+    document.getElementById('run-web-search').click();
+  })()`);
+  await wait(300);
+  const searchRows = await js(`JSON.stringify(document.querySelectorAll('#search-results .search-result').length)`);
+  expect(searchRows === '2', `web search renders results (${searchRows})`);
+  expect(calls.some(([name, query]) => name === 'searchWeb' && query === 'pi workbench'), 'web search calls backend');
+  const searchStatus = await js(`JSON.stringify(document.getElementById('search-status').textContent)`);
+  expect(searchStatus.includes('2'), `search status reports count (${searchStatus})`);
+  await js(`(() => {
+    const toggle = document.getElementById('tool-crawl');
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await wait(200);
+  expect(calls.some(([name, input]) => name === 'saveToolSettings' && input?.crawl === true), 'advanced tool toggle persists');
+  await js(`(() => {
+    document.getElementById('analyze-path').value = 'C:\\\\src\\\\demo';
+    document.getElementById('run-analyze').click();
+  })()`);
+  await wait(200);
+  const analyzeText = await js(`JSON.stringify(document.getElementById('analyze-output').textContent)`);
+  expect(analyzeText.includes('文件数'), `reverse analysis renders output (${analyzeText})`);
+  expect(calls.some(([name]) => name === 'analyzePath'), 'reverse analysis calls backend');
+  try {
+    const shot = await page.capturePage();
+    writeFileSync(path.join(root, '.smoke', 'workbench-search.png'), shot.toPNG());
+  } catch (error) {
+    console.log('search screenshot skipped:', String(error));
+  }
 
   // 右侧工作区与本地工具
   await js(`document.getElementById('tab-ws-review').click()`);
@@ -246,6 +502,87 @@ async function run() {
   await wait(100);
   const interactVisible = await js(`JSON.stringify(document.getElementById('pane-ws-interact').hidden === false)`);
   expect(interactVisible === 'true', 'interact workspace opens');
+
+  await js(`document.getElementById('tab-ws-visual').click()`);
+  await wait(300);
+  const visualState = JSON.parse(await js(`JSON.stringify({
+    visible: document.getElementById('pane-ws-visual').hidden === false,
+    cards: document.querySelectorAll('#visual-apps .app-card').length,
+    installed: document.querySelectorAll('#visual-apps .app-card:not(.missing)').length,
+    groups: document.querySelectorAll('#visual-apps .app-group').length,
+    customTagged: document.querySelectorAll('#visual-apps .app-tag').length,
+  })`));
+  expect(visualState.visible === true, 'visual workspace opens');
+  expect(visualState.cards === 4, `visual app cards rendered (${visualState.cards})`);
+  expect(visualState.installed === 3, `visual app detects installed tool (${visualState.installed})`);
+  expect(visualState.groups === 4, `visual apps grouped by category (${visualState.groups})`);
+  expect(visualState.customTagged === 1, `custom app tagged (${visualState.customTagged})`);
+  await js(`document.querySelector('#visual-apps .app-card:not(.missing) button').click()`);
+  await wait(200);
+  expect(calls.some(([name, input]) => name === 'openApp' && input.id === 'premiere'), 'visual launch calls backend with app id');
+
+  await js(`document.getElementById('visual-scan-all').click()`);
+  await wait(400);
+  const scannedState = JSON.parse(await js(`JSON.stringify({
+    cards: document.querySelectorAll('#visual-apps .app-card').length,
+    tags: document.querySelectorAll('#visual-apps .app-tag').length,
+    tagTexts: [...document.querySelectorAll('#visual-apps .app-tag')].map((el) => el.textContent),
+    names: [...document.querySelectorAll('#visual-apps .app-card .app-name')].map((el) => el.textContent),
+    installButtons: [...document.querySelectorAll('#visual-apps .app-card button')].filter((b) => b.textContent.includes('一键安装')).length,
+  })`));
+  expect(calls.some(([name]) => name === 'scanApps'), 'scan all calls backend');
+  expect(scannedState.cards === 6, `scanned apps merged (${scannedState.cards})`);
+  expect(scannedState.tags === 3, `scanned apps tagged (${scannedState.tags})`);
+  expect(scannedState.installButtons === 1, `installable app shows install button (${scannedState.installButtons})`);
+
+  await js(`(() => {
+    document.getElementById('custom-link-name').value = '新站点';
+    document.getElementById('custom-link-url').value = 'https://example.org';
+    document.getElementById('custom-link-save').click();
+    return true;
+  })()`);
+  await wait(200);
+  expect(
+    calls.some(([name, input]) => name === 'saveLink' && input.url === 'https://example.org'),
+    'custom website save calls backend',
+  );
+
+  await js(`(() => {
+    const input = document.getElementById('visual-app-search');
+    input.value = 'blender';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await wait(150);
+  const filteredApps = await js(`JSON.stringify(document.querySelectorAll('#visual-apps .app-card').length)`);
+  expect(filteredApps === '1', `visual app search filters (${filteredApps})`);
+  await js(`(() => {
+    const input = document.getElementById('visual-app-search');
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+
+  await js(`(() => { window.confirm = () => true; return true; })()`);
+  await js(`document.querySelector('#visual-apps .app-card .danger').click()`);
+  await wait(300);
+  expect(calls.some(([name, input]) => name === 'removeApp' && input === 'custom-app-demo'), 'custom app removal calls backend');
+
+  await js(`document.getElementById('visual-add-app').click()`);
+  await js(`(() => {
+    document.getElementById('custom-app-name').value = '新工具';
+    document.getElementById('custom-app-kind').value = 'office';
+    document.getElementById('custom-app-path').value = 'C:\\\\Tools\\\\NewTool.exe';
+    document.getElementById('custom-app-save').click();
+  })()`);
+  await wait(400);
+  const savedApp = calls.find(([name]) => name === 'saveApp')?.[1];
+  expect(savedApp?.name === '新工具' && savedApp?.kind === 'office', `custom app payload (${JSON.stringify(savedApp)})`);
+  expect(String(savedApp?.path ?? '').includes('NewTool.exe'), 'custom app path captured');
+  try {
+    const shot = await page.capturePage();
+    writeFileSync(path.join(root, '.smoke', 'workbench-visual.png'), shot.toPNG());
+  } catch (error) {
+    console.log('visual screenshot skipped:', String(error));
+  }
 
   await js(`document.getElementById('tab-settings').click()`);
   await js(`document.querySelector('[data-open-app="vscode"]').click()`);

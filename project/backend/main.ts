@@ -4,9 +4,23 @@ import { createServer, type Server } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { AutomationStore, type AutomationJob, type RunResult } from './automation.js';
-import { detectAgents, runAgent, runTeam, stopRun } from './agents.js';
-import { listCatalog, searchMcpRegistry } from './catalog.js';
-import { addMcpServer, addSkill } from './capabilities.js';
+import {
+  configureCustomAgents,
+  detectAgents,
+  installAgent,
+  openAgentApp,
+  removeCustomAgent,
+  runAgent,
+  runTeam,
+  saveCustomAgent,
+  stopRun,
+  suggestTeam,
+} from './agents.js';
+import { appCatalog, configureCustomApps, installLocalApp, launchLocalApp, launchScannedApp, removeCustomApp, saveCustomApp, scanLocalApps } from './apps.js';
+import { configureCustomLinks, listCustomLinks, removeCustomLink, saveCustomLink } from './links.js';
+import { listImportedProjects } from './projects-import.js';
+import { fetchSkillFromUrl, installExtension, listCatalog, searchMcpRegistry, searchNpmExtensions } from './catalog.js';
+import { addMcpServer, addSkill, removeSkill } from './capabilities.js';
 import { installPi, probeEnvironment } from './env.js';
 import { gitStatus } from './git.js';
 import { inspectCapabilities, inspectModels, isSafeSessionPath, listSessions } from './inspect.js';
@@ -28,6 +42,14 @@ import {
   setDefaultModel,
 } from './providers.js';
 import { resolvePi, spawnPi, type PiSession } from './pi.js';
+import {
+  analyzePath,
+  crawlPage,
+  fetchPage,
+  getToolSettings,
+  saveToolSettings,
+  searchWeb,
+} from './tools.js';
 
 interface ProjectRecord {
   path: string;
@@ -231,6 +253,7 @@ interface StartOptions {
   sessionPath?: string;
   isolated?: boolean;
   model?: string;
+  thinking?: string;
 }
 
 function startSession(options: StartOptions): { ok: boolean; isolatedDir?: string; isolated?: boolean; install?: unknown; error?: string } {
@@ -252,6 +275,10 @@ function startSession(options: StartOptions): { ok: boolean; isolatedDir?: strin
     if (model && !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}$/.test(model)) {
       throw new Error(t('模型标识无效'));
     }
+    const thinking = typeof options.thinking === 'string' ? options.thinking.trim() : '';
+    if (thinking && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinking)) {
+      throw new Error(t('推理度无效'));
+    }
 
     const next = spawnPi({
       cwd: options.cwd,
@@ -261,6 +288,7 @@ function startSession(options: StartOptions): { ok: boolean; isolatedDir?: strin
       isolated,
       sessionPath,
       model: model || undefined,
+      thinking: thinking || undefined,
     });
     session = next;
     unackedBytes = 0;
@@ -649,7 +677,38 @@ ipcMain.handle('project:pick', async () => {
   return { ok: true, path: picked };
 });
 
-ipcMain.handle('app:projects', () => ({ ok: true, projects: loadProjects() }));
+ipcMain.handle('app:projects', () => ({
+  ok: true,
+  projects: loadProjects().map((project) => ({ ...project, exists: existsSync(project.path) })),
+}));
+
+// 从其他编辑器读取最近项目；只返回仍存在的目录，不修改对方配置。
+ipcMain.handle('project:import-candidates', () => {
+  try {
+    return { ok: true, projects: listImportedProjects() };
+  } catch (error) {
+    return { ok: false, projects: [], error: errorMessage(error) };
+  }
+});
+
+// 把用户勾选的项目写入本工作台的最近项目列表。
+ipcMain.handle('project:remember', (_event, paths: unknown) => {
+  const list = Array.isArray(paths) ? paths : [];
+  let added = 0;
+  for (const item of list.slice(0, 200)) {
+    if (typeof item !== 'string' || !item.trim()) continue;
+    const resolved = path.resolve(item.trim());
+    // 目录可能刚被删除或无权限访问，单条失败不影响其他项目
+    try {
+      if (!statSync(resolved).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    rememberProject(resolved);
+    added += 1;
+  }
+  return { ok: true, added };
+});
 
 ipcMain.handle('pi:inspect-models', () => {
   try {
@@ -698,6 +757,7 @@ ipcMain.handle('pi:sessions', (_event, cwd: unknown) => {
 });
 
 ipcMain.handle('pi:add-skill', (_event, input: unknown) => addSkill(input as Parameters<typeof addSkill>[0]));
+ipcMain.handle('pi:remove-skill', (_event, input: unknown) => removeSkill(input as Parameters<typeof removeSkill>[0]));
 ipcMain.handle('pi:add-mcp', (_event, input: unknown) => addMcpServer(input as Parameters<typeof addMcpServer>[0]));
 
 ipcMain.handle('project:git-status', (_event, cwd: unknown) => gitStatus(cwd));
@@ -711,6 +771,30 @@ ipcMain.handle('catalog:list', () => {
 });
 
 ipcMain.handle('catalog:search-mcp', (_event, query: unknown) => searchMcpRegistry(typeof query === 'string' ? query : ''));
+ipcMain.handle('catalog:search-extensions', (_event, query: unknown) =>
+  searchNpmExtensions(typeof query === 'string' ? query : ''));
+ipcMain.handle('catalog:install-extension', async (_event, name: unknown) => {
+  if (typeof name !== 'string') return { ok: false, output: '', error: t('参数无效') };
+  const result = await installExtension(name, (line) => send('catalog:install-event', { name, line }));
+  if (result.ok) send('catalog:changed', {});
+  return result;
+});
+ipcMain.handle('catalog:import-skill-url', async (_event, input: unknown) => {
+  if (!input || typeof input !== 'object') return { ok: false, error: t('参数无效') };
+  const source = input as Record<string, unknown>;
+  const scope = source.scope === 'user' ? 'user' : 'project';
+  const cwd = typeof source.cwd === 'string' ? source.cwd : undefined;
+  if (scope === 'project' && !cwd) return { ok: false, error: t('缺少项目目录') };
+  const fetched = await fetchSkillFromUrl(typeof source.url === 'string' ? source.url : '');
+  if (!fetched.ok || !fetched.name) return { ok: false, error: fetched.error ?? t('读取失败') };
+  return addSkill({
+    scope,
+    cwd: scope === 'project' ? cwd : undefined,
+    name: fetched.name,
+    description: fetched.description,
+    body: fetched.body,
+  });
+});
 
 ipcMain.handle('agents:list', (_event, refresh: unknown) => {
   try {
@@ -738,6 +822,39 @@ ipcMain.handle('agents:run', async (_event, input: unknown) => {
 });
 
 ipcMain.handle('agents:stop', (_event, runId: unknown) => ({ ok: stopRun(String(runId ?? '')) }));
+
+ipcMain.handle('agents:suggest-team', (_event, task: unknown, cwd: unknown) => {
+  try {
+    return suggestTeam(typeof task === 'string' ? task : '', typeof cwd === 'string' ? cwd : '');
+  } catch (error) {
+    return { taskKind: '', members: [], supervisorId: '', reason: errorMessage(error) };
+  }
+});
+
+ipcMain.handle('agents:install', async (_event, agentId: unknown) => {
+  if (typeof agentId !== 'string') return { ok: false, agentId: '', output: '', error: t('参数无效') };
+  return installAgent(agentId, (line) => send('agents:install-event', { agentId, line }));
+});
+
+ipcMain.handle('agents:save-custom', (_event, input: unknown) => saveCustomAgent(input));
+ipcMain.handle('agents:remove-custom', (_event, id: unknown) => removeCustomAgent(id));
+
+ipcMain.handle('agents:open-app', (_event, agentId: unknown, cwd: unknown) => {
+  if (typeof agentId !== 'string') return { ok: false, error: t('参数无效') };
+  return openAgentApp(agentId, typeof cwd === 'string' ? cwd : undefined);
+});
+
+ipcMain.handle('agents:pick-command', async () => {
+  const result = await dialog.showOpenDialog({
+    title: t('选择可执行文件'),
+    properties: ['openFile'],
+    filters: process.platform === 'win32'
+      ? [{ name: t('可执行文件'), extensions: ['exe', 'cmd', 'bat', 'com'] }]
+      : undefined,
+  });
+  if (result.canceled || !result.filePaths[0]) return { ok: false };
+  return { ok: true, path: result.filePaths[0] };
+});
 
 ipcMain.handle('agents:team', async (_event, input: unknown) => {
   if (!input || typeof input !== 'object') return { ok: false, error: t('参数无效'), summaries: [] };
@@ -794,6 +911,33 @@ ipcMain.handle('automation:delete-channel', (_event, id: unknown) => ({
 
 ipcMain.handle('automation:test-channel', (_event, id: unknown) => automationStore().testChannel(String(id ?? '')));
 
+ipcMain.handle('tools:list-apps', (_event, refresh: unknown) => {
+  try {
+    return { ok: true, apps: appCatalog(refresh === true) };
+  } catch (error) {
+    return { ok: false, apps: [], error: errorMessage(error) };
+  }
+});
+
+// 扫描开始菜单全部快捷方式；按需触发，不自动执行。
+ipcMain.handle('tools:scan-apps', async (_event, refresh: unknown) => {
+  try {
+    return { ok: true, apps: await scanLocalApps(refresh === true) };
+  } catch (error) {
+    return { ok: false, apps: [], error: errorMessage(error) };
+  }
+});
+
+// 一键安装：仅在用户点击时调用，命令与包 ID 都来自内置目录。
+ipcMain.handle('tools:install-app', (_event, id: unknown) =>
+  installLocalApp(typeof id === 'string' ? id : ''));
+
+ipcMain.handle('tools:list-links', () => ({ ok: true, links: listCustomLinks() }));
+
+ipcMain.handle('tools:save-link', (_event, input: unknown) => saveCustomLink(input));
+
+ipcMain.handle('tools:remove-link', (_event, id: unknown) => removeCustomLink(id));
+
 ipcMain.handle('tools:open-app', (_event, id: unknown, target: unknown) => {
   try {
     return openLocalApp(id, target);
@@ -802,9 +946,64 @@ ipcMain.handle('tools:open-app', (_event, id: unknown, target: unknown) => {
   }
 });
 
+ipcMain.handle('tools:save-app', (_event, input: unknown) => {
+  try {
+    return saveCustomApp(input);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+ipcMain.handle('tools:remove-app', (_event, id: unknown) => {
+  try {
+    return removeCustomApp(id);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+ipcMain.handle('tools:pick-app-exe', async () => {
+  const result = await dialog.showOpenDialog({
+    title: t('选择可执行文件'),
+    properties: ['openFile'],
+    filters: [{ name: t('可执行文件'), extensions: ['exe'] }],
+  });
+  const picked = result.filePaths[0];
+  return result.canceled || !picked ? { ok: false } : { ok: true, path: picked };
+});
+
+ipcMain.handle('tools:get-settings', () => ({ ok: true, settings: getToolSettings() }));
+
+ipcMain.handle('tools:save-settings', (_event, input: unknown) => saveToolSettings(input));
+
+ipcMain.handle('tools:search', (_event, query: unknown) =>
+  searchWeb(typeof query === 'string' ? query : ''));
+
+ipcMain.handle('tools:fetch-page', (_event, url: unknown) =>
+  fetchPage(typeof url === 'string' ? url : ''));
+
+ipcMain.handle('tools:crawl', (_event, url: unknown) =>
+  crawlPage(typeof url === 'string' ? url : ''));
+
+ipcMain.handle('tools:analyze', (_event, target: unknown) =>
+  analyzePath(typeof target === 'string' ? target : ''));
+
+ipcMain.handle('tools:pick-analyze-path', async () => {
+  const result = await dialog.showOpenDialog({
+    title: t('选择要分析的文件或目录'),
+    properties: ['openFile', 'openDirectory'],
+  });
+  const picked = result.filePaths[0];
+  return result.canceled || !picked ? { ok: false } : { ok: true, path: picked };
+});
+
 function openLocalApp(id: unknown, target: unknown): { ok: boolean; error?: string } {
   if (typeof id !== 'string') return { ok: false, error: t('未知应用') };
   const resolved = typeof target === 'string' && target.trim() ? safeOpenTarget(target) : undefined;
+  // 开始菜单扫描出来的程序走独立启动路径，只能使用扫描缓存里的 ID。
+  if (id.startsWith('scan-')) {
+    return launchScannedApp(id, resolved) ?? { ok: false, error: t('未知应用') };
+  }
   if (id === 'vscode') {
     const folder = resolved ?? process.cwd();
     const slashPath = folder.split(path.sep).join('/');
@@ -819,6 +1018,9 @@ function openLocalApp(id: unknown, target: unknown): { ok: boolean; error?: stri
     }
     return { ok: false, error: t('该平台暂未内置此应用，请用「打开路径」') };
   }
+  const catalogApp = appCatalog().find((item) => item.id === id);
+  if (catalogApp) return launchLocalApp(id, resolved);
+
   const launches: Record<string, { command: string; args: string[] }> = {
     explorer: { command: 'explorer.exe', args: [resolved ?? app.getPath('home')] },
     terminal: { command: 'wt.exe', args: resolved ? ['-d', resolved] : [] },
@@ -902,6 +1104,15 @@ ipcMain.handle('app:open-path', async (_event, target: unknown) => {
   try {
     const resolved = safeOpenTarget(target);
     const error = await shell.openPath(resolved);
+    return error ? { ok: false, error } : { ok: true };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+ipcMain.handle('app:open-user-data', async () => {
+  try {
+    const error = await shell.openPath(app.getPath('userData'));
     return error ? { ok: false, error } : { ok: true };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
@@ -1004,6 +1215,9 @@ if (!singleInstance) {
 
   app.whenReady().then(() => {
     setBackendLocale(app.getLocale());
+    configureCustomAgents(path.join(app.getPath('userData'), 'custom-agents.json'));
+    configureCustomApps(path.join(app.getPath('userData'), 'custom-apps.json'));
+    configureCustomLinks(path.join(app.getPath('userData'), 'custom-links.json'));
     installMediaProtocol();
     automationStore().start();
     createWindow();

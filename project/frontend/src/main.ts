@@ -19,6 +19,20 @@ interface ProjectRecord {
   path: string;
   name: string;
   lastUsed: number;
+  exists?: boolean;
+}
+
+interface ImportedProject {
+  source: string;
+  name: string;
+  path: string;
+  lastUsed: number;
+}
+
+interface CustomLink {
+  id: string;
+  name: string;
+  url: string;
 }
 
 interface ModelEntry {
@@ -29,6 +43,8 @@ interface ModelEntry {
   contextWindow?: number;
   relay: boolean;
   current: boolean;
+  free: boolean;
+  freeReason?: 'local' | 'openrouter' | 'zero-cost' | 'whitelist';
 }
 
 interface ModelReport {
@@ -164,10 +180,43 @@ interface MediaResult {
   error?: string;
 }
 
+interface LocalAppInfo {
+  id: string;
+  name: string;
+  kind: 'video' | '3d' | 'design' | 'audio' | 'engine' | 'dev' | 'office' | 'browser' | 'system';
+  installed: boolean;
+  path?: string;
+  hint: string;
+  custom?: boolean;
+  discovered?: boolean;
+  installId?: string;
+}
+
+interface ToolSettings {
+  webSearch: boolean;
+  crawl: boolean;
+  reverse: boolean;
+  searchProvider: 'duckduckgo' | 'searxng';
+  searxngUrl: string;
+}
+
+interface SearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+interface PageContent {
+  url: string;
+  title: string;
+  text: string;
+}
+
 interface VendorInfo {
   key: string;
   label: string;
   tier: number;
+  region: 'cn' | 'global';
   aliases: string[];
 }
 
@@ -192,10 +241,22 @@ interface CatalogMcp {
   needsConfig?: boolean;
 }
 
+interface CatalogExtension {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  tags: string[];
+  builtin: boolean;
+  version?: string;
+  source: string;
+}
+
 interface CatalogReport {
   vendors: VendorInfo[];
   skills: CatalogSkill[];
   mcps: CatalogMcp[];
+  extensions?: CatalogExtension[];
 }
 
 interface RegistryMcp {
@@ -217,8 +278,13 @@ interface AgentInfo {
   authHint: string;
   installHint: string;
   installed: boolean;
+  runnable?: boolean;
+  cliInstalled?: boolean;
+  desktopInstalled?: boolean;
+  desktopPath?: string;
   version?: string;
   path?: string;
+  custom?: boolean;
 }
 
 interface AgentEvent {
@@ -261,6 +327,8 @@ interface PiDesktopApi {
   setLocale(locale: string): Promise<{ ok: boolean; locale: string }>;
   pickProject(): Promise<{ ok: boolean; path?: string }>;
   projects(): Promise<{ ok: boolean; projects: ProjectRecord[] }>;
+  importProjects(): Promise<{ ok: boolean; projects: ImportedProject[]; error?: string }>;
+  rememberProjects(paths: string[]): Promise<{ ok: boolean; added: number }>;
   inspectModels(): Promise<{ ok: boolean; report?: ModelReport; error?: string }>;
   providers(): Promise<{ ok: boolean; report?: ProviderReport; error?: string }>;
   saveProvider(input: {
@@ -296,6 +364,7 @@ interface PiDesktopApi {
     description?: string;
     body?: string;
   }): Promise<CapabilityResult>;
+  removeSkill(input: { scope: 'user' | 'project'; cwd?: string; name: string }): Promise<CapabilityResult>;
   addMcp(input: {
     scope: 'user' | 'project';
     cwd?: string;
@@ -306,12 +375,13 @@ interface PiDesktopApi {
   }): Promise<CapabilityResult>;
   gitStatus(cwd: string): Promise<GitStatusResult>;
   openPath(target: string): Promise<{ ok: boolean; error?: string }>;
+  openUserData(): Promise<{ ok: boolean; error?: string }>;
   openVSCode(target: string): Promise<{ ok: boolean; error?: string }>;
   probeEnvironment(): Promise<EnvironmentReport>;
   installPi(): Promise<SetupResult>;
   createShortcut(target?: string): Promise<{ ok: boolean; path?: string; error?: string }>;
   sessions(cwd: string): Promise<{ ok: boolean; sessions?: SessionEntry[]; error?: string }>;
-  startPi(options: { cwd: string; cols: number; rows: number; sessionPath?: string; isolated?: boolean; model?: string }): Promise<{
+  startPi(options: { cwd: string; cols: number; rows: number; sessionPath?: string; isolated?: boolean; model?: string; thinking?: string }): Promise<{
     ok: boolean;
     isolatedDir?: string;
     isolated?: boolean;
@@ -330,10 +400,29 @@ interface PiDesktopApi {
   onOpenProject(callback: (projectPath: string) => void): () => void;
   catalog(): Promise<{ ok: boolean; catalog?: CatalogReport; agents?: AgentInfo[]; error?: string }>;
   searchMcpRegistry(query: string): Promise<{ ok: boolean; results: RegistryMcp[]; error?: string }>;
+  searchExtensions(query: string): Promise<{ ok: boolean; results: CatalogExtension[]; error?: string }>;
+  installExtension(name: string): Promise<{ ok: boolean; output: string; error?: string }>;
+  importSkillUrl(input: { url: string; scope: 'user' | 'project'; cwd?: string }): Promise<{ ok: boolean; path?: string; error?: string }>;
   listAgents(refresh?: boolean): Promise<{ ok: boolean; agents?: AgentInfo[]; error?: string }>;
   runAgent(input: { agentId: string; prompt: string; cwd?: string; timeoutMinutes?: number }): Promise<{ ok: boolean; runId: string; summary: string; error?: string }>;
   stopAgent(runId: string): Promise<{ ok: boolean }>;
-  runTeam(input: { task: string; agentIds: string[]; mode: 'parallel' | 'supervisor'; supervisorId?: string; cwd?: string }): Promise<{ ok: boolean; summaries: Array<{ agentId: string; ok: boolean; text: string }>; error?: string }>;
+  runTeam(input: { task: string; agentIds: string[]; mode: 'parallel' | 'supervisor'; supervisorId?: string; cwd?: string; apps?: string[]; webSearch?: boolean }): Promise<{ ok: boolean; summaries: Array<{ agentId: string; ok: boolean; text: string }>; error?: string }>;
+  suggestTeam(task: string, cwd?: string): Promise<{ taskKind: string; members: string[]; supervisorId: string; reason: string }>;
+  installAgent(agentId: string): Promise<{ ok: boolean; agentId: string; output: string; error?: string }>;
+  openAgentApp(agentId: string, cwd?: string): Promise<{ ok: boolean; error?: string }>;
+  pickAgentCommand(): Promise<{ ok: boolean; path?: string }>;
+  saveCustomAgent(input: {
+    name: string;
+    command: string;
+    description?: string;
+    roles?: string[];
+    specialties?: string[];
+    strengths?: string[];
+    weaknesses?: string[];
+    limitations?: string[];
+    args?: string[];
+  }): Promise<{ ok: boolean; error?: string }>;
+  removeCustomAgent(id: string): Promise<{ ok: boolean; error?: string }>;
   automationList(): Promise<{ ok: boolean; jobs?: AutomationJob[]; channels?: PublicChannel[]; error?: string }>;
   saveAutomationJob(input: unknown, id?: string): Promise<{ ok: boolean; job?: AutomationJob; error?: string }>;
   deleteAutomationJob(id: string): Promise<{ ok: boolean }>;
@@ -343,6 +432,22 @@ interface PiDesktopApi {
   deleteAutomationChannel(id: string): Promise<{ ok: boolean }>;
   testAutomationChannel(id: string): Promise<{ ok: boolean; message: string }>;
   openApp(id: string, target?: string): Promise<{ ok: boolean; error?: string }>;
+  listApps(refresh?: boolean): Promise<{ ok: boolean; apps: LocalAppInfo[]; error?: string }>;
+  scanApps(refresh?: boolean): Promise<{ ok: boolean; apps: LocalAppInfo[]; error?: string }>;
+  installApp(id: string): Promise<{ ok: boolean; output: string; error?: string }>;
+  listLinks(): Promise<{ ok: boolean; links: CustomLink[] }>;
+  saveLink(input: { name: string; url: string }): Promise<{ ok: boolean; link?: CustomLink; error?: string }>;
+  removeLink(id: string): Promise<{ ok: boolean; error?: string }>;
+  pickAppExe(): Promise<{ ok: boolean; path?: string; error?: string }>;
+  saveApp(input: { id?: string; name: string; kind: string; path: string; hint?: string; projectArg?: string }): Promise<{ ok: boolean; app?: LocalAppInfo; error?: string }>;
+  removeApp(id: string): Promise<{ ok: boolean; error?: string }>;
+  getToolSettings(): Promise<{ ok: boolean; settings: ToolSettings }>;
+  saveToolSettings(input: ToolSettings): Promise<{ ok: boolean; settings?: ToolSettings; error?: string }>;
+  searchWeb(query: string): Promise<{ ok: boolean; results: SearchResult[]; error?: string }>;
+  fetchWebPage(url: string): Promise<{ ok: boolean; page?: PageContent; error?: string }>;
+  crawlWeb(url: string): Promise<{ ok: boolean; pages: PageContent[]; links: string[]; error?: string }>;
+  analyzePath(target: string): Promise<{ ok: boolean; lines?: string[]; error?: string }>;
+  pickAnalyzePath(): Promise<{ ok: boolean; path?: string }>;
   onAgentEvent(callback: (event: AgentEvent) => void): () => void;
 }
 
@@ -357,6 +462,110 @@ let panels: PanelsController | null = null;
 let catalogVendors: VendorInfo[] = [];
 const expandedVendors = new Set<string>();
 initLocale();
+
+type ThemeMode = 'dark' | 'light' | 'system';
+type AccentPreset = 'mint' | 'blue' | 'violet' | 'amber' | 'rose' | 'custom';
+type ReasoningLevel = 'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+type SmartLevel = 'auto' | 'fast' | 'balanced' | 'max';
+type StartupAnimation = 'dynamic' | 'fade' | 'off';
+
+const REASONING_LEVELS: ReasoningLevel[] = ['auto', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+const SMART_LEVELS: SmartLevel[] = ['auto', 'fast', 'balanced', 'max'];
+const ACCENT_PRESETS: AccentPreset[] = ['mint', 'blue', 'violet', 'amber', 'rose', 'custom'];
+const ACCENT_COLORS: Record<Exclude<AccentPreset, 'custom'>, { dark: string; light: string }> = {
+  mint: { dark: '#a4e6cc', light: '#2f7a64' },
+  blue: { dark: '#9fc3ff', light: '#35689f' },
+  violet: { dark: '#c7b3ff', light: '#6b55a5' },
+  amber: { dark: '#f0cf8a', light: '#8a6212' },
+  rose: { dark: '#f3b3c4', light: '#a84562' },
+};
+
+function readPreference(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writePreference(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // storage is optional
+  }
+}
+
+function oneOf<T extends string>(value: string, allowed: readonly T[], fallback: T): T {
+  return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+let themeMode = oneOf<ThemeMode>(readPreference('pi-theme-mode', 'dark'), ['dark', 'light', 'system'], 'dark');
+let accentPreset = oneOf<AccentPreset>(readPreference('pi-accent', 'mint'), ACCENT_PRESETS, 'mint');
+let accentCustom = /^#[0-9a-f]{6}$/i.test(readPreference('pi-accent-custom', '#a4e6cc'))
+  ? readPreference('pi-accent-custom', '#a4e6cc')
+  : '#a4e6cc';
+let compactDensity = readPreference('pi-density', 'comfortable') === 'compact';
+let startupAnimation = oneOf<StartupAnimation>(readPreference('pi-startup-animation', 'dynamic'), ['dynamic', 'fade', 'off'], 'dynamic');
+let reasoningLevel = oneOf<ReasoningLevel>(readPreference('pi-reasoning-level', 'auto'), REASONING_LEVELS, 'auto');
+let smartLevel = oneOf<SmartLevel>(readPreference('pi-smart-level', 'auto'), SMART_LEVELS, 'auto');
+
+function resolvedTheme(): 'dark' | 'light' {
+  if (themeMode === 'system') return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return themeMode;
+}
+
+function accentValue(): string {
+  if (accentPreset === 'custom') return accentCustom;
+  return ACCENT_COLORS[accentPreset][resolvedTheme()];
+}
+
+function terminalTheme(): Record<string, string> {
+  const accent = accentValue();
+  if (resolvedTheme() === 'light') {
+    return {
+      background: '#f7faf8',
+      foreground: '#1c2825',
+      cursor: accent,
+      cursorAccent: '#f7faf8',
+      selectionBackground: '#c9e7dc',
+      black: '#1c2825',
+      brightBlack: '#667a75',
+      green: accent,
+      brightGreen: '#256a56',
+      cyan: '#2b6f7a',
+      brightCyan: '#245d66',
+      yellow: '#7a5a12',
+      brightYellow: '#8a6212',
+      red: '#a84562',
+      brightRed: '#8f334f',
+    };
+  }
+  return {
+    background: '#111517',
+    foreground: '#e9efed',
+    cursor: accent,
+    selectionBackground: '#2b4a44',
+    black: '#111517',
+    brightBlack: '#5b6b69',
+    green: accent,
+    brightGreen: '#c8f5e5',
+    cyan: '#8fd8c4',
+    brightCyan: '#b5f0e2',
+  };
+}
+
+function applyThemeAttributes(): void {
+  const root = document.documentElement;
+  root.dataset.theme = resolvedTheme();
+  root.dataset.accent = accentPreset;
+  root.style.setProperty('--accent', accentValue());
+  root.style.setProperty('--terminal-bg', terminalTheme().background);
+  document.body.classList.toggle('compact', compactDensity);
+}
+
+applyThemeAttributes();
+
 const $ = <T extends HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
   if (!element) throw new Error(t('缺少元素 #{id}', { id }));
@@ -383,18 +592,7 @@ const terminal = new Terminal({
       });
     },
   },
-  theme: {
-    background: '#111517',
-    foreground: '#e9efed',
-    cursor: '#a4e6cc',
-    selectionBackground: '#2b4a44',
-    black: '#111517',
-    brightBlack: '#5b6b69',
-    green: '#a4e6cc',
-    brightGreen: '#c8f5e5',
-    cyan: '#8fd8c4',
-    brightCyan: '#b5f0e2',
-  },
+  theme: terminalTheme(),
 });
 
 const fit = new FitAddon();
@@ -469,6 +667,31 @@ let modelModules: ModelModule[] = [];
 let projectModelBindings: Record<string, string> = {};
 let moduleEditingId = '';
 
+type ModelBoard = 'cn' | 'global' | 'free';
+type TaskKind = 'coding' | 'research' | 'writing' | 'data' | 'design' | 'video3d' | 'general';
+const TASK_KINDS: Array<{ key: TaskKind; label: string; keywords: string[] }> = [
+  { key: 'coding', label: '写代码 / 修 Bug', keywords: ['代码', '函数', '报错', '修复', '重构', '实现', '测试', '接口', '编译', '构建', 'bug', 'api', 'typescript', 'python', 'java', 'go', 'rust', 'react', 'sql', '```'] },
+  { key: 'research', label: '调研 / 查资料', keywords: ['调研', '查资料', '搜索', '资料', '对比', '分析', '研究', '论文', '最新', '方案', '选型'] },
+  { key: 'writing', label: '写作 / 文档', keywords: ['写', '文案', '文档', 'readme', '润色', '翻译', '总结', '邮件', '说明', '文章'] },
+  { key: 'data', label: '数据 / 表格', keywords: ['数据', '表格', 'excel', 'csv', '统计', '爬取', '报表', '指标'] },
+  { key: 'design', label: '设计 / 视觉', keywords: ['设计', 'ui', '界面', '配色', '图标', '视觉', '原型', 'figma', '布局', '字体'] },
+  { key: 'video3d', label: '视频 / 3D', keywords: ['视频', '剪辑', '建模', 'blender', '3d', '渲染', '动画', '特效', '合成'] },
+  { key: 'general', label: '通用任务', keywords: [] },
+];
+const TASK_PREFERRED: Record<TaskKind, string[]> = {
+  coding: ['anthropic', 'openai', 'deepseek', 'zhipu', 'xai', 'moonshot', 'alibaba'],
+  research: ['google', 'openai', 'anthropic', 'xai', 'deepseek'],
+  writing: ['anthropic', 'openai', 'moonshot', 'alibaba'],
+  data: ['openai', 'deepseek', 'google', 'alibaba'],
+  design: ['google', 'openai', 'anthropic', 'xai'],
+  video3d: ['google', 'openai', 'xai', 'anthropic'],
+  general: ['deepseek', 'moonshot', 'openai', 'anthropic', 'google', 'zhipu'],
+};
+let activeBoard: ModelBoard = 'cn';
+let routerEnabled = false;
+let routerMap: Partial<Record<TaskKind, string>> = {};
+let lastRoutedKey = '';
+
 const versionElement = $('pi-version');
 const activeModelElement = $('active-model');
 const stateElement = $('process-state');
@@ -487,7 +710,9 @@ const startButton = $<HTMLButtonElement>('start-pi');
 const stopButton = $<HTMLButtonElement>('stop-pi');
 const openFolderButton = $<HTMLButtonElement>('open-folder');
 const openVSCodeButton = $<HTMLButtonElement>('open-vscode');
-const auditElement = $<HTMLOListElement>('audit-log');
+const sessionSearchInput = $<HTMLInputElement>('session-search');
+let sessionCache: SessionEntry[] = [];
+const collapsedSessionGroups = new Set<string>();
 const modelListElement = $('model-list');
 const modelSummaryElement = $('model-summary');
 const modelSearchElement = $<HTMLInputElement>('model-search');
@@ -495,6 +720,10 @@ const previewElement = $('command-preview');
 const copyButton = $<HTMLButtonElement>('copy-command');
 const capabilitySummaryElement = $('capability-summary');
 const capabilityListElement = $('capability-list');
+const capabilitySearchInput = $<HTMLInputElement>('capability-search');
+let capabilityCache: CapabilityEntry[] = [];
+let capabilityWarnings: string[] = [];
+const collapsedCapabilityGroups = new Set<string>();
 const capabilityFormElement = $<HTMLFormElement>('capability-form');
 const capabilityKindSelect = $<HTMLSelectElement>('capability-kind');
 const capabilityScopeSelect = $<HTMLSelectElement>('capability-scope');
@@ -516,6 +745,11 @@ const sendButton = $<HTMLButtonElement>('send-command');
 const alertBar = $('terminal-alert');
 const alertText = $('terminal-alert-text');
 const modelProviderElement = $<HTMLSelectElement>('model-provider');
+const routerToggleElement = $<HTMLInputElement>('router-toggle');
+const routerMapElement = $('router-map');
+const routerNoteElement = $('router-note');
+const applyFreeButton = $<HTMLButtonElement>('apply-free-model');
+const boardTabs = [...document.querySelectorAll<HTMLButtonElement>('.board-tab')];
 const moduleListElement = $('module-list');
 const moduleFormElement = $<HTMLFormElement>('module-form');
 const moduleNameInput = $<HTMLInputElement>('module-name');
@@ -550,6 +784,190 @@ const mediaPreviewName = $('media-preview-name');
 const mediaPreviewBody = $('media-preview-body');
 const mediaPreviewExternalButton = $<HTMLButtonElement>('media-preview-external');
 const mediaPreviewCloseButton = $<HTMLButtonElement>('media-preview-close');
+const openSettingsButton = $<HTMLButtonElement>('open-settings');
+const reasoningSelect = $<HTMLSelectElement>('reasoning-level');
+const smartSelect = $<HTMLSelectElement>('smart-level');
+const tuningState = $('tuning-state');
+const themeModeSelect = $<HTMLSelectElement>('theme-mode');
+const accentSelect = $<HTMLSelectElement>('accent-color');
+const accentCustomRow = $('accent-custom-row');
+const accentCustomInput = $<HTMLInputElement>('accent-custom');
+const compactDensityCheckbox = $<HTMLInputElement>('compact-density');
+const startupAnimationSelect = $<HTMLSelectElement>('startup-animation');
+const previewStartupButton = $<HTMLButtonElement>('preview-startup');
+const resetAppearanceButton = $<HTMLButtonElement>('reset-appearance');
+const settingsReasoningSelect = $<HTMLSelectElement>('settings-reasoning');
+const settingsSmartSelect = $<HTMLSelectElement>('settings-smart');
+const startupSplash = $('startup-splash');
+
+let splashTimer: number | undefined;
+
+function playStartupSplash(force = false): void {
+  const mode = force && startupAnimation === 'off' ? 'dynamic' : startupAnimation;
+  if (splashTimer !== undefined) {
+    window.clearTimeout(splashTimer);
+    splashTimer = undefined;
+  }
+  if (mode === 'off') {
+    startupSplash.hidden = true;
+    startupSplash.classList.remove('playing');
+    return;
+  }
+  startupSplash.hidden = false;
+  startupSplash.dataset.mode = mode;
+  startupSplash.classList.remove('playing');
+  void startupSplash.offsetWidth;
+  startupSplash.classList.add('playing');
+  splashTimer = window.setTimeout(() => {
+    startupSplash.classList.remove('playing');
+    startupSplash.hidden = true;
+    splashTimer = undefined;
+  }, mode === 'fade' ? 900 : 1500);
+}
+
+function updateTuningState(): void {
+  const active = reasoningLevel !== 'auto' || smartLevel !== 'auto';
+  tuningState.textContent = active ? t(running ? '新会话生效' : '启动生效') : '';
+}
+
+function syncTuningControls(): void {
+  reasoningSelect.value = reasoningLevel;
+  smartSelect.value = smartLevel;
+  settingsReasoningSelect.value = reasoningLevel;
+  settingsSmartSelect.value = smartLevel;
+  updateTuningState();
+}
+
+function pickSmartModel(base: string): string | undefined {
+  if (smartLevel === 'auto' || smartLevel === 'balanced') return base || undefined;
+  const [baseProvider] = base.split('/');
+  const provider = baseProvider || models.find((model) => model.current)?.provider || models[0]?.provider;
+  if (!provider) return base || undefined;
+  const hint = smartLevel === 'fast'
+    ? /(mini|nano|flash|spark|highspeed|lite|small|turbo|haiku)/i
+    : /(pro|max|opus|ultra|thinking|reason|sol|terra|astra|large)/i;
+  const match = models.find((model) => model.provider === provider && !model.relay && hint.test(model.id));
+  return match ? `${match.provider}/${match.id}` : base || undefined;
+}
+
+function setReasoningLevel(level: string): void {
+  const next = oneOf<ReasoningLevel>(level, REASONING_LEVELS, 'auto');
+  if (next === reasoningLevel) return;
+  reasoningLevel = next;
+  writePreference('pi-reasoning-level', next);
+  syncTuningControls();
+  if (running) toast('推理度已保存，将在新会话生效');
+}
+
+function setSmartLevel(level: string): void {
+  const next = oneOf<SmartLevel>(level, SMART_LEVELS, 'auto');
+  if (next === smartLevel) return;
+  smartLevel = next;
+  writePreference('pi-smart-level', next);
+  syncTuningControls();
+  if (!running) return;
+  const base = shownModel || (models.find((model) => model.current)
+    ? `${models.find((model) => model.current)?.provider}/${models.find((model) => model.current)?.id}`
+    : '');
+  const target = pickSmartModel(base);
+  if (target && target !== shownModel) {
+    api.write(`/model ${target}\r`);
+    toast('已请求切换到 {model}', { model: target });
+  } else if (next === 'auto') {
+    toast('已保存，自动沿用当前模型');
+  } else {
+    toast('当前模型已是该档位');
+  }
+}
+
+function syncAppearanceControls(): void {
+  themeModeSelect.value = themeMode;
+  accentSelect.value = accentPreset;
+  accentCustomInput.value = accentCustom;
+  accentCustomRow.hidden = accentPreset !== 'custom';
+  compactDensityCheckbox.checked = compactDensity;
+  startupAnimationSelect.value = startupAnimation;
+}
+
+function applyAppearance(): void {
+  applyThemeAttributes();
+  terminal.options.theme = terminalTheme();
+}
+
+function initAppearanceControls(): void {
+  syncAppearanceControls();
+  syncTuningControls();
+
+  openSettingsButton.addEventListener('click', () => {
+    activateTab('tab-settings');
+    document.getElementById('tab-settings')?.focus();
+  });
+  window.addEventListener('keydown', (event) => {
+    if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key === ',') {
+      event.preventDefault();
+      activateTab('tab-settings');
+      document.getElementById('tab-settings')?.focus();
+    }
+  });
+
+  themeModeSelect.addEventListener('change', () => {
+    themeMode = oneOf<ThemeMode>(themeModeSelect.value, ['dark', 'light', 'system'], 'dark');
+    writePreference('pi-theme-mode', themeMode);
+    applyAppearance();
+  });
+  accentSelect.addEventListener('change', () => {
+    accentPreset = oneOf<AccentPreset>(accentSelect.value, ACCENT_PRESETS, 'mint');
+    writePreference('pi-accent', accentPreset);
+    accentCustomRow.hidden = accentPreset !== 'custom';
+    applyAppearance();
+  });
+  accentCustomInput.addEventListener('input', () => {
+    if (!/^#[0-9a-f]{6}$/i.test(accentCustomInput.value)) return;
+    accentCustom = accentCustomInput.value;
+    accentPreset = 'custom';
+    accentSelect.value = 'custom';
+    accentCustomRow.hidden = false;
+    writePreference('pi-accent-custom', accentCustom);
+    writePreference('pi-accent', accentPreset);
+    applyAppearance();
+  });
+  compactDensityCheckbox.addEventListener('change', () => {
+    compactDensity = compactDensityCheckbox.checked;
+    writePreference('pi-density', compactDensity ? 'compact' : 'comfortable');
+    applyAppearance();
+  });
+  startupAnimationSelect.addEventListener('change', () => {
+    startupAnimation = oneOf<StartupAnimation>(startupAnimationSelect.value, ['dynamic', 'fade', 'off'], 'dynamic');
+    writePreference('pi-startup-animation', startupAnimation);
+  });
+  previewStartupButton.addEventListener('click', () => playStartupSplash(true));
+  resetAppearanceButton.addEventListener('click', () => {
+    themeMode = 'dark';
+    accentPreset = 'mint';
+    accentCustom = '#a4e6cc';
+    compactDensity = false;
+    startupAnimation = 'dynamic';
+    writePreference('pi-theme-mode', themeMode);
+    writePreference('pi-accent', accentPreset);
+    writePreference('pi-accent-custom', accentCustom);
+    writePreference('pi-density', 'comfortable');
+    writePreference('pi-startup-animation', startupAnimation);
+    syncAppearanceControls();
+    applyAppearance();
+    toast('已恢复默认外观');
+  });
+
+  reasoningSelect.addEventListener('change', () => setReasoningLevel(reasoningSelect.value));
+  settingsReasoningSelect.addEventListener('change', () => setReasoningLevel(settingsReasoningSelect.value));
+  smartSelect.addEventListener('change', () => setSmartLevel(smartSelect.value));
+  settingsSmartSelect.addEventListener('change', () => setSmartLevel(settingsSmartSelect.value));
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (themeMode === 'system') applyAppearance();
+  });
+
+  playStartupSplash();
+}
 
 let attachments: MediaItem[] = [];
 let previewItem: MediaItem | null = null;
@@ -558,15 +976,8 @@ let previewX = 0;
 let previewY = 0;
 let previewPan: { x: number; y: number; left: number; top: number } | null = null;
 
-function timestamp(): string {
-  return new Date().toLocaleTimeString(getLocale() === 'en' ? 'en-US' : 'zh-CN', { hour12: false });
-}
-
 function audit(source: string, vars?: Record<string, string | number>): void {
-  const item = document.createElement('li');
-  item.textContent = `${timestamp()} · ${t(source, vars)}`;
-  auditElement.prepend(item);
-  while (auditElement.children.length > 60) auditElement.lastElementChild?.remove();
+  console.debug('[pi]', t(source, vars));
 }
 
 let toastTimer: number | undefined;
@@ -788,11 +1199,18 @@ function renderProjects(projects: ProjectRecord[]): void {
   for (const project of projects) {
     if (project.path === currentCwd) continue;
     const button = document.createElement('button');
+    if (project.exists === false) button.classList.add('missing');
+    const head = document.createElement('span');
+    head.className = 'recent-head';
     const name = document.createElement('strong');
     name.textContent = project.name;
+    const when = document.createElement('small');
+    when.className = 'recent-time';
+    when.textContent = project.lastUsed ? formatTime(new Date(project.lastUsed).toISOString()) : '';
+    head.append(name, when);
     const detail = document.createElement('small');
-    detail.textContent = project.path;
-    button.append(name, detail);
+    detail.textContent = project.exists === false ? `${t('路径无效')} · ${project.path}` : project.path;
+    button.append(head, detail);
     button.title = project.path;
     button.addEventListener('click', () => setProject(project.path));
     recentElement.append(button);
@@ -813,6 +1231,90 @@ async function refreshProjects(): Promise<void> {
     renderProjects([]);
   }
 }
+
+// ---------- 从其他软件导入项目 ----------
+const importDrawer = $<HTMLDetailsElement>('import-projects-drawer');
+const importProjectList = $('import-project-list');
+const importProjectsRefresh = $<HTMLButtonElement>('import-projects-refresh');
+const importProjectsApply = $<HTMLButtonElement>('import-projects-apply');
+let importCandidates: ImportedProject[] = [];
+let importScanning = false;
+
+function renderImportCandidates(): void {
+  importProjectList.replaceChildren();
+  if (!importCandidates.length) {
+    const note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = t('没有找到可导入的项目；先在其他软件里打开过项目目录再试。');
+    importProjectList.append(note);
+    return;
+  }
+  for (const project of importCandidates) {
+    const label = document.createElement('label');
+    label.className = 'import-item';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = project.path;
+    const text = document.createElement('span');
+    text.className = 'import-text';
+    const title = document.createElement('strong');
+    title.textContent = project.name;
+    const source = document.createElement('span');
+    source.className = 'app-tag';
+    source.textContent = project.source;
+    const detail = document.createElement('small');
+    detail.textContent = project.path;
+    detail.title = project.path;
+    text.append(title, source, detail);
+    label.append(checkbox, text);
+    importProjectList.append(label);
+  }
+}
+
+async function loadImportCandidates(): Promise<void> {
+  if (importScanning) return;
+  importScanning = true;
+  importProjectsRefresh.disabled = true;
+  importProjectList.replaceChildren();
+  const loading = document.createElement('p');
+  loading.className = 'note';
+  loading.textContent = t('正在扫描其他软件的最近项目…');
+  importProjectList.append(loading);
+  try {
+    const result = await api.importProjects();
+    if (!result.ok) {
+      toast('扫描失败：{error}', { error: result.error ?? t('未知错误') });
+      importCandidates = [];
+    } else {
+      importCandidates = result.projects;
+    }
+    renderImportCandidates();
+  } finally {
+    importScanning = false;
+    importProjectsRefresh.disabled = false;
+  }
+}
+
+importDrawer.addEventListener('toggle', () => {
+  if (importDrawer.open && !importCandidates.length && !importScanning) void loadImportCandidates();
+});
+importProjectsRefresh.addEventListener('click', () => void loadImportCandidates());
+importProjectsApply.addEventListener('click', async () => {
+  const selected = [...importProjectList.querySelectorAll<HTMLInputElement>('input[type=checkbox]:checked')]
+    .map((input) => input.value);
+  if (!selected.length) {
+    toast('请先勾选要导入的项目');
+    return;
+  }
+  importProjectsApply.disabled = true;
+  try {
+    const result = await api.rememberProjects(selected);
+    await refreshProjects();
+    toast('已导入 {n} 个项目', { n: result.added });
+  } finally {
+    importProjectsApply.disabled = false;
+  }
+});
 
 const LAST_PROJECT_KEY = 'pi-last-project';
 const AUTO_START_KEY = 'pi-autostart';
@@ -957,13 +1459,19 @@ function vendorKeyFor(model: ModelEntry): string {
   return vendor ? vendor.key : `provider:${model.provider}`;
 }
 
-function vendorMeta(key: string, provider: string): { label: string; tier: number; order: number } {
+function vendorMeta(key: string, provider: string): { label: string; tier: number; order: number; region: 'cn' | 'global' } {
   const index = catalogVendors.findIndex((item) => item.key === key);
   if (index >= 0) {
     const vendor = catalogVendors[index];
-    return { label: vendor.label, tier: vendor.tier, order: index };
+    return { label: vendor.label, tier: vendor.tier, order: index, region: vendor.region ?? 'global' };
   }
-  return { label: provider, tier: 99, order: 999 };
+  return { label: provider, tier: 99, order: 999, region: 'global' };
+}
+
+function boardOf(model: ModelEntry): ModelBoard {
+  if (model.free) return 'free';
+  const meta = vendorMeta(vendorKeyFor(model), model.provider);
+  return meta.region === 'cn' ? 'cn' : 'global';
 }
 
 function renderModels(): void {
@@ -971,6 +1479,7 @@ function renderModels(): void {
   const query = modelSearchElement.value.trim().toLowerCase();
   const providerFilter = modelProviderElement.value;
   const filtered = models.filter((model) => {
+    if (boardOf(model) !== activeBoard) return false;
     if (providerFilter && model.provider !== providerFilter) return false;
     return query ? `${model.provider}/${model.id} ${model.name ?? ''}`.toLowerCase().includes(query) : true;
   });
@@ -1028,11 +1537,19 @@ function renderModels(): void {
         contextLabel(model.contextWindow),
         model.reasoning ? t('思考') : '',
         model.name && model.name !== model.id ? model.name : '',
+        model.freeReason === 'local' ? t('本地端点') : model.freeReason === 'openrouter' ? 'OpenRouter :free'
+          : model.freeReason === 'zero-cost' ? t('目录零价') : model.freeReason === 'whitelist' ? t('厂商免费额度') : '',
       ].filter(Boolean).join(' · ') || t('模型');
       main.append(modelName, meta);
 
       const tags = document.createElement('span');
       tags.className = 'item-tags';
+      if (model.free) {
+        const tag = document.createElement('span');
+        tag.className = 'tag free';
+        tag.textContent = t('免费');
+        tags.append(tag);
+      }
       if (model.relay) {
         const tag = document.createElement('span');
         tag.className = 'tag relay';
@@ -1071,9 +1588,12 @@ function renderModels(): void {
   if (!filtered.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = models.length ? t('没有匹配的模型。') : t('未读取到模型配置。');
+    empty.textContent = models.length
+      ? (activeBoard === 'free' ? t('未发现可判定的免费模型；可接入本地端点或 OpenRouter :free。') : t('没有匹配的模型。'))
+      : t('未读取到模型配置。');
     modelListElement.append(empty);
   }
+  renderRouterMap();
 }
 
 function renderProviderFilter(): void {
@@ -1105,10 +1625,175 @@ function stageModel(model: ModelEntry): void {
   audit('暂存 {command}', { command });
 }
 
+const ROUTER_KEY = 'pi-model-router';
+
+function loadRouterConfig(): void {
+  try {
+    const raw = JSON.parse(localStorage.getItem(ROUTER_KEY) ?? '{}') as Record<string, unknown>;
+    routerEnabled = raw.enabled === true;
+    const map = raw.map;
+    if (map && typeof map === 'object' && !Array.isArray(map)) {
+      for (const task of TASK_KINDS) {
+        const value = (map as Record<string, unknown>)[task.key];
+        if (typeof value === 'string' && value.includes('/')) routerMap[task.key] = value.slice(0, 240);
+      }
+    }
+  } catch {
+    routerEnabled = false;
+    routerMap = {};
+  }
+  routerToggleElement.checked = routerEnabled;
+}
+
+function saveRouterConfig(): void {
+  try {
+    localStorage.setItem(ROUTER_KEY, JSON.stringify({ enabled: routerEnabled, map: routerMap }));
+  } catch {
+    // storage is optional
+  }
+}
+
+function taskLabel(task: TaskKind): string {
+  return TASK_KINDS.find((item) => item.key === task)?.label ?? task;
+}
+
+function classifyTask(text: string): TaskKind {
+  const lower = text.toLowerCase();
+  let best: TaskKind = 'general';
+  let bestScore = 0;
+  for (const task of TASK_KINDS) {
+    if (task.key === 'general') continue;
+    let score = 0;
+    for (const keyword of task.keywords) {
+      if (lower.includes(keyword)) score += keyword.length > 1 ? 2 : 1;
+    }
+    if (task.key === 'coding' && lower.includes('```')) score += 3;
+    if (score > bestScore) {
+      best = task.key;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function pickRouterModel(task: TaskKind): ModelEntry | null {
+  const manual = routerMap[task];
+  if (manual) {
+    const match = models.find((model) => `${model.provider}/${model.id}` === manual);
+    if (match) return match;
+  }
+  const preferred = TASK_PREFERRED[task];
+  const scored = models.map((model) => {
+    const rank = preferred.indexOf(vendorKeyFor(model));
+    let score = rank >= 0 ? (preferred.length - rank) * 100 : 0;
+    if (model.free) score -= 40;
+    if ((task === 'coding' || task === 'research' || task === 'data') && model.reasoning) score += 20;
+    if (model.current) score += 5;
+    score += Math.min(10, Math.log2((model.contextWindow ?? 0) / 1000 + 1));
+    return { model, score };
+  }).sort((a, b) => b.score - a.score);
+  return scored[0]?.model ?? null;
+}
+
+function renderRouterMap(): void {
+  routerMapElement.replaceChildren();
+  routerMapElement.hidden = !routerEnabled;
+  routerNoteElement.textContent = routerEnabled
+    ? t('总控已开启：发送前按任务类型切换模型；手动选择优先于自动推荐。')
+    : t('总控关闭：只在你点击模型时暂存切换命令，不会自动改写发送内容。');
+  if (!routerEnabled) return;
+  for (const task of TASK_KINDS) {
+    const row = document.createElement('label');
+    row.className = 'router-row';
+    const name = document.createElement('span');
+    name.textContent = t(task.label);
+    const select = document.createElement('select');
+    const auto = document.createElement('option');
+    auto.value = '';
+    auto.textContent = t('自动推荐');
+    select.append(auto);
+    const groups = new Map<string, HTMLOptGroupElement>();
+    for (const model of models) {
+      const vendor = vendorKeyFor(model);
+      let group = groups.get(vendor);
+      if (!group) {
+        group = document.createElement('optgroup');
+        group.label = vendorMeta(vendor, model.provider).label;
+        groups.set(vendor, group);
+        select.append(group);
+      }
+      const option = document.createElement('option');
+      option.value = `${model.provider}/${model.id}`;
+      option.textContent = `${model.id}${model.free ? ` · ${t('免费')}` : ''}`;
+      group.append(option);
+    }
+    select.value = routerMap[task.key] ?? '';
+    select.addEventListener('change', () => {
+      if (select.value) routerMap[task.key] = select.value;
+      else delete routerMap[task.key];
+      saveRouterConfig();
+    });
+    row.append(name, select);
+    routerMapElement.append(row);
+  }
+}
+
+async function maybeRouteModel(text: string): Promise<void> {
+  if (!routerEnabled || !running) return;
+  const task = classifyTask(text);
+  const model = pickRouterModel(task);
+  if (!model) return;
+  const key = `${model.provider}/${model.id}`;
+  if (key === lastRoutedKey) return;
+  api.write(`/model ${key}\r`);
+  lastRoutedKey = key;
+  toast(t('总控：{task} → {model}', { task: t(taskLabel(task)), model: key }));
+  audit('总控切换模型 · {task} → {model}', { task: t(taskLabel(task)), model: key });
+  await new Promise((resolve) => window.setTimeout(resolve, 400));
+}
+
+function applyFreeModel(): void {
+  if (!running) {
+    toast(t('先启动 Pi 会话'));
+    return;
+  }
+  const free = models.filter((model) => model.free);
+  if (!free.length) {
+    toast(t('未发现可判定的免费模型'));
+    return;
+  }
+  const currentFree = free.find((model) => model.current);
+  const pick = free.find((model) => !model.current) ?? currentFree ?? free[0];
+  const key = `${pick.provider}/${pick.id}`;
+  api.write(`/model ${key}\r`);
+  lastRoutedKey = key;
+  toast(t('已切换到免费模型 {model}', { model: key }));
+  audit('一键免费模型 · {model}（{reason}）', { model: key, reason: pick.freeReason ?? 'free' });
+}
+
+routerToggleElement.addEventListener('change', () => {
+  routerEnabled = routerToggleElement.checked;
+  saveRouterConfig();
+  renderRouterMap();
+  audit(routerEnabled ? '开启模型总控' : '关闭模型总控');
+});
+applyFreeButton.addEventListener('click', applyFreeModel);
+for (const tab of boardTabs) {
+  tab.addEventListener('click', () => {
+    const board = tab.dataset.board;
+    if (board !== 'cn' && board !== 'global' && board !== 'free') return;
+    activeBoard = board;
+    for (const item of boardTabs) item.setAttribute('aria-selected', String(item === tab));
+    renderProviderFilter();
+    renderModels();
+  });
+}
+
 const MODULES_KEY = 'pi-model-modules';
 const BINDINGS_KEY = 'pi-project-models';
 modelModules = loadModelModules();
 projectModelBindings = loadProjectModelBindings();
+loadRouterConfig();
 
 function loadModelModules(): ModelModule[] {
   try {
@@ -1377,10 +2062,12 @@ function applyModule(module: ModelModule): void {
     reasoning: false,
     relay: false,
     current: false,
+    free: false,
   });
   if (running) {
     const command = `/model ${module.provider}/${module.model}`;
     api.write(`${command}\r`);
+    lastRoutedKey = `${module.provider}/${module.model}`;
     terminal.focus();
     toast('已切换模型 {model}', { model: `${module.provider}/${module.model}` });
     audit('终端执行 {command}', { command });
@@ -1852,20 +2539,34 @@ const KIND_LABELS: Record<CapabilityEntry['kind'], string> = {
 };
 
 function renderCapabilities(capabilities: CapabilityEntry[], warnings: string[]): void {
+  capabilityCache = capabilities;
+  capabilityWarnings = warnings;
   capabilityListElement.replaceChildren();
-  if (!capabilities.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = t('未发现扩展、Skills 或 MCP 配置。');
-    capabilityListElement.append(empty);
-  }
+  const query = capabilitySearchInput.value.trim().toLowerCase();
+  let shown = 0;
   for (const kind of ['package', 'extension', 'skill', 'mcp'] as const) {
-    const items = capabilities.filter((item) => item.kind === kind);
+    const items = capabilities
+      .filter((item) => item.kind === kind)
+      .filter((item) => !query || `${item.name} ${item.detail ?? ''}`.toLowerCase().includes(query));
     if (!items.length) continue;
-    const label = document.createElement('div');
-    label.className = 'group-label';
-    label.textContent = `${t(KIND_LABELS[kind])} · ${items.length}`;
-    capabilityListElement.append(label);
+    shown += items.length;
+    const group = document.createElement('details');
+    group.className = 'cap-group';
+    group.dataset.kind = kind;
+    group.open = query ? true : !collapsedCapabilityGroups.has(kind);
+    const head = document.createElement('summary');
+    head.className = 'cap-group-head';
+    const title = document.createElement('strong');
+    title.textContent = t(KIND_LABELS[kind]);
+    const count = document.createElement('span');
+    count.className = 'cap-count';
+    count.textContent = String(items.length);
+    head.append(title, count);
+    group.addEventListener('toggle', () => {
+      if (group.open) collapsedCapabilityGroups.delete(kind);
+      else collapsedCapabilityGroups.add(kind);
+    });
+    group.append(head);
     for (const item of items) {
       const row = document.createElement('div');
       row.className = 'item';
@@ -1882,8 +2583,15 @@ function renderCapabilities(capabilities: CapabilityEntry[], warnings: string[])
       scope.textContent = item.scope === 'user' ? t('用户') : t('项目');
       tags.append(scope);
       row.append(main, tags);
-      capabilityListElement.append(row);
+      group.append(row);
     }
+    capabilityListElement.append(group);
+  }
+  if (!shown) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = query ? t('没有匹配的能力') : t('未发现扩展、Skills 或 MCP 配置。');
+    capabilityListElement.append(empty);
   }
   const counts = capabilities.reduce<Record<string, number>>((acc, item) => {
     acc[item.kind] = (acc[item.kind] ?? 0) + 1;
@@ -2251,39 +2959,96 @@ function formatSize(bytes: number): string {
   return `${bytes} B`;
 }
 
+function sessionGroup(timestamp: string): string {
+  const when = Date.parse(timestamp);
+  if (!Number.isFinite(when)) return 'older';
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  if (when >= start.getTime()) return 'today';
+  start.setDate(start.getDate() - 1);
+  if (when >= start.getTime()) return 'yesterday';
+  start.setDate(start.getDate() - 6);
+  if (when >= start.getTime()) return 'week';
+  return 'older';
+}
+
+const SESSION_GROUP_ORDER: Array<[string, string]> = [
+  ['today', '今天'],
+  ['yesterday', '昨天'],
+  ['week', '本周'],
+  ['older', '更早'],
+];
+
 function renderSessions(sessions: SessionEntry[]): void {
+  sessionCache = sessions;
+  const query = sessionSearchInput.value.trim().toLowerCase();
+  const visible = query
+    ? sessions.filter((session) => `${session.id} ${session.path} ${formatTime(session.timestamp)}`.toLowerCase().includes(query))
+    : sessions;
   sessionListElement.replaceChildren();
-  if (!sessions.length) {
+  if (!visible.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = t('该项目还没有 Pi 会话。启动新会话后会出现在这里。');
+    empty.textContent = query
+      ? t('没有匹配的会话')
+      : t('该项目还没有 Pi 会话。启动新会话后会出现在这里。');
     sessionListElement.append(empty);
     return;
   }
-  for (const session of sessions) {
-    const button = document.createElement('button');
-    button.className = 'item';
-    const main = document.createElement('span');
-    main.className = 'item-main';
-    const name = document.createElement('strong');
-    name.textContent = formatTime(session.timestamp);
-    const detail = document.createElement('small');
-    detail.textContent = `${session.id.slice(0, 8)} · ${formatSize(session.size)}`;
-    main.append(name, detail);
-    const tags = document.createElement('span');
-    const tag = document.createElement('span');
-    tag.className = 'tag';
-    tag.textContent = t('恢复');
-    tags.append(tag);
-    button.append(main, tags);
-    button.addEventListener('click', () => {
-      if (running) {
-        toast('先停止当前 Pi 再恢复会话');
-        return;
-      }
-      void startSession(session.path);
+  const buckets = new Map<string, SessionEntry[]>();
+  for (const session of visible) {
+    const key = sessionGroup(session.timestamp);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(session);
+    else buckets.set(key, [session]);
+  }
+  for (const [key, label] of SESSION_GROUP_ORDER) {
+    const items = buckets.get(key);
+    if (!items?.length) continue;
+    const group = document.createElement('details');
+    group.className = 'app-group session-group';
+    group.open = !collapsedSessionGroups.has(key);
+    group.addEventListener('toggle', () => {
+      if (group.open) collapsedSessionGroups.delete(key);
+      else collapsedSessionGroups.add(key);
     });
-    sessionListElement.append(button);
+    const head = document.createElement('summary');
+    head.className = 'app-group-head';
+    const title = document.createElement('span');
+    title.textContent = t(label);
+    const count = document.createElement('span');
+    count.className = 'cap-count';
+    count.textContent = String(items.length);
+    head.append(title, count);
+    const list = document.createElement('div');
+    list.className = 'session-items';
+    for (const session of items) {
+      const button = document.createElement('button');
+      button.className = 'item';
+      const main = document.createElement('span');
+      main.className = 'item-main';
+      const name = document.createElement('strong');
+      name.textContent = formatTime(session.timestamp);
+      const detail = document.createElement('small');
+      detail.textContent = `${session.id.slice(0, 8)} · ${formatSize(session.size)}`;
+      main.append(name, detail);
+      const tags = document.createElement('span');
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = t('恢复');
+      tags.append(tag);
+      button.append(main, tags);
+      button.addEventListener('click', () => {
+        if (running) {
+          toast('先停止当前 Pi 再恢复会话');
+          return;
+        }
+        void startSession(session.path);
+      });
+      list.append(button);
+    }
+    group.append(head, list);
+    sessionListElement.append(group);
   }
 }
 
@@ -2333,13 +3098,15 @@ async function startSession(sessionPath?: string): Promise<void> {
   activeModelElement.textContent = t('模型 —');
   startButton.disabled = true;
   terminal.reset();
+  const baseModel = projectModule ? `${projectModule.provider}/${projectModule.model}` : '';
   const result = await api.startPi({
     cwd: currentCwd,
     cols: terminal.cols,
     rows: terminal.rows,
     sessionPath,
     isolated: isolatedCheckbox.checked,
-    model: projectModule ? `${projectModule.provider}/${projectModule.model}` : undefined,
+    model: pickSmartModel(baseModel),
+    thinking: reasoningLevel === 'auto' ? undefined : reasoningLevel,
   }).catch((error: unknown): { ok: false; error: string } => ({
     ok: false,
     error: error instanceof Error ? error.message : String(error),
@@ -2493,7 +3260,7 @@ composerInput.addEventListener('keydown', (event) => {
   if (event.key !== 'Enter' || event.shiftKey) return;
   if (event.isComposing || event.keyCode === 229) return;
   event.preventDefault();
-  sendComposerMessage();
+  void sendComposerMessage();
 });
 composerInput.addEventListener('paste', (event) => {
   const items = [...(event.clipboardData?.items ?? [])];
@@ -2506,7 +3273,7 @@ composerInput.addEventListener('dragover', (event) => event.preventDefault());
 composerInput.addEventListener('drop', (event) => {
   void handleDroppedFiles(event);
 });
-sendMessageButton.addEventListener('click', sendComposerMessage);
+sendMessageButton.addEventListener('click', () => void sendComposerMessage());
 stopRunButton.addEventListener('click', () => {
   if (!running) return;
   api.write('\x1b');
@@ -2689,7 +3456,7 @@ async function attachClipboardImage(): Promise<boolean> {
   }
 }
 
-function sendComposerMessage(): void {
+async function sendComposerMessage(): Promise<void> {
   if (!mediaPreview.hidden || !commandPalette.hidden) return;
   const text = composerInput.value.trim();
   if (text && !attachments.length) {
@@ -2712,6 +3479,8 @@ function sendComposerMessage(): void {
   const paths = attachments.map((item) => (/\s/.test(item.path) ? `"${item.path}"` : item.path));
   const message = [text, paths.join(' ')].filter(Boolean).join('\n');
   if (!message) return;
+  await maybeRouteModel(text);
+  if (!running) return;
   // Pi's TUI handles bracketed paste; multi-line input reaches the editor as one block.
   const payload = message.includes('\n') ? `\x1b[200~${message}\x1b[201~` : message;
   api.write(`${payload}\r`);
@@ -2920,6 +3689,7 @@ function executeNaturalIntent(intent: NaturalIntent): boolean {
     } else if (running) {
       const command = `/model ${target.provider}/${target.model}`;
       api.write(`${command}\r`);
+      lastRoutedKey = `${target.provider}/${target.model}`;
       terminal.focus();
       toast('已切换模型 {model}', { model: `${target.provider}/${target.model}` });
       audit('自然语言执行 {command}', { command });
@@ -2931,6 +3701,7 @@ function executeNaturalIntent(intent: NaturalIntent): boolean {
         reasoning: false,
         relay: false,
         current: false,
+        free: false,
       });
     }
     return true;
@@ -3173,6 +3944,7 @@ api.onState((state) => {
     startButton.disabled = true;
     sendButton.disabled = !(previewElement.textContent ?? '').startsWith('/model ');
     updateComposerState();
+    updateTuningState();
   } else if (state.status === 'exited') {
     running = false;
     setState('exited', '已退出 {code}', { code: state.exitCode ?? '?' });
@@ -3180,6 +3952,7 @@ api.onState((state) => {
     startButton.disabled = !currentCwd;
     sendButton.disabled = true;
     updateComposerState();
+    updateTuningState();
     setTerminalHint('会话已结束 · 点击「新会话」或从会话面板恢复');
     audit('Pi 退出，代码 {code}', { code: state.exitCode ?? t('未知') });
     renderTaskStatus();
@@ -3192,6 +3965,7 @@ api.onState((state) => {
     startButton.disabled = !currentCwd;
     sendButton.disabled = true;
     updateComposerState();
+    updateTuningState();
     setTerminalHint('Pi 已停止 · 点击「新会话」重新开始');
     audit('已停止 Pi');
     renderTaskStatus();
@@ -3217,7 +3991,12 @@ stopButton.addEventListener('click', async () => {
 
 $('refresh-models').addEventListener('click', () => void refreshModels());
 $('refresh-capabilities').addEventListener('click', () => void refreshCapabilities());
+capabilitySearchInput.addEventListener('input', () => {
+  if (!capabilityCache.length) return;
+  renderCapabilities(capabilityCache, capabilityWarnings);
+});
 $('refresh-sessions').addEventListener('click', () => void refreshSessions());
+sessionSearchInput.addEventListener('input', () => renderSessions(sessionCache));
 $('refresh-providers').addEventListener('click', () => void refreshProviders());
 $('add-provider').addEventListener('click', openNewProvider);
 $('builtin-provider-key').addEventListener('click', () => openBuiltinKey(''));
@@ -3336,6 +4115,7 @@ sendButton.addEventListener('click', () => {
     return;
   }
   api.write(`${command}\r`);
+  lastRoutedKey = command.slice('/model '.length);
   terminal.focus();
   toast('已发送到终端');
   audit('终端执行 {command}', { command });
@@ -3366,6 +4146,7 @@ function updateModeNote(): void {
 
 function relocalize(): void {
   applyStaticI18n();
+  syncTuningControls();
   document.title = t('Pi 工作台 · PoC');
   projectPathElement.textContent = currentCwd || t('尚未选择');
   cwdElement.textContent = currentCwd || t('未绑定项目');
@@ -3445,6 +4226,8 @@ const languageSelect = $<HTMLSelectElement>('language-select');
 languageSelect.value = getLocale();
 languageSelect.addEventListener('change', () => void switchLocale(languageSelect.value));
 applyStaticI18n();
+initAppearanceControls();
+if (new URLSearchParams(window.location.search).has('smokeCwd')) startupSplash.hidden = true;
 renderModules();
 void api.setLocale(getLocale()).catch(() => undefined);
 updateModeNote();
@@ -3496,6 +4279,101 @@ panels = initPanels({
   toast,
   refreshCapabilities: () => void refreshCapabilities(),
 });
+
+const LAYOUT_KEY = 'pi-layout-widths';
+const DEFAULT_LAYOUT = { left: 286, right: 310 };
+const MIN_CENTER = 320;
+const MIN_SIDE = 200;
+
+function setupResizers(): void {
+  const layout = document.querySelector<HTMLElement>('.layout');
+  const sidebar = document.querySelector<HTMLElement>('.layout > .sidebar');
+  const workspace = document.querySelector<HTMLElement>('.layout > .workspace');
+  if (!layout || !sidebar || !workspace) return;
+  const widths = { ...DEFAULT_LAYOUT };
+  try {
+    const raw = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? '{}') as Partial<typeof DEFAULT_LAYOUT>;
+    if (Number.isFinite(raw.left)) widths.left = Number(raw.left);
+    if (Number.isFinite(raw.right)) widths.right = Number(raw.right);
+  } catch {
+    // storage is optional
+  }
+  const save = (): void => {
+    try {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify(widths));
+    } catch {
+      // ignore storage failures
+    }
+  };
+  const apply = (): void => {
+    const total = layout.clientWidth - 10;
+    const maxLeft = Math.max(MIN_SIDE, Math.min(560, total - widths.right - MIN_CENTER));
+    const maxRight = Math.max(MIN_SIDE + 40, Math.min(640, total - widths.left - MIN_CENTER));
+    widths.left = Math.round(Math.max(MIN_SIDE, Math.min(maxLeft, widths.left)));
+    widths.right = Math.round(Math.max(MIN_SIDE + 40, Math.min(maxRight, widths.right)));
+    sidebar.style.flexBasis = `${widths.left}px`;
+    sidebar.style.width = `${widths.left}px`;
+    workspace.style.flexBasis = `${widths.right}px`;
+    workspace.style.width = `${widths.right}px`;
+  };
+  apply();
+  window.addEventListener('resize', () => window.requestAnimationFrame(apply));
+
+  const bind = (side: 'left' | 'right'): void => {
+    const handle = $(`resizer-${side}`);
+    const startDrag = (event: PointerEvent): void => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const startX = event.clientX;
+      const startWidth = widths[side];
+      handle.classList.add('dragging');
+      document.body.classList.add('resizing');
+      const move = (moveEvent: PointerEvent): void => {
+        const delta = moveEvent.clientX - startX;
+        widths[side] = side === 'left' ? startWidth + delta : startWidth - delta;
+        apply();
+      };
+      const end = (): void => {
+        window.removeEventListener('pointermove', move);
+        handle.classList.remove('dragging');
+        document.body.classList.remove('resizing');
+        save();
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', end, { once: true });
+      window.addEventListener('pointercancel', end, { once: true });
+    };
+    handle.addEventListener('pointerdown', startDrag);
+    handle.addEventListener('dblclick', () => {
+      widths[side] = DEFAULT_LAYOUT[side];
+      apply();
+      save();
+      audit('恢复{side}栏默认宽度', { side: side === 'left' ? '左' : '右' });
+    });
+    handle.addEventListener('keydown', (event) => {
+      const step = event.shiftKey ? 48 : 16;
+      let delta = 0;
+      if (event.key === 'ArrowLeft') delta = -step;
+      else if (event.key === 'ArrowRight') delta = step;
+      else if (event.key === 'Home') {
+        widths[side] = DEFAULT_LAYOUT[side];
+        apply();
+        save();
+        event.preventDefault();
+        return;
+      } else return;
+      event.preventDefault();
+      widths[side] += side === 'left' ? delta : -delta;
+      apply();
+      save();
+    });
+    handle.setAttribute('aria-valuemin', String(MIN_SIDE));
+  };
+  bind('left');
+  bind('right');
+}
+
+setupResizers();
 
 void (async () => {
   await refreshProjects();

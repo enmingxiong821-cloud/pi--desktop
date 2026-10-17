@@ -10,7 +10,7 @@
     "协作",
     "能力",
     "会话",
-    "审计",
+    "搜索",
     "设置"
   ],
   "state": "未启动",
@@ -42,7 +42,7 @@
     "×"
   ],
   "moduleBindingLabel": "本项目模型",
-  "moduleBindingValue": "m-mvc4acag-3dky",
+  "moduleBindingValue": "m-mvcbg42m-gq5i",
   "moduleBindingOptions": [
     "Pi 默认",
     "快速修复 · demo/mini"

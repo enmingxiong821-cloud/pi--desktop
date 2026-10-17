@@ -10,7 +10,7 @@
     "Team",
     "Capabilities",
     "Sessions",
-    "Audit",
+    "Search",
     "Settings"
   ],
   "state": "Not started",
@@ -42,7 +42,7 @@
     "×"
   ],
   "moduleBindingLabel": "Model for this project",
-  "moduleBindingValue": "m-mvc4acag-3dky",
+  "moduleBindingValue": "m-mvcbg42m-gq5i",
   "moduleBindingOptions": [
     "Pi default",
     "快速修复 · demo/mini"
