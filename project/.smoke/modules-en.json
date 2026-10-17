@@ -1,0 +1,48 @@
+{
+  "lang": "en",
+  "title": "Pi Workbench · PoC",
+  "brand": "Pi Workbench",
+  "tabs": [
+    "Task",
+    "Models",
+    "Capabilities",
+    "Providers",
+    "Sessions",
+    "Audit"
+  ],
+  "state": "Not started",
+  "model": "Model —",
+  "version": "Pi 1.3.0",
+  "cwd": "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project",
+  "path": "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project",
+  "isolated": "Shown after start",
+  "modeNote": "Real config: uses the local Pi configuration and credentials, with all extensions/MCP/Skills loaded; conversations may go online and incur costs.",
+  "hint": "Click “New session” to start Pi",
+  "composerPlaceholder": "Type a message. Enter to send, Shift+Enter for a new line; paste images or drop any file",
+  "searchPlaceholder": "Search provider / model",
+  "localeSelect": "en",
+  "storedLocale": "en",
+  "preview": "/model demo/mini",
+  "modelSummary": "2 models · Default demo/demo-model · 1 relays",
+  "modelNote": "Read-only scan of settings.json / models.json / models-store.json; keys are never read or shown. Selecting only generates a /model command; Send writes it to the terminal with Enter.",
+  "providerNote": "Custom providers are written to the real local Pi config (models.json + auth.json; independent of Isolated mode and the same credentials as /login). A backup is made before saving. New providers take effect in a new Pi session.",
+  "paletteHint": "Commands that run directly are written to the terminal with Enter; ones that need arguments are placed in the composer.",
+  "mediaHint": "Scroll to zoom · drag to pan · Esc to close",
+  "alertHidden": true,
+  "moduleRows": [
+    "快速修复 Autodemo/miniAutoApplyEdit×"
+  ],
+  "moduleButtons": [
+    "Auto",
+    "Apply",
+    "Edit",
+    "×"
+  ],
+  "moduleBindingLabel": "Model for this project",
+  "moduleBindingValue": "m-mvbxpqtp-zrla",
+  "moduleBindingOptions": [
+    "Pi default",
+    "快速修复 · demo/mini"
+  ],
+  "moduleBindingDisabled": false
+}

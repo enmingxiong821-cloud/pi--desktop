@@ -1,0 +1,8 @@
+node_modules/
+dist/
+release/
+.poc-agent/
+poc-*.log
+*.tsbuildinfo
+.smoke/user-data/
+.smoke/**/*.bak-*

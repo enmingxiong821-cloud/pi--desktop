@@ -1,0 +1,57 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'project/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    paths:
+      - 'project/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+          - os: macos-latest
+            target: --mac
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: project
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: project/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npx electron-builder ${{ matrix.target }} --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pi-workbench-${{ matrix.os }}
+          path: |
+            project/release/*.exe
+            project/release/*.dmg
+            project/release/*.zip
+            project/release/*.AppImage
+            project/release/*.deb
+          if-no-files-found: error
