@@ -99,6 +99,25 @@ ipcMain.handle('media:open-external', () => ({ ok: true }));
 ipcMain.handle('clipboard:read', () => '');
 ipcMain.handle('clipboard:write', () => undefined);
 ipcMain.handle('shell:open-external', () => ({ ok: true }));
+ipcMain.handle('catalog:list', () => ({
+  ok: true,
+  catalog: { vendors: [], skills: [], mcps: [] },
+  agents: [],
+}));
+ipcMain.handle('catalog:search-mcp', () => ({ ok: true, results: [] }));
+ipcMain.handle('agents:list', () => ({ ok: true, agents: [] }));
+ipcMain.handle('agents:run', () => ({ ok: false, runId: '', summary: '', error: 'stub' }));
+ipcMain.handle('agents:stop', () => ({ ok: true }));
+ipcMain.handle('agents:team', () => ({ ok: false, error: 'stub' }));
+ipcMain.handle('automation:list', () => ({ ok: true, jobs: [], channels: [] }));
+ipcMain.handle('automation:save-job', () => ({ ok: false, error: 'stub' }));
+ipcMain.handle('automation:delete-job', () => ({ ok: true }));
+ipcMain.handle('automation:toggle-job', () => ({ ok: true }));
+ipcMain.handle('automation:run-job', () => ({ ok: false, error: 'stub' }));
+ipcMain.handle('automation:save-channel', () => ({ ok: false, error: 'stub' }));
+ipcMain.handle('automation:delete-channel', () => ({ ok: true }));
+ipcMain.handle('automation:test-channel', () => ({ ok: false, error: 'stub' }));
+ipcMain.handle('tools:open-app', () => ({ ok: true }));
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -136,13 +155,14 @@ async function run() {
   console.log('step: reloaded clean');
 
   const snapshot = () => `(() => {
+    try {
     const text = (id) => document.getElementById(id)?.textContent ?? '';
     const rows = [...document.querySelectorAll('#module-list .module-item')];
     return {
       lang: document.documentElement.lang,
       title: document.title,
       brand: document.querySelector('.brand strong')?.textContent,
-      tabs: [...document.querySelectorAll('.panel-tabs button')].map((el) => el.textContent),
+      tabs: [...document.querySelectorAll('.nav-list button[role=tab]')].map((el) => el.textContent),
       state: text('process-state'),
       model: text('active-model'),
       version: text('pi-version'),
@@ -158,7 +178,7 @@ async function run() {
       preview: text('command-preview'),
       modelSummary: text('model-summary'),
       modelNote: document.querySelector('#pane-model .note')?.textContent,
-      providerNote: document.querySelector('#pane-provider > .note')?.textContent,
+      providerNote: document.querySelector('#provider-drawer > .note')?.textContent,
       paletteHint: document.querySelector('#command-palette .note')?.textContent,
       mediaHint: document.querySelector('#media-preview .media-preview-hint')?.textContent,
       alertHidden: document.getElementById('terminal-alert')?.hidden,
@@ -169,6 +189,7 @@ async function run() {
       moduleBindingOptions: [...(document.getElementById('project-module')?.options ?? [])].map((el) => el.textContent),
       moduleBindingDisabled: document.getElementById('project-module')?.disabled,
     };
+    } catch (error) { return { snapshotError: String(error && error.stack || error) }; }
   })()`;
   const moduleInfo = () => `(() => {
     const rows = [...document.querySelectorAll('#module-list .module-item')];
@@ -196,12 +217,13 @@ async function run() {
     todoEmpty: document.querySelector('#todo-list .empty')?.textContent ?? '',
   }))()`;
 
-  const zh = await page.executeJavaScript(snapshot());
   console.log('step: zh snapshot');
-  writeFileSync(path.join(root, '.smoke', 'i18n-zh.json'), JSON.stringify(zh, null, 2));
+  const zhData = await page.executeJavaScript(snapshot());
+  writeFileSync(path.join(root, '.smoke', 'i18n-zh.json'), JSON.stringify(zhData, null, 2));
+  const zhSnap = zhData;
 
   // task pane: git status + todo list
-  await page.executeJavaScript(`document.getElementById('tab-task').click()`);
+  await page.executeJavaScript(`document.getElementById('tab-ws-review').click()`);
   await wait(500);
   const task = await page.executeJavaScript(taskInfo());
   console.log('task pane:', JSON.stringify(task));
@@ -316,30 +338,30 @@ async function run() {
   const back = await page.executeJavaScript(snapshot());
   writeFileSync(path.join(root, '.smoke', 'i18n-back.json'), JSON.stringify(back, null, 2));
 
-  expectText(zh.lang === 'zh-CN', 'zh lang attribute');
-  expectText(zh.title === 'Pi 工作台 · PoC', 'zh title');
-  expectText(zh.tabs.join('|') === '任务|模型|能力|接入|会话|审计', 'zh tabs');
-  expectText(zh.modeNote.startsWith('真实配置'), 'zh mode note');
-  expectText(zh.preview === '选择模型后生成命令', 'zh command preview');
-  expectText(zh.composerPlaceholder.includes('输入消息'), 'zh composer placeholder');
-  expectText(zh.moduleBindingLabel === '本项目模型', `zh module binding label (${zh.moduleBindingLabel})`);
-  expectText(zh.moduleRows.length === 0, 'zh starts without modules');
+  expectText(zhSnap.lang === 'zh-CN', 'zh lang attribute');
+  expectText(zhSnap.title === 'Pi 工作台 · PoC', 'zh title');
+  expectText(zhSnap.tabs.join('|') === '项目|模型|市场|自动化|协作|能力|会话|审计|设置', 'zh tabs');
+  expectText(zhSnap.modeNote.startsWith('真实配置'), 'zh mode note');
+  expectText(zhSnap.preview === '选择模型后生成命令', 'zh command preview');
+  expectText(zhSnap.composerPlaceholder.includes('输入消息'), 'zh composer placeholder');
+  expectText(zhSnap.moduleBindingLabel === '本项目模型', `zh module binding label (${zhSnap.moduleBindingLabel})`);
+  expectText(zhSnap.moduleRows.length === 0, 'zh starts without modules');
 
   expectText(en.lang === 'en', 'en lang attribute');
   expectText(en.title === 'Pi Workbench · PoC', 'en title');
   expectText(en.brand === 'Pi Workbench', 'en brand');
-  expectText(en.tabs.join('|') === 'Task|Models|Capabilities|Providers|Sessions|Audit', 'en tabs');
+  expectText(en.tabs.join('|') === 'Project|Models|Market|Automation|Team|Capabilities|Sessions|Audit|Settings', 'en tabs');
   expectText(en.state === 'Not started', 'en process state');
   expectText(en.modeNote.startsWith('Real config'), 'en mode note');
   expectText(en.modeNote.includes('extensions/MCP/Skills'), 'en mode note body');
   expectText(en.cwd === root, 'en cwd label');
   expectText(en.isolated === 'Shown after start', 'en isolated path');
   expectText(en.composerPlaceholder.startsWith('Type a message.'), 'en composer placeholder');
-  expectText(en.searchPlaceholder === 'Search provider / model', 'en model search placeholder');
+  expectText(en.searchPlaceholder === 'Search vendor / model', 'en model search placeholder');
   expectText(en.preview === '/model demo/mini', `en selected command preserved (${en.preview})`);
   expectText(en.modelSummary.includes('Default demo/demo-model'), `en model summary (${en.modelSummary})`);
   expectText(en.modelSummary.includes('2 models'), 'en model summary count');
-  expectText(en.modelNote.includes('Read-only scan'), 'en model note');
+  expectText(en.modelNote.includes('Sorted by popularity'), 'en model note');
   expectText(en.providerNote.includes('Custom providers are written'), 'en provider note');
   expectText(en.paletteHint.startsWith('Commands that run directly'), 'en palette hint');
   expectText(en.mediaHint.startsWith('Scroll to zoom'), 'en media hint');
@@ -354,7 +376,7 @@ async function run() {
 
   expectText(back.lang === 'zh-CN', 'back lang attribute');
   expectText(back.title === 'Pi 工作台 · PoC', 'back title');
-  expectText(back.tabs.join('|') === '任务|模型|能力|接入|会话|审计', 'back tabs');
+  expectText(back.tabs.join('|') === '项目|模型|市场|自动化|协作|能力|会话|审计|设置', 'back tabs');
   expectText(back.state === '未启动', 'back process state');
   expectText(back.cwd === root, 'back cwd label');
   expectText(back.composerPlaceholder.includes('输入消息'), 'back composer placeholder');

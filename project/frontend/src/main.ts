@@ -6,6 +6,7 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import './style.css';
 import { applyStaticI18n, getLocale, initLocale, setLocale, t } from './i18n.js';
+import { initPanels, type PanelsController } from './panels.js';
 
 interface InstallInfo {
   version: string;
@@ -163,6 +164,98 @@ interface MediaResult {
   error?: string;
 }
 
+interface VendorInfo {
+  key: string;
+  label: string;
+  tier: number;
+  aliases: string[];
+}
+
+interface CatalogSkill {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  tags: string[];
+  body: string;
+}
+
+interface CatalogMcp {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  tags: string[];
+  command: string;
+  args: string[];
+  envHint?: string;
+  needsConfig?: boolean;
+}
+
+interface CatalogReport {
+  vendors: VendorInfo[];
+  skills: CatalogSkill[];
+  mcps: CatalogMcp[];
+}
+
+interface RegistryMcp {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  command: string;
+  args: string[];
+  source: string;
+}
+
+interface AgentInfo {
+  id: string;
+  name: string;
+  command: string;
+  description: string;
+  roles: string[];
+  authHint: string;
+  installHint: string;
+  installed: boolean;
+  version?: string;
+  path?: string;
+}
+
+interface AgentEvent {
+  runId: string;
+  agentId: string;
+  phase: 'start' | 'chunk' | 'stderr' | 'done' | 'error';
+  text?: string;
+  code?: number | null;
+  summary?: string;
+}
+
+interface PublicChannel {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  chatId?: string;
+  hasToken: boolean;
+  enabled: boolean;
+}
+
+interface AutomationJob {
+  id: string;
+  name: string;
+  enabled: boolean;
+  schedule: { kind: string; minutes?: number; time?: string; days?: number[]; cron?: string };
+  action: { type: string; prompt?: string; command?: string; argsText?: string; url?: string; target?: string; title?: string; body?: string; agentId?: string };
+  cwd?: string;
+  channelIds: string[];
+  notifyOn: 'always' | 'failure' | 'never';
+  createdAt: string;
+  lastRunAt?: string;
+  lastStatus?: 'ok' | 'error';
+  lastMessage?: string;
+  nextRunAt?: string;
+}
+
 interface PiDesktopApi {
   locate(): Promise<{ ok: boolean; install?: InstallInfo; error?: string }>;
   setLocale(locale: string): Promise<{ ok: boolean; locale: string }>;
@@ -235,6 +328,22 @@ interface PiDesktopApi {
   onData(callback: (data: string) => void): () => void;
   onState(callback: (state: { status: string; exitCode?: number; cwd?: string }) => void): () => void;
   onOpenProject(callback: (projectPath: string) => void): () => void;
+  catalog(): Promise<{ ok: boolean; catalog?: CatalogReport; agents?: AgentInfo[]; error?: string }>;
+  searchMcpRegistry(query: string): Promise<{ ok: boolean; results: RegistryMcp[]; error?: string }>;
+  listAgents(refresh?: boolean): Promise<{ ok: boolean; agents?: AgentInfo[]; error?: string }>;
+  runAgent(input: { agentId: string; prompt: string; cwd?: string; timeoutMinutes?: number }): Promise<{ ok: boolean; runId: string; summary: string; error?: string }>;
+  stopAgent(runId: string): Promise<{ ok: boolean }>;
+  runTeam(input: { task: string; agentIds: string[]; mode: 'parallel' | 'supervisor'; supervisorId?: string; cwd?: string }): Promise<{ ok: boolean; summaries: Array<{ agentId: string; ok: boolean; text: string }>; error?: string }>;
+  automationList(): Promise<{ ok: boolean; jobs?: AutomationJob[]; channels?: PublicChannel[]; error?: string }>;
+  saveAutomationJob(input: unknown, id?: string): Promise<{ ok: boolean; job?: AutomationJob; error?: string }>;
+  deleteAutomationJob(id: string): Promise<{ ok: boolean }>;
+  toggleAutomationJob(id: string, enabled: boolean): Promise<{ ok: boolean }>;
+  runAutomationJob(id: string): Promise<{ ok: boolean; message: string }>;
+  saveAutomationChannel(input: unknown, id?: string): Promise<{ ok: boolean; channel?: PublicChannel; error?: string }>;
+  deleteAutomationChannel(id: string): Promise<{ ok: boolean }>;
+  testAutomationChannel(id: string): Promise<{ ok: boolean; message: string }>;
+  openApp(id: string, target?: string): Promise<{ ok: boolean; error?: string }>;
+  onAgentEvent(callback: (event: AgentEvent) => void): () => void;
 }
 
 declare global {
@@ -244,6 +353,9 @@ declare global {
 }
 
 const api = window.piDesktop;
+let panels: PanelsController | null = null;
+let catalogVendors: VendorInfo[] = [];
+const expandedVendors = new Set<string>();
 initLocale();
 const $ = <T extends HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
@@ -598,21 +710,32 @@ function doFit(): void {
 }
 
 function activateTab(id: string): void {
-  document.querySelectorAll<HTMLButtonElement>('.panel-tabs [role=tab]').forEach((tab) => {
+  if (id.startsWith('tab-ws-')) {
+    panels?.activateWorkspace(id);
+    if (id === 'tab-ws-review') {
+      refreshTaskPane();
+      void refreshTaskGit();
+    }
+    return;
+  }
+  document.querySelectorAll<HTMLButtonElement>('.nav-list [role=tab]').forEach((tab) => {
     const selected = tab.id === id;
     tab.setAttribute('aria-selected', String(selected));
     tab.tabIndex = selected ? 0 : -1;
     const pane = document.getElementById(tab.getAttribute('aria-controls') ?? '');
     if (pane) pane.hidden = !selected;
   });
-  if (id === 'tab-provider') void refreshProviders();
-  if (id === 'tab-task') {
+  if (id === 'tab-model') void refreshProviders();
+  if (id === 'tab-market') panels?.refreshMarket();
+  if (id === 'tab-automation') void panels?.refreshAutomation();
+  if (id === 'tab-team') void panels?.refreshAgents();
+  if (id === 'tab-task' || id === 'tab-ws-review') {
     refreshTaskPane();
     void refreshTaskGit();
   }
 }
 
-document.querySelectorAll<HTMLButtonElement>('.panel-tabs [role=tab]').forEach((tab, index, tabs) => {
+document.querySelectorAll<HTMLButtonElement>('.nav-list [role=tab]').forEach((tab, index, tabs) => {
   tab.addEventListener('click', () => activateTab(tab.id));
   tab.addEventListener('keydown', (event) => {
     let next: HTMLButtonElement | undefined;
@@ -624,6 +747,15 @@ document.querySelectorAll<HTMLButtonElement>('.panel-tabs [role=tab]').forEach((
       event.preventDefault();
       activateTab(next.id);
       next.focus();
+    }
+  });
+});
+
+document.querySelectorAll<HTMLButtonElement>('.workspace-tabs [role=tab]').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    if (tab.id === 'tab-ws-review') {
+      refreshTaskPane();
+      void refreshTaskGit();
     }
   });
 });
@@ -645,6 +777,7 @@ function setProject(cwd: string): void {
   void refreshTaskGit();
   void refreshCapabilities();
   void refreshSessions();
+  panels?.setProject();
 }
 
 let lastProjects: ProjectRecord[] = [];
@@ -818,6 +951,21 @@ function contextLabel(value?: number): string {
   return value >= 1_000_000 ? `${(value / 1_000_000).toFixed(1)}M` : `${Math.round(value / 1000)}K`;
 }
 
+function vendorKeyFor(model: ModelEntry): string {
+  const haystack = `${model.provider} ${model.id}`.toLowerCase();
+  const vendor = catalogVendors.find((item) => item.aliases.some((alias) => haystack.includes(alias)));
+  return vendor ? vendor.key : `provider:${model.provider}`;
+}
+
+function vendorMeta(key: string, provider: string): { label: string; tier: number; order: number } {
+  const index = catalogVendors.findIndex((item) => item.key === key);
+  if (index >= 0) {
+    const vendor = catalogVendors[index];
+    return { label: vendor.label, tier: vendor.tier, order: index };
+  }
+  return { label: provider, tier: 99, order: 999 };
+}
+
 function renderModels(): void {
   modelListElement.replaceChildren();
   const query = modelSearchElement.value.trim().toLowerCase();
@@ -827,49 +975,97 @@ function renderModels(): void {
     return query ? `${model.provider}/${model.id} ${model.name ?? ''}`.toLowerCase().includes(query) : true;
   });
 
+  interface Group { key: string; label: string; tier: number; order: number; models: ModelEntry[] }
+  const groups = new Map<string, Group>();
   for (const model of filtered) {
-    const button = document.createElement('button');
-    button.className = 'item';
-    button.setAttribute('aria-pressed', String(Boolean(selectedModel
-      && selectedModel.provider === model.provider
-      && selectedModel.id === model.id)));
-
-    const main = document.createElement('span');
-    main.className = 'item-main';
-    const name = document.createElement('strong');
-    name.textContent = `${model.provider}/${model.id}`;
-    const meta = document.createElement('small');
-    meta.textContent = [
-      contextLabel(model.contextWindow),
-      model.reasoning ? t('思考') : '',
-      model.name && model.name !== model.id ? model.name : '',
-    ].filter(Boolean).join(' · ') || t('模型');
-    main.append(name, meta);
-
-    const tags = document.createElement('span');
-    tags.className = 'item-tags';
-    if (model.relay) {
-      const tag = document.createElement('span');
-      tag.className = 'tag relay';
-      tag.textContent = t('中转');
-      tags.append(tag);
+    const key = vendorKeyFor(model);
+    let group = groups.get(key);
+    if (!group) {
+      group = { key, ...vendorMeta(key, model.provider), models: [] };
+      groups.set(key, group);
     }
-    if (model.current) {
-      const tag = document.createElement('span');
-      tag.className = 'tag current';
-      tag.textContent = t('默认');
-      tags.append(tag);
-    }
-    if (failedModel && `${model.provider}/${model.id}` === failedModel) {
-      const tag = document.createElement('span');
-      tag.className = 'tag failed';
-      tag.textContent = t('密钥无效');
-      tags.append(tag);
+    group.models.push(model);
+  }
+  const ordered = [...groups.values()].sort((a, b) => a.tier - b.tier || a.order - b.order || a.label.localeCompare(b.label));
+  const autoExpand = Boolean(query || providerFilter) || ordered.length === 1;
+
+  for (const group of ordered) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'vendor-group';
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'vendor-head';
+    const expanded = autoExpand || expandedVendors.has(group.key)
+      || group.models.some((model) => model.current);
+    head.setAttribute('aria-expanded', String(expanded));
+    const name = document.createElement('span');
+    name.className = 'vendor-name';
+    name.textContent = group.label;
+    const count = document.createElement('span');
+    count.className = 'vendor-count';
+    count.textContent = `${group.models.length}`;
+    const arrow = document.createElement('span');
+    arrow.className = 'vendor-arrow';
+    arrow.textContent = expanded ? '▾' : '▸';
+    head.append(name, count, arrow);
+
+    const body = document.createElement('div');
+    body.className = 'vendor-models';
+    body.hidden = !expanded;
+    for (const model of group.models) {
+      const button = document.createElement('button');
+      button.className = 'item';
+      button.setAttribute('aria-pressed', String(Boolean(selectedModel
+        && selectedModel.provider === model.provider
+        && selectedModel.id === model.id)));
+
+      const main = document.createElement('span');
+      main.className = 'item-main';
+      const modelName = document.createElement('strong');
+      modelName.textContent = `${model.provider}/${model.id}`;
+      const meta = document.createElement('small');
+      meta.textContent = [
+        contextLabel(model.contextWindow),
+        model.reasoning ? t('思考') : '',
+        model.name && model.name !== model.id ? model.name : '',
+      ].filter(Boolean).join(' · ') || t('模型');
+      main.append(modelName, meta);
+
+      const tags = document.createElement('span');
+      tags.className = 'item-tags';
+      if (model.relay) {
+        const tag = document.createElement('span');
+        tag.className = 'tag relay';
+        tag.textContent = t('中转');
+        tags.append(tag);
+      }
+      if (model.current) {
+        const tag = document.createElement('span');
+        tag.className = 'tag current';
+        tag.textContent = t('默认');
+        tags.append(tag);
+      }
+      if (failedModel && `${model.provider}/${model.id}` === failedModel) {
+        const tag = document.createElement('span');
+        tag.className = 'tag failed';
+        tag.textContent = t('密钥无效');
+        tags.append(tag);
+      }
+      button.append(main, tags);
+      button.addEventListener('click', () => stageModel(model));
+      body.append(button);
     }
 
-    button.append(main, tags);
-    button.addEventListener('click', () => stageModel(model));
-    modelListElement.append(button);
+    head.addEventListener('click', () => {
+      const next = body.hidden;
+      body.hidden = !next;
+      head.setAttribute('aria-expanded', String(next));
+      arrow.textContent = next ? '▾' : '▸';
+      if (next) expandedVendors.add(group.key);
+      else expandedVendors.delete(group.key);
+    });
+    wrapper.append(head, body);
+    modelListElement.append(wrapper);
   }
 
   if (!filtered.length) {
@@ -1345,6 +1541,18 @@ function renderProviders(warnings: string[] = []): void {
 
     row.append(main, actions);
     providerListElement.append(row);
+  }
+}
+
+async function loadCatalog(): Promise<void> {
+  try {
+    const result = await api.catalog();
+    if (result.ok && result.catalog?.vendors?.length) {
+      catalogVendors = result.catalog.vendors;
+      renderModels();
+    }
+  } catch {
+    // catalog ordering is an enhancement; keep the flat model list if it fails
   }
 }
 
@@ -2653,7 +2861,7 @@ const NATURAL_RULES: Array<{ re: RegExp; build: (match: RegExpMatchArray) => Nat
   { re: /^(?:打开|显示)?\s*(?:模型|模型面板)$/, build: () => ({ kind: 'ui', tab: 'tab-model', label: '模型面板' }) },
   { re: /^(?:打开|显示)?\s*(?:能力|技能|扩展|skills?|mcp)(?:面板)?$/, build: () => ({ kind: 'ui', tab: 'tab-capability', label: '能力面板' }) },
   { re: /^(?:打开|显示)?\s*(?:会话|会话列表|会话面板)$/, build: () => ({ kind: 'ui', tab: 'tab-session', label: '会话面板' }) },
-  { re: /^(?:打开|显示)?\s*(?:任务|任务面板|状态|git|git 状态)$/, build: () => ({ kind: 'ui', tab: 'tab-task', label: '任务面板' }) },
+  { re: /^(?:打开|显示)?\s*(?:任务|任务面板|状态|git|git 状态)$/, build: () => ({ kind: 'ui', tab: 'tab-ws-review', label: '任务面板' }) },
   { re: /^(?:打开|显示)?\s*(?:接入|provider|中转站)(?:面板)?$/, build: () => ({ kind: 'ui', tab: 'tab-provider', label: '接入面板' }) },
   { re: /^(?:刷新|重新读取)\s*(?:模型)$/, build: () => ({ kind: 'refresh', target: 'models', label: '刷新模型' }) },
   { re: /^(?:刷新|重新读取)\s*(?:能力|技能|扩展)$/, build: () => ({ kind: 'refresh', target: 'capabilities', label: '刷新能力' }) },
@@ -3282,6 +3490,13 @@ resizeObserver.observe(terminalElement.parentElement ?? terminalElement);
 terminalElement.addEventListener('click', () => terminal.focus());
 window.addEventListener('resize', () => window.requestAnimationFrame(doFit));
 
+panels = initPanels({
+  api,
+  currentCwd: () => currentCwd,
+  toast,
+  refreshCapabilities: () => void refreshCapabilities(),
+});
+
 void (async () => {
   await refreshProjects();
   const smokeCwd = new URLSearchParams(window.location.search).get('smokeCwd');
@@ -3305,6 +3520,7 @@ void (async () => {
   if (environment) syncVersionFromEnvironment(environment);
   void refreshModels();
   void refreshProviders();
+  void loadCatalog();
   renderAttachments();
   if (!smokeCwd && !externalProjectPending) {
     let lastProject: string | null = null;

@@ -1,6 +1,6 @@
 {
   "name": "pi-desktop-poc",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Pi 桌面工作台技术 PoC：真实 Pi TUI + Electron 辅助面板",

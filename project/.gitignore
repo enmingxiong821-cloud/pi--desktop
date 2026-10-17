@@ -5,4 +5,6 @@ release/
 poc-*.log
 *.tsbuildinfo
 .smoke/user-data/
+.smoke/user-data-workbench/
+.smoke/workbench-test.json
 .smoke/**/*.bak-*

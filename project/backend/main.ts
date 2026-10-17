@@ -1,7 +1,11 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, shell } from 'electron';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { AutomationStore, type AutomationJob, type RunResult } from './automation.js';
+import { detectAgents, runAgent, runTeam, stopRun } from './agents.js';
+import { listCatalog, searchMcpRegistry } from './catalog.js';
 import { addMcpServer, addSkill } from './capabilities.js';
 import { installPi, probeEnvironment } from './env.js';
 import { gitStatus } from './git.js';
@@ -76,6 +80,102 @@ function errorMessage(error: unknown): string {
 
 function send(channel: string, ...args: unknown[]): void {
   if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
+}
+
+let automation: AutomationStore | null = null;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function automationStore(): AutomationStore {
+  if (!automation) {
+    automation = new AutomationStore(app.getPath('userData'));
+    automation.setExecutor(executeAutomation);
+  }
+  return automation;
+}
+
+function runShellAction(command: string, argsText: string, cwd: string): Promise<RunResult> {
+  return new Promise((resolve) => {
+    const line = argsText ? `${command} ${argsText}` : command;
+    let output = '';
+    let settled = false;
+    let child;
+    try {
+      child = spawn(line, { cwd, shell: true, windowsHide: true, env: process.env });
+    } catch (error) {
+      resolve({ ok: false, message: errorMessage(error) });
+      return;
+    }
+    const finish = (ok: boolean, message: string): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ ok, message: message.slice(-4000) });
+    };
+    const timer = setTimeout(() => {
+      try {
+        if (process.platform === 'win32' && child.pid) {
+          spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 5000 });
+        } else {
+          child.kill('SIGTERM');
+        }
+      } catch {
+        // 进程可能已退出
+      }
+      finish(false, t('命令执行超时，已终止'));
+    }, 10 * 60_000);
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => { output = (output + chunk).slice(-20_000); });
+    child.stderr?.on('data', (chunk: string) => { output = (output + chunk).slice(-20_000); });
+    child.on('error', (error) => finish(false, error.message));
+    child.on('close', (code) => finish(code === 0, output.trim() || t('命令已完成（无输出）')));
+  });
+}
+
+async function executeAutomation(job: AutomationJob): Promise<RunResult> {
+  const action = job.action;
+  if (action.type === 'notify') {
+    if (Notification.isSupported()) new Notification({ title: action.title, body: action.body }).show();
+    send('automation:notify', { title: action.title, body: action.body });
+    return { ok: true, message: action.title };
+  }
+  if (action.type === 'open-url') {
+    if (!/^https?:\/\//i.test(action.url)) return { ok: false, message: t('只支持 http / https 链接') };
+    await shell.openExternal(action.url);
+    return { ok: true, message: action.url };
+  }
+  if (action.type === 'open-path') {
+    const resolved = safeOpenTarget(action.target);
+    const error = await shell.openPath(resolved);
+    return error ? { ok: false, message: error } : { ok: true, message: resolved };
+  }
+  if (action.type === 'shell') {
+    const cwd = job.cwd && existsSync(job.cwd) ? job.cwd : process.cwd();
+    return runShellAction(action.command, action.argsText ?? '', cwd);
+  }
+  if (action.type === 'pi-prompt') {
+    const project = job.cwd && existsSync(job.cwd) ? job.cwd : loadProjects()[0]?.path;
+    if (!project) return { ok: false, message: t('未设置项目目录') };
+    if (!session) {
+      const started = startSession({ cwd: project, cols: 120, rows: 32, isolated: true });
+      if (!started.ok) return { ok: false, message: started.error || t('Pi 启动失败') };
+      await delay(6000);
+    }
+    if (!session) return { ok: false, message: t('Pi 未运行') };
+    session.write(action.prompt.replace(/\r?\n/g, '\r') + '\r');
+    return { ok: true, message: t('已发送到 Pi 终端') };
+  }
+  if (action.type === 'agent') {
+    const cwd = job.cwd && existsSync(job.cwd) ? job.cwd : process.cwd();
+    const result = await runAgent({ agentId: action.agentId, prompt: action.prompt, cwd }, (event) => {
+      send('agents:event', event);
+    });
+    return { ok: result.ok, message: result.summary || result.error || '' };
+  }
+  return { ok: false, message: t('未知动作') };
 }
 
 let pendingProject: string | undefined;
@@ -602,6 +702,142 @@ ipcMain.handle('pi:add-mcp', (_event, input: unknown) => addMcpServer(input as P
 
 ipcMain.handle('project:git-status', (_event, cwd: unknown) => gitStatus(cwd));
 
+ipcMain.handle('catalog:list', () => {
+  try {
+    return { ok: true, catalog: listCatalog(), agents: detectAgents() };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+ipcMain.handle('catalog:search-mcp', (_event, query: unknown) => searchMcpRegistry(typeof query === 'string' ? query : ''));
+
+ipcMain.handle('agents:list', (_event, refresh: unknown) => {
+  try {
+    return { ok: true, agents: detectAgents(Boolean(refresh)) };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+ipcMain.handle('agents:run', async (_event, input: unknown) => {
+  if (!input || typeof input !== 'object') return { ok: false, error: t('参数无效') };
+  const source = input as Record<string, unknown>;
+  if (typeof source.agentId !== 'string' || typeof source.prompt !== 'string') {
+    return { ok: false, error: t('参数无效') };
+  }
+  return runAgent(
+    {
+      agentId: source.agentId,
+      prompt: source.prompt,
+      cwd: typeof source.cwd === 'string' ? source.cwd : undefined,
+      timeoutMinutes: Number(source.timeoutMinutes) || undefined,
+    },
+    (event) => send('agents:event', event),
+  );
+});
+
+ipcMain.handle('agents:stop', (_event, runId: unknown) => ({ ok: stopRun(String(runId ?? '')) }));
+
+ipcMain.handle('agents:team', async (_event, input: unknown) => {
+  if (!input || typeof input !== 'object') return { ok: false, error: t('参数无效'), summaries: [] };
+  const source = input as Record<string, unknown>;
+  return runTeam(
+    {
+      task: typeof source.task === 'string' ? source.task : '',
+      agentIds: Array.isArray(source.agentIds) ? source.agentIds.filter((id): id is string => typeof id === 'string') : [],
+      mode: source.mode === 'supervisor' ? 'supervisor' : 'parallel',
+      supervisorId: typeof source.supervisorId === 'string' ? source.supervisorId : undefined,
+      cwd: typeof source.cwd === 'string' ? source.cwd : undefined,
+    },
+    (event) => send('agents:event', event),
+  );
+});
+
+ipcMain.handle('automation:list', () => {
+  try {
+    return { ok: true, ...automationStore().list() };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+ipcMain.handle('automation:save-job', (_event, input: unknown, id: unknown) => {
+  try {
+    return automationStore().saveJob(input, typeof id === 'string' ? id : undefined);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+ipcMain.handle('automation:delete-job', (_event, id: unknown) => ({
+  ok: automationStore().deleteJob(String(id ?? '')),
+}));
+
+ipcMain.handle('automation:toggle-job', (_event, id: unknown, enabled: unknown) => ({
+  ok: automationStore().toggleJob(String(id ?? ''), Boolean(enabled)),
+}));
+
+ipcMain.handle('automation:run-job', async (_event, id: unknown) => automationStore().runNow(String(id ?? '')));
+
+ipcMain.handle('automation:save-channel', (_event, input: unknown, id: unknown) => {
+  try {
+    return automationStore().saveChannel(input, typeof id === 'string' ? id : undefined);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+ipcMain.handle('automation:delete-channel', (_event, id: unknown) => ({
+  ok: automationStore().deleteChannel(String(id ?? '')),
+}));
+
+ipcMain.handle('automation:test-channel', (_event, id: unknown) => automationStore().testChannel(String(id ?? '')));
+
+ipcMain.handle('tools:open-app', (_event, id: unknown, target: unknown) => {
+  try {
+    return openLocalApp(id, target);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+function openLocalApp(id: unknown, target: unknown): { ok: boolean; error?: string } {
+  if (typeof id !== 'string') return { ok: false, error: t('未知应用') };
+  const resolved = typeof target === 'string' && target.trim() ? safeOpenTarget(target) : undefined;
+  if (id === 'vscode') {
+    const folder = resolved ?? process.cwd();
+    const slashPath = folder.split(path.sep).join('/');
+    const uri = encodeURI(`vscode://file${process.platform === 'win32' ? '/' : ''}${slashPath}`);
+    void shell.openExternal(uri);
+    return { ok: true };
+  }
+  if (process.platform !== 'win32') {
+    if (id === 'explorer' || id === 'finder') {
+      void shell.openPath(resolved ?? app.getPath('home'));
+      return { ok: true };
+    }
+    return { ok: false, error: t('该平台暂未内置此应用，请用「打开路径」') };
+  }
+  const launches: Record<string, { command: string; args: string[] }> = {
+    explorer: { command: 'explorer.exe', args: [resolved ?? app.getPath('home')] },
+    terminal: { command: 'wt.exe', args: resolved ? ['-d', resolved] : [] },
+    notepad: { command: 'notepad.exe', args: resolved ? [resolved] : [] },
+    calculator: { command: 'calc.exe', args: [] },
+    mspaint: { command: 'mspaint.exe', args: resolved ? [resolved] : [] },
+  };
+  const launch = launches[id];
+  if (!launch) return { ok: false, error: t('未知应用') };
+  const child = spawn(launch.command, launch.args, { detached: true, stdio: 'ignore', windowsHide: false });
+  child.on('error', () => {
+    if (id === 'terminal') {
+      spawn('cmd.exe', ['/c', 'start', 'cmd'], { cwd: resolved ?? undefined, detached: true, stdio: 'ignore', windowsHide: false });
+    }
+  });
+  child.unref();
+  return { ok: true };
+}
+
 function safeOpenTarget(target: unknown): string {
   if (typeof target !== 'string' || !target.trim() || target.includes('\u0000') || target.length > 4096) {
     throw new Error(t('路径无效'));
@@ -769,13 +1005,17 @@ if (!singleInstance) {
   app.whenReady().then(() => {
     setBackendLocale(app.getLocale());
     installMediaProtocol();
+    automationStore().start();
     createWindow();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
   });
 
-  app.on('before-quit', stopSession);
+  app.on('before-quit', () => {
+    automation?.stop();
+    stopSession();
+  });
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
   });

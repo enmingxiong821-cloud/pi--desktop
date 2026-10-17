@@ -1,7 +1,7 @@
 {
   "startOptions": {
     "cwd": "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project",
-    "cols": 91,
+    "cols": 85,
     "rows": 27,
     "isolated": false,
     "model": "demo/mini"
@@ -42,21 +42,21 @@
       }
     ],
     "bindingLabel": "本项目模型",
-    "bindingValue": "m-mvbxpqtp-zrla",
+    "bindingValue": "m-mvc4acag-3dky",
     "bindingOptions": [
       {
         "value": "",
         "text": "Pi 默认"
       },
       {
-        "value": "m-mvbxpqtp-zrla",
+        "value": "m-mvc4acag-3dky",
         "text": "快速修复 · demo/mini"
       }
     ],
     "bindingDisabled": false,
     "storedModules": [
       {
-        "id": "m-mvbxpqtp-zrla",
+        "id": "m-mvc4acag-3dky",
         "name": "快速修复",
         "provider": "demo",
         "model": "mini",
@@ -64,7 +64,7 @@
       }
     ],
     "storedBindings": {
-      "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project": "m-mvbxpqtp-zrla"
+      "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project": "m-mvc4acag-3dky"
     },
     "preview": "/model demo/mini",
     "toast": "模块已暂存，启动 Pi 后发送"
@@ -74,12 +74,15 @@
     "title": "Pi Workbench · PoC",
     "brand": "Pi Workbench",
     "tabs": [
-      "Task",
+      "Project",
       "Models",
+      "Market",
+      "Automation",
+      "Team",
       "Capabilities",
-      "Providers",
       "Sessions",
-      "Audit"
+      "Audit",
+      "Settings"
     ],
     "state": "Not started",
     "model": "Model —",
@@ -90,13 +93,13 @@
     "modeNote": "Real config: uses the local Pi configuration and credentials, with all extensions/MCP/Skills loaded; conversations may go online and incur costs.",
     "hint": "Click “New session” to start Pi",
     "composerPlaceholder": "Type a message. Enter to send, Shift+Enter for a new line; paste images or drop any file",
-    "searchPlaceholder": "Search provider / model",
+    "searchPlaceholder": "Search vendor / model",
     "localeSelect": "en",
     "storedLocale": "en",
     "preview": "/model demo/mini",
     "modelSummary": "2 models · Default demo/demo-model · 1 relays",
-    "modelNote": "Read-only scan of settings.json / models.json / models-store.json; keys are never read or shown. Selecting only generates a /model command; Send writes it to the terminal with Enter.",
-    "providerNote": "Custom providers are written to the real local Pi config (models.json + auth.json; independent of Isolated mode and the same credentials as /login). A backup is made before saving. New providers take effect in a new Pi session.",
+    "modelNote": "Sorted by popularity; click a vendor to expand models, click a model to stage the /model command.",
+    "providerNote": "Custom providers are written to the real local Pi config (models.json + auth.json) with an automatic backup; new providers take effect after a new Pi session.",
     "paletteHint": "Commands that run directly are written to the terminal with Enter; ones that need arguments are placed in the composer.",
     "mediaHint": "Scroll to zoom · drag to pan · Esc to close",
     "alertHidden": true,
@@ -110,7 +113,7 @@
       "×"
     ],
     "moduleBindingLabel": "Model for this project",
-    "moduleBindingValue": "m-mvbxpqtp-zrla",
+    "moduleBindingValue": "m-mvc4acag-3dky",
     "moduleBindingOptions": [
       "Pi default",
       "快速修复 · demo/mini"

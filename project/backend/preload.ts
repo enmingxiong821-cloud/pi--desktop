@@ -1,4 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { AgentEvent, AgentInfo, TeamRequest, TeamResult } from './agents.js';
+import type { AutomationJob, PublicChannel, RunResult } from './automation.js';
+import type { CatalogReport, RegistryMcp } from './catalog.js';
 import type { CapabilityResult } from './capabilities.js';
 import type { EnvironmentReport, SetupResult } from './env.js';
 import type { GitStatusResult } from './git.js';
@@ -58,6 +61,37 @@ const api = {
   }): Promise<FetchModelsResult> => ipcRenderer.invoke('pi:fetch-provider-models', input),
   setDefaultModel: (provider: string, model: string): Promise<SaveProviderResult> =>
     ipcRenderer.invoke('pi:set-default-model', provider, model),
+  catalog: (): Promise<{ ok: boolean; catalog?: CatalogReport; agents?: AgentInfo[]; error?: string }> =>
+    ipcRenderer.invoke('catalog:list'),
+  searchMcpRegistry: (query: string): Promise<{ ok: boolean; results: RegistryMcp[]; error?: string }> =>
+    ipcRenderer.invoke('catalog:search-mcp', query),
+  listAgents: (refresh = false): Promise<{ ok: boolean; agents?: AgentInfo[]; error?: string }> =>
+    ipcRenderer.invoke('agents:list', refresh),
+  runAgent: (input: { agentId: string; prompt: string; cwd?: string; timeoutMinutes?: number }): Promise<{
+    ok: boolean; runId: string; summary: string; error?: string;
+  }> => ipcRenderer.invoke('agents:run', input),
+  stopAgent: (runId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('agents:stop', runId),
+  runTeam: (input: TeamRequest): Promise<TeamResult> => ipcRenderer.invoke('agents:team', input),
+  automationList: (): Promise<{ ok: boolean; jobs?: AutomationJob[]; channels?: PublicChannel[]; error?: string }> =>
+    ipcRenderer.invoke('automation:list'),
+  saveAutomationJob: (input: unknown, id?: string): Promise<{ ok: boolean; job?: AutomationJob; error?: string }> =>
+    ipcRenderer.invoke('automation:save-job', input, id),
+  deleteAutomationJob: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('automation:delete-job', id),
+  toggleAutomationJob: (id: string, enabled: boolean): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('automation:toggle-job', id, enabled),
+  runAutomationJob: (id: string): Promise<RunResult> => ipcRenderer.invoke('automation:run-job', id),
+  saveAutomationChannel: (input: unknown, id?: string): Promise<{
+    ok: boolean; channel?: PublicChannel; error?: string;
+  }> => ipcRenderer.invoke('automation:save-channel', input, id),
+  deleteAutomationChannel: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('automation:delete-channel', id),
+  testAutomationChannel: (id: string): Promise<RunResult> => ipcRenderer.invoke('automation:test-channel', id),
+  openApp: (id: string, target?: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('tools:open-app', id, target),
+  onAgentEvent: (callback: (event: AgentEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: AgentEvent) => callback(payload);
+    ipcRenderer.on('agents:event', listener);
+    return () => ipcRenderer.removeListener('agents:event', listener);
+  },
   pickMedia: (): Promise<MediaResult> => ipcRenderer.invoke('media:pick'),
   clipboardImage: (): Promise<MediaResult> => ipcRenderer.invoke('media:clipboard-image'),
   allowMediaPath: (filePath: string): Promise<MediaResult> => ipcRenderer.invoke('media:allow', filePath),

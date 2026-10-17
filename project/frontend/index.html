@@ -21,34 +21,374 @@
 
   <div class="layout">
     <aside class="sidebar">
-      <div class="section-label" data-i18n="项目">项目</div>
-      <button id="pick-project" class="primary" data-i18n="选择项目目录">选择项目目录</button>
-      <div id="project-path" class="path" data-i18n="尚未选择">尚未选择</div>
-      <div class="project-actions">
-        <button id="open-folder" class="ghost" disabled data-i18n="打开目录">打开目录</button>
-        <button id="open-vscode" class="ghost" disabled data-i18n="VS Code">VS Code</button>
+      <nav class="panel-tabs nav-list" role="tablist" aria-label="功能导航" data-i18n-aria-label="功能导航">
+        <button role="tab" id="tab-project" aria-controls="pane-project" aria-selected="true" data-i18n="项目">项目</button>
+        <button role="tab" id="tab-model" aria-controls="pane-model" aria-selected="false" data-i18n="模型">模型</button>
+        <button role="tab" id="tab-market" aria-controls="pane-market" aria-selected="false" data-i18n="市场">市场</button>
+        <button role="tab" id="tab-automation" aria-controls="pane-automation" aria-selected="false" data-i18n="自动化">自动化</button>
+        <button role="tab" id="tab-team" aria-controls="pane-team" aria-selected="false" data-i18n="协作">协作</button>
+        <button role="tab" id="tab-capability" aria-controls="pane-capability" aria-selected="false" data-i18n="能力">能力</button>
+        <button role="tab" id="tab-session" aria-controls="pane-session" aria-selected="false" data-i18n="会话">会话</button>
+        <button role="tab" id="tab-audit" aria-controls="pane-audit" aria-selected="false" data-i18n="审计">审计</button>
+        <button role="tab" id="tab-settings" aria-controls="pane-settings" aria-selected="false" data-i18n="设置">设置</button>
+      </nav>
+
+      <div class="pane-stack">
+        <section id="pane-project" role="tabpanel" class="pane">
+          <button id="pick-project" class="primary" data-i18n="选择项目目录">选择项目目录</button>
+          <div id="project-path" class="path" data-i18n="尚未选择">尚未选择</div>
+          <div class="project-actions">
+            <button id="open-folder" class="ghost" disabled data-i18n="打开目录">打开目录</button>
+            <button id="open-vscode" class="ghost" disabled data-i18n="VS Code">VS Code</button>
+          </div>
+          <div id="recent-projects" class="recent"></div>
+          <div class="group-label"><span data-i18n="会话">会话</span></div>
+          <button id="start-pi" class="primary" disabled data-i18n="新会话">新会话</button>
+          <button id="stop-pi" disabled data-i18n="停止 Pi">停止 Pi</button>
+          <div class="group-label"><span data-i18n="环境">环境</span></div>
+          <dl class="meta">
+            <dt>Node</dt><dd id="node-path">—</dd>
+            <dt>npm</dt><dd id="npm-version">—</dd>
+            <dt>Pi</dt><dd id="pi-env">—</dd>
+            <dt data-i18n="配置目录">配置目录</dt><dd id="isolated-path" data-i18n="启动后显示">启动后显示</dd>
+          </dl>
+          <div class="env-actions">
+            <button id="setup-env" class="ghost" data-i18n="一键配置环境">一键配置环境</button>
+            <button id="create-shortcut" class="ghost" data-i18n="创建桌面快捷方式">创建桌面快捷方式</button>
+          </div>
+          <label class="toggle"><input type="checkbox" id="auto-start" checked> <span data-i18n="打开时自动启动 Pi">打开时自动启动 Pi</span></label>
+          <label class="toggle"><input type="checkbox" id="isolated-mode"> <span data-i18n="隔离模式">隔离模式</span></label>
+          <p id="mode-note" class="note" data-i18n="真实配置：使用本机 Pi 配置与授权，扩展/MCP/Skills 全部加载；对话可能联网并产生费用。">真实配置：使用本机 Pi 配置与授权，扩展/MCP/Skills 全部加载；对话可能联网并产生费用。</p>
+        </section>
+
+        <section id="pane-model" role="tabpanel" class="pane" hidden>
+          <div class="module-head">
+            <span class="summary" data-i18n="模型模块">模型模块</span>
+            <button id="add-module" type="button" class="ghost" data-i18n="新建模块">新建模块</button>
+          </div>
+          <form id="module-form" class="module-form" autocomplete="off" hidden>
+            <input id="module-name" type="text" spellcheck="false" placeholder="模块名称，例如 快速修复" data-i18n-placeholder="模块名称，例如 快速修复">
+            <select id="module-model" aria-label="模块使用的模型" data-i18n-aria-label="模块使用的模型"></select>
+            <input id="module-model-custom" type="text" spellcheck="false" placeholder="provider/model，例如 openai/gpt-5.5" data-i18n-placeholder="provider/model，例如 openai/gpt-5.5" hidden>
+            <label class="toggle"><input type="checkbox" id="module-auto"> <span data-i18n="启动时自动使用">启动时自动使用</span></label>
+            <div class="module-form-actions">
+              <button id="save-module" type="submit" class="primary" data-i18n="保存">保存</button>
+              <button id="cancel-module" type="button" class="ghost" data-i18n="取消">取消</button>
+            </div>
+          </form>
+          <div id="module-list" class="module-list"></div>
+          <label class="module-binding">
+            <span data-i18n="本项目模型">本项目模型</span>
+            <select id="project-module"></select>
+          </label>
+          <div class="pane-head">
+            <input id="model-search" type="search" placeholder="搜索厂商 / 模型" data-i18n-placeholder="搜索厂商 / 模型" autocomplete="off" spellcheck="false">
+            <button id="refresh-models" class="ghost" title="重新读取 Pi 配置" data-i18n-title="重新读取 Pi 配置" data-i18n="刷新">刷新</button>
+          </div>
+          <p id="model-summary" class="summary" data-i18n="读取本机 Pi 配置…">读取本机 Pi 配置…</p>
+          <select id="model-provider" class="filter-select" aria-label="按 provider 筛选" data-i18n-aria-label="按 provider 筛选" hidden>
+            <option value="" data-i18n="全部 provider">全部 provider</option>
+          </select>
+          <p class="note" data-i18n="按常用度排序；点击厂商展开模型，点击模型暂存 /model 命令。">按常用度排序；点击厂商展开模型，点击模型暂存 /model 命令。</p>
+          <div id="model-list" class="vendor-list"></div>
+          <div class="stage">
+            <code id="command-preview" data-i18n="选择模型后生成命令">选择模型后生成命令</code>
+            <button id="send-command" disabled data-i18n="发送">发送</button>
+            <button id="copy-command" disabled data-i18n="复制">复制</button>
+            <button id="set-default" disabled title="写入 settings.json，新 Pi 会话生效" data-i18n-title="写入 settings.json，新 Pi 会话生效" data-i18n="设为默认">设为默认</button>
+          </div>
+          <p class="note" data-i18n-html="只读扫描 <code>settings.json</code> / <code>models.json</code> / <code>models-store.json</code>；密钥不读取、不显示。">只读扫描 settings.json / models.json / models-store.json；密钥不读取、不显示。</p>
+
+          <details id="provider-drawer" class="drawer">
+            <summary data-i18n="接入第三方模型 / 中转站">接入第三方模型 / 中转站</summary>
+            <div class="pane-head">
+              <span class="summary" data-i18n="第三方 API · 中转站">第三方 API · 中转站</span>
+              <button id="refresh-providers" class="ghost" data-i18n="刷新">刷新</button>
+            </div>
+            <p id="provider-summary" class="summary" data-i18n="读取接入配置…">读取接入配置…</p>
+            <div class="provider-actions">
+              <button id="add-provider" class="primary" data-i18n="新增自定义接入">新增自定义接入</button>
+              <button id="builtin-provider-key" class="ghost" data-i18n="配置内置 provider 密钥">配置内置 provider 密钥</button>
+            </div>
+            <form id="provider-form" class="provider-form" autocomplete="off" hidden>
+              <label class="field" id="field-name">
+                <span>Provider ID</span>
+                <input id="provider-id" type="text" spellcheck="false" placeholder="例如 my-relay" data-i18n-placeholder="例如 my-relay">
+              </label>
+              <label class="field" id="field-display">
+                <span data-i18n="显示名（可选）">显示名（可选）</span>
+                <input id="provider-display" type="text" spellcheck="false" placeholder="例如 我的中转站" data-i18n-placeholder="例如 我的中转站">
+              </label>
+              <label class="field" id="field-baseurl">
+                <span>Base URL</span>
+                <input id="provider-baseurl" type="text" spellcheck="false" placeholder="https://api.example.com/v1">
+              </label>
+              <label class="field" id="field-api">
+                <span data-i18n="API 类型">API 类型</span>
+                <select id="provider-api">
+                  <option value="openai-completions" data-i18n="openai-completions（OpenAI 兼容）">openai-completions（OpenAI 兼容）</option>
+                  <option value="openai-responses">openai-responses</option>
+                  <option value="anthropic-messages" data-i18n="anthropic-messages（Claude 兼容）">anthropic-messages（Claude 兼容）</option>
+                  <option value="google-generative-ai">google-generative-ai</option>
+                  <option value="mistral-conversations">mistral-conversations</option>
+                  <option value="azure-openai-responses">azure-openai-responses</option>
+                </select>
+              </label>
+              <label class="field" id="field-key">
+                <span>API Key</span>
+                <input id="provider-key" type="password" spellcheck="false" placeholder="留空则保留现有密钥" data-i18n-placeholder="留空则保留现有密钥">
+              </label>
+              <div id="headers-block">
+                <label class="toggle" id="headers-replace-row" hidden>
+                  <input id="provider-headers-replace" type="checkbox"> <span id="headers-replace-label" data-i18n="替换额外请求头">替换额外请求头</span>
+                </label>
+                <label class="field" id="field-headers">
+                  <span data-i18n="额外请求头（可选，每行 Key: Value）">额外请求头（可选，每行 Key: Value）</span>
+                  <textarea id="provider-headers" rows="2" spellcheck="false" placeholder="X-Provider: value"></textarea>
+                </label>
+              </div>
+              <label class="field" id="field-models">
+                <span data-i18n="模型（每行一个：id | 显示名 | 上下文 | 是否思考）">模型（每行一个：id | 显示名 | 上下文 | 是否思考）</span>
+                <textarea id="provider-models" rows="5" spellcheck="false" placeholder="qwen3-coder-plus | Qwen3 Coder | 262144 | false"></textarea>
+              </label>
+              <div class="provider-form-actions">
+                <button id="fetch-models" type="button" class="ghost" data-i18n="从端点拉取模型">从端点拉取模型</button>
+                <button id="save-provider" type="submit" class="primary" data-i18n="保存">保存</button>
+                <button id="cancel-provider" type="button" class="ghost" data-i18n="取消">取消</button>
+                <button id="clear-provider-key" type="button" class="ghost danger" hidden data-i18n="清除密钥">清除密钥</button>
+                <button id="delete-provider" type="button" class="ghost danger" hidden data-i18n="删除">删除</button>
+              </div>
+              <p id="provider-form-note" class="note"></p>
+            </form>
+            <div id="provider-list" class="list"></div>
+            <p class="note" data-i18n-html="自定义接入写入本机真实 Pi 配置（<code>models.json</code> + <code>auth.json</code>），保存前自动备份。新增 provider 需新开 Pi 会话后生效。">自定义接入写入本机真实 Pi 配置（models.json + auth.json），保存前自动备份。新增 provider 需新开 Pi 会话后生效。</p>
+          </details>
+        </section>
+
+        <section id="pane-market" role="tabpanel" class="pane" hidden>
+          <div class="pane-head">
+            <span class="summary" data-i18n="能力市场">能力市场</span>
+            <button id="refresh-market" class="ghost" data-i18n="刷新">刷新</button>
+          </div>
+          <input id="market-search" type="search" placeholder="搜索 Skill / MCP，例如 浏览器、审查" data-i18n-placeholder="搜索 Skill / MCP，例如 浏览器、审查" autocomplete="off" spellcheck="false">
+          <div class="market-tabs" role="tablist" aria-label="市场分类" data-i18n-aria-label="市场分类">
+            <button type="button" class="market-tab active" data-market="skills" data-i18n="Skills">Skills</button>
+            <button type="button" class="market-tab" data-market="mcps" data-i18n="MCP">MCP</button>
+            <button type="button" class="market-tab" data-market="online" data-i18n="在线目录">在线目录</button>
+          </div>
+          <div class="market-scope">
+            <select id="market-scope" aria-label="安装范围" data-i18n-aria-label="安装范围">
+              <option value="project" data-i18n="安装到当前项目">安装到当前项目</option>
+              <option value="user" data-i18n="安装到用户配置">安装到用户配置</option>
+            </select>
+          </div>
+          <p id="market-status" class="summary" data-i18n="选择要添加的能力。">选择要添加的能力。</p>
+          <div id="market-list" class="market-list"></div>
+          <p class="note" data-i18n="安装前会显示启动命令与所需密钥；系统控制类能力会二次确认。已写入的配置不会自动执行。">安装前会显示启动命令与所需密钥；系统控制类能力会二次确认。已写入的配置不会自动执行。</p>
+        </section>
+
+        <section id="pane-automation" role="tabpanel" class="pane" hidden>
+          <div class="pane-head">
+            <span class="summary" data-i18n="自动化">自动化</span>
+            <span class="pane-head-actions">
+              <button id="new-automation" class="ghost" data-i18n="新建任务">新建任务</button>
+              <button id="refresh-automation" class="ghost" data-i18n="刷新">刷新</button>
+            </span>
+          </div>
+          <p id="automation-summary" class="summary" data-i18n="定时任务在应用运行期间执行。">定时任务在应用运行期间执行。</p>
+          <form id="automation-form" class="module-form" autocomplete="off" hidden>
+            <input id="automation-name" type="text" placeholder="任务名称" data-i18n-placeholder="任务名称">
+            <label class="field">
+              <span data-i18n="执行周期">执行周期</span>
+              <select id="automation-kind">
+                <option value="interval" data-i18n="每隔一段时间">每隔一段时间</option>
+                <option value="daily" data-i18n="每天固定时间">每天固定时间</option>
+                <option value="weekly" data-i18n="每周固定时间">每周固定时间</option>
+                <option value="cron" data-i18n="cron 表达式">cron 表达式</option>
+              </select>
+            </label>
+            <label class="field" id="automation-interval-row">
+              <span data-i18n="间隔（分钟）">间隔（分钟）</span>
+              <input id="automation-interval" type="number" min="1" max="10080" value="60">
+            </label>
+            <label class="field" id="automation-time-row">
+              <span data-i18n="时间">时间</span>
+              <input id="automation-time" type="time" value="09:00">
+            </label>
+            <div id="automation-days-row" class="weekday-row" hidden></div>
+            <label class="field" id="automation-cron-row" hidden>
+              <span data-i18n="cron（分 时 日 月 周）">cron（分 时 日 月 周）</span>
+              <input id="automation-cron" type="text" placeholder="0 9 * * 1-5" spellcheck="false">
+            </label>
+            <label class="field">
+              <span data-i18n="动作">动作</span>
+              <select id="automation-action">
+                <option value="pi-prompt" data-i18n="发送提示词给 Pi">发送提示词给 Pi</option>
+                <option value="shell" data-i18n="执行本机命令">执行本机命令</option>
+                <option value="agent" data-i18n="调用 Agent">调用 Agent</option>
+                <option value="open-url" data-i18n="打开网页">打开网页</option>
+                <option value="open-path" data-i18n="打开文件或目录">打开文件或目录</option>
+                <option value="notify" data-i18n="系统通知">系统通知</option>
+              </select>
+            </label>
+            <textarea id="automation-prompt" rows="3" placeholder="提示词" data-i18n-placeholder="提示词"></textarea>
+            <input id="automation-command" type="text" placeholder="命令，例如 npm run build" data-i18n-placeholder="命令，例如 npm run build" hidden>
+            <input id="automation-agent" list="agent-options" type="text" placeholder="Agent ID，例如 claude" data-i18n-placeholder="Agent ID，例如 claude" hidden>
+            <datalist id="agent-options"></datalist>
+            <input id="automation-url" type="url" placeholder="https://…" hidden>
+            <input id="automation-path" type="text" placeholder="绝对路径" data-i18n-placeholder="绝对路径" hidden>
+            <input id="automation-title" type="text" placeholder="通知标题" data-i18n-placeholder="通知标题" hidden>
+            <input id="automation-body" type="text" placeholder="通知内容" data-i18n-placeholder="通知内容" hidden>
+            <label class="field">
+              <span data-i18n="结果推送">结果推送</span>
+              <select id="automation-notify">
+                <option value="failure" data-i18n="仅失败时">仅失败时</option>
+                <option value="always" data-i18n="每次都推送">每次都推送</option>
+                <option value="never" data-i18n="不推送">不推送</option>
+              </select>
+            </label>
+            <div id="automation-channels" class="channel-picker"></div>
+            <div class="module-form-actions">
+              <button type="submit" class="primary" data-i18n="保存">保存</button>
+              <button id="cancel-automation" type="button" class="ghost" data-i18n="取消">取消</button>
+              <button id="delete-automation" type="button" class="ghost danger" hidden data-i18n="删除">删除</button>
+            </div>
+          </form>
+          <div id="automation-list" class="list"></div>
+
+          <div class="pane-head">
+            <span class="summary" data-i18n="消息通道">消息通道</span>
+            <button id="new-channel" class="ghost" data-i18n="新增通道">新增通道</button>
+          </div>
+          <form id="channel-form" class="module-form" autocomplete="off" hidden>
+            <label class="field">
+              <span data-i18n="类型">类型</span>
+              <select id="channel-type">
+                <option value="webhook" data-i18n="通用 Webhook">通用 Webhook</option>
+                <option value="wecom" data-i18n="企业微信群机器人">企业微信群机器人</option>
+                <option value="feishu" data-i18n="飞书自定义机器人">飞书自定义机器人</option>
+                <option value="telegram" data-i18n="Telegram Bot">Telegram Bot</option>
+              </select>
+            </label>
+            <input id="channel-name" type="text" placeholder="通道名称" data-i18n-placeholder="通道名称">
+            <input id="channel-url" type="url" placeholder="Webhook 地址" data-i18n-placeholder="Webhook 地址">
+            <input id="channel-token" type="password" placeholder="Bot Token（Telegram）" data-i18n-placeholder="Bot Token（Telegram）" autocomplete="off">
+            <input id="channel-chat" type="text" placeholder="Chat ID（Telegram）" data-i18n-placeholder="Chat ID（Telegram）" autocomplete="off">
+            <div class="module-form-actions">
+              <button type="submit" class="primary" data-i18n="保存">保存</button>
+              <button id="cancel-channel" type="button" class="ghost" data-i18n="取消">取消</button>
+              <button id="test-channel" type="button" class="ghost" data-i18n="发送测试">发送测试</button>
+              <button id="delete-channel" type="button" class="ghost danger" hidden data-i18n="删除">删除</button>
+            </div>
+          </form>
+          <div id="channel-list" class="list"></div>
+          <p class="note" data-i18n="仅支持官方机器人/Webhook 的单向推送；不接入个人微信，不使用非官方协议。">仅支持官方机器人/Webhook 的单向推送；不接入个人微信，不使用非官方协议。</p>
+        </section>
+
+        <section id="pane-team" role="tabpanel" class="pane" hidden>
+          <div class="pane-head">
+            <span class="summary" data-i18n="多 Agent 协作">多 Agent 协作</span>
+            <button id="refresh-agents" class="ghost" data-i18n="重新检测">重新检测</button>
+          </div>
+          <p id="team-summary" class="summary" data-i18n="检测本机已安装的 Agent CLI。">检测本机已安装的 Agent CLI。</p>
+          <div id="agent-list" class="list agent-list"></div>
+          <label class="field">
+            <span data-i18n="协作任务">协作任务</span>
+            <textarea id="team-task" rows="3" placeholder="例如：调研这个项目的构建链路并给出优化方案" data-i18n-placeholder="例如：调研这个项目的构建链路并给出优化方案"></textarea>
+          </label>
+          <label class="field">
+            <span data-i18n="编排方式">编排方式</span>
+            <select id="team-mode">
+              <option value="parallel" data-i18n="并行独立执行">并行独立执行</option>
+              <option value="supervisor" data-i18n="主管先规划再分工">主管先规划再分工</option>
+            </select>
+          </label>
+          <label class="field">
+            <span data-i18n="主管">主管</span>
+            <select id="team-supervisor"></select>
+          </label>
+          <div id="team-agents" class="agent-picker"></div>
+          <div class="module-form-actions">
+            <button id="run-team" class="primary" data-i18n="开始协作">开始协作</button>
+            <button id="refresh-team" class="ghost" data-i18n="刷新状态">刷新状态</button>
+          </div>
+          <p id="team-status" class="note"></p>
+          <p class="note" data-i18n="每个 Agent 以本机 CLI 的无交互模式运行；会真实调用模型并产生费用。">每个 Agent 以本机 CLI 的无交互模式运行；会真实调用模型并产生费用。</p>
+        </section>
+
+        <section id="pane-capability" role="tabpanel" class="pane" hidden>
+          <div class="pane-head">
+            <span class="summary" data-i18n="扩展 · Skills · MCP">扩展 · Skills · MCP</span>
+            <span class="pane-head-actions">
+              <button id="add-capability" class="ghost" data-i18n="添加">添加</button>
+              <button id="refresh-capabilities" class="ghost" title="刷新能力配置" data-i18n-title="刷新能力配置" data-i18n="刷新">刷新</button>
+            </span>
+          </div>
+          <form id="capability-form" class="module-form" autocomplete="off" hidden>
+            <div class="capability-row">
+              <select id="capability-kind" aria-label="类型" data-i18n-aria-label="类型">
+                <option value="skill">Skill</option>
+                <option value="mcp">MCP</option>
+              </select>
+              <select id="capability-scope" aria-label="作用域" data-i18n-aria-label="作用域">
+                <option value="project" data-i18n="项目">项目</option>
+                <option value="user" data-i18n="用户">用户</option>
+              </select>
+            </div>
+            <input id="capability-name" type="text" spellcheck="false" placeholder="名称，例如 code-review" data-i18n-placeholder="名称，例如 code-review">
+            <input id="capability-description" type="text" placeholder="描述（Skill）" data-i18n-placeholder="描述（Skill）">
+            <textarea id="capability-body" rows="3" spellcheck="false" placeholder="Skill 内容（Markdown）" data-i18n-placeholder="Skill 内容（Markdown）"></textarea>
+            <input id="capability-command" type="text" spellcheck="false" placeholder="启动命令（MCP），例如 npx" data-i18n-placeholder="启动命令（MCP），例如 npx" hidden>
+            <textarea id="capability-args" rows="2" spellcheck="false" placeholder="参数，每行一个" data-i18n-placeholder="参数，每行一个" hidden></textarea>
+            <textarea id="capability-env" rows="2" spellcheck="false" placeholder="环境变量，每行 KEY=VALUE" data-i18n-placeholder="环境变量，每行 KEY=VALUE" hidden></textarea>
+            <p id="capability-form-note" class="note"></p>
+            <div class="module-form-actions">
+              <button type="submit" class="primary" data-i18n="保存">保存</button>
+              <button id="cancel-capability" type="button" class="ghost" data-i18n="取消">取消</button>
+            </div>
+          </form>
+          <p id="capability-summary" class="summary" data-i18n="尚未选择项目">尚未选择项目</p>
+          <div id="capability-list" class="list"></div>
+        </section>
+
+        <section id="pane-session" role="tabpanel" class="pane" hidden>
+          <div class="pane-head">
+            <span class="summary" data-i18n="Pi 原生会话">Pi 原生会话</span>
+            <button id="refresh-sessions" class="ghost" data-i18n="刷新">刷新</button>
+          </div>
+          <p id="session-summary" class="summary" data-i18n="尚未选择项目">尚未选择项目</p>
+          <div id="session-list" class="list"></div>
+          <p class="note" data-i18n-html="点击会话会在停止当前 Pi 后以 <code>--session</code> 恢复；会话文件不会被修改，除非继续对话。">点击会话会在停止当前 Pi 后以 --session 恢复；会话文件不会被修改，除非继续对话。</p>
+        </section>
+
+        <section id="pane-audit" role="tabpanel" class="pane" hidden>
+          <p class="summary" data-i18n="本地操作记录">本地操作记录</p>
+          <ol id="audit-log" class="audit"></ol>
+        </section>
+
+        <section id="pane-settings" role="tabpanel" class="pane" hidden>
+          <p class="summary" data-i18n="本机软件与网页">本机软件与网页</p>
+          <div class="tool-grid">
+            <button class="ghost" data-open-app="vscode" data-i18n="VS Code">VS Code</button>
+            <button class="ghost" data-open-app="explorer" data-i18n="资源管理器">资源管理器</button>
+            <button class="ghost" data-open-app="terminal" data-i18n="终端">终端</button>
+            <button class="ghost" data-open-app="notepad" data-i18n="记事本">记事本</button>
+            <button class="ghost" data-open-app="calculator" data-i18n="计算器">计算器</button>
+            <button class="ghost" data-open-app="mspaint" data-i18n="画图">画图</button>
+          </div>
+          <label class="field">
+            <span data-i18n="用浏览器打开">用浏览器打开</span>
+            <input id="tool-url" type="url" placeholder="https://…" spellcheck="false">
+          </label>
+          <button id="tool-open-url" class="primary" data-i18n="打开网页">打开网页</button>
+          <label class="field">
+            <span data-i18n="打开本地文件或目录">打开本地文件或目录</span>
+            <input id="tool-path" type="text" placeholder="绝对路径" data-i18n-placeholder="绝对路径" spellcheck="false">
+          </label>
+          <button id="tool-open-path" class="ghost" data-i18n="打开路径">打开路径</button>
+          <p class="note" data-i18n="只调用系统默认程序，不执行任意脚本；Agent 需要更复杂的控制时通过 MCP 扩展。">只调用系统默认程序，不执行任意脚本；Agent 需要更复杂的控制时通过 MCP 扩展。</p>
+        </section>
       </div>
-      <div id="recent-projects" class="recent"></div>
-
-      <div class="section-label" data-i18n="会话">会话</div>
-      <button id="start-pi" class="primary" disabled data-i18n="新会话">新会话</button>
-      <button id="stop-pi" disabled data-i18n="停止 Pi">停止 Pi</button>
-
-      <div class="section-label" data-i18n="环境">环境</div>
-      <dl class="meta">
-        <dt>Node</dt><dd id="node-path">—</dd>
-        <dt>npm</dt><dd id="npm-version">—</dd>
-        <dt>Pi</dt><dd id="pi-env">—</dd>
-        <dt data-i18n="配置目录">配置目录</dt><dd id="isolated-path" data-i18n="启动后显示">启动后显示</dd>
-      </dl>
-      <div class="env-actions">
-        <button id="setup-env" class="ghost" data-i18n="一键配置环境">一键配置环境</button>
-        <button id="create-shortcut" class="ghost" data-i18n="创建桌面快捷方式">创建桌面快捷方式</button>
-      </div>
-      <label class="toggle"><input type="checkbox" id="auto-start" checked> <span data-i18n="打开时自动启动 Pi">打开时自动启动 Pi</span></label>
-      <label class="toggle"><input type="checkbox" id="isolated-mode"> <span data-i18n="隔离模式">隔离模式</span></label>
-
-      <p id="mode-note" class="note" data-i18n="真实配置：使用本机 Pi 配置与授权，扩展/MCP/Skills 全部加载；对话可能联网并产生费用。">真实配置：使用本机 Pi 配置与授权，扩展/MCP/Skills 全部加载；对话可能联网并产生费用。</p>
     </aside>
 
     <main class="terminal-column">
@@ -98,19 +438,37 @@
       </footer>
     </main>
 
-    <aside class="panel">
-      <div class="panel-tabs" role="tablist" aria-label="辅助面板">
-        <button role="tab" id="tab-task" aria-controls="pane-task" aria-selected="false" data-i18n="任务">任务</button>
-        <button role="tab" id="tab-model" aria-controls="pane-model" aria-selected="true" data-i18n="模型">模型</button>
-        <button role="tab" id="tab-capability" aria-controls="pane-capability" aria-selected="false" data-i18n="能力">能力</button>
-        <button role="tab" id="tab-provider" aria-controls="pane-provider" aria-selected="false" data-i18n="接入">接入</button>
-        <button role="tab" id="tab-session" aria-controls="pane-session" aria-selected="false" data-i18n="会话">会话</button>
-        <button role="tab" id="tab-audit" aria-controls="pane-audit" aria-selected="false" data-i18n="审计">审计</button>
+    <aside class="panel workspace">
+      <div class="panel-tabs workspace-tabs" role="tablist" aria-label="工作区" data-i18n-aria-label="工作区">
+        <button role="tab" id="tab-ws-edit" aria-controls="pane-ws-edit" aria-selected="true" data-i18n="编辑">编辑</button>
+        <button role="tab" id="tab-ws-review" aria-controls="pane-ws-review" aria-selected="false" data-i18n="审查">审查</button>
+        <button role="tab" id="tab-ws-interact" aria-controls="pane-ws-interact" aria-selected="false" data-i18n="交互">交互</button>
+        <button role="tab" id="tab-ws-collab" aria-controls="pane-ws-collab" aria-selected="false" data-i18n="协作日志">协作日志</button>
       </div>
 
-      <section id="pane-task" role="tabpanel" class="pane" hidden>
+      <section id="pane-ws-edit" role="tabpanel" class="pane">
+        <p class="summary" data-i18n="编辑与外部工具">编辑与外部工具</p>
+        <div class="tool-grid">
+          <button class="ghost" data-open-app="vscode" data-i18n="VS Code">VS Code</button>
+          <button class="ghost" data-open-app="explorer" data-i18n="资源管理器">资源管理器</button>
+          <button class="ghost" data-open-app="terminal" data-i18n="终端">终端</button>
+        </div>
+        <label class="field">
+          <span data-i18n="打开文件或目录">打开文件或目录</span>
+          <input id="ws-path" type="text" placeholder="绝对路径或项目内相对路径" data-i18n-placeholder="绝对路径或项目内相对路径" spellcheck="false">
+        </label>
+        <button id="ws-open-path" class="ghost" data-i18n="打开">打开</button>
+        <label class="field">
+          <span data-i18n="预览网页">预览网页</span>
+          <input id="ws-url" type="url" placeholder="http://localhost:3000" spellcheck="false">
+        </label>
+        <button id="ws-open-url" class="ghost" data-i18n="用浏览器打开">用浏览器打开</button>
+        <p class="note" data-i18n="编辑、调试在 VS Code 中进行；这里负责快速定位与打开。">编辑、调试在 VS Code 中进行；这里负责快速定位与打开。</p>
+      </section>
+
+      <section id="pane-ws-review" role="tabpanel" class="pane" hidden>
         <div class="pane-head">
-          <span class="summary" data-i18n="任务状态">任务状态</span>
+          <span class="summary" data-i18n="变更审查">变更审查</span>
           <button id="refresh-task" class="ghost" data-i18n="刷新">刷新</button>
         </div>
         <div id="task-status" class="task-status"></div>
@@ -120,163 +478,27 @@
         </div>
         <div class="group-label"><span data-i18n="变更文件">变更文件</span><span id="git-count" class="count"></span></div>
         <div id="git-list" class="list"></div>
-        <div class="group-label"><span data-i18n="任务清单">任务清单</span><span id="todo-count" class="count"></span></div>
+        <p class="note" data-i18n="点击文件可直接在 VS Code 中打开；提交与回滚仍在 Git 中确认。">点击文件可直接在 VS Code 中打开；提交与回滚仍在 Git 中确认。</p>
+      </section>
+
+      <section id="pane-ws-interact" role="tabpanel" class="pane" hidden>
+        <p class="summary" data-i18n="任务清单">任务清单</p>
         <form id="todo-form" class="todo-form" autocomplete="off">
           <input id="todo-input" type="text" placeholder="添加任务…" data-i18n-placeholder="添加任务…">
           <button type="submit" class="primary" data-i18n="添加">添加</button>
         </form>
+        <div class="group-label"><span data-i18n="待办">待办</span><span id="todo-count" class="count"></span></div>
         <div id="todo-list" class="todo-list"></div>
+        <p class="note" data-i18n="Pi 的授权确认仍在终端内完成；这里记录人工待办与验收项。">Pi 的授权确认仍在终端内完成；这里记录人工待办与验收项。</p>
       </section>
 
-      <section id="pane-model" role="tabpanel" class="pane">
-        <div class="module-head">
-          <span class="summary" data-i18n="模型模块">模型模块</span>
-          <button id="add-module" type="button" class="ghost" data-i18n="新建模块">新建模块</button>
-        </div>
-        <form id="module-form" class="module-form" autocomplete="off" hidden>
-          <input id="module-name" type="text" spellcheck="false" placeholder="模块名称，例如 快速修复" data-i18n-placeholder="模块名称，例如 快速修复">
-          <select id="module-model" aria-label="模块使用的模型" data-i18n-aria-label="模块使用的模型"></select>
-          <input id="module-model-custom" type="text" spellcheck="false" placeholder="provider/model，例如 openai/gpt-5.5" data-i18n-placeholder="provider/model，例如 openai/gpt-5.5" hidden>
-          <label class="toggle"><input type="checkbox" id="module-auto"> <span data-i18n="启动时自动使用">启动时自动使用</span></label>
-          <div class="module-form-actions">
-            <button id="save-module" type="submit" class="primary" data-i18n="保存">保存</button>
-            <button id="cancel-module" type="button" class="ghost" data-i18n="取消">取消</button>
-          </div>
-        </form>
-        <div id="module-list" class="module-list"></div>
-        <label class="module-binding">
-          <span data-i18n="本项目模型">本项目模型</span>
-          <select id="project-module"></select>
-        </label>
+      <section id="pane-ws-collab" role="tabpanel" class="pane" hidden>
         <div class="pane-head">
-          <input id="model-search" type="search" placeholder="搜索 provider / 模型" data-i18n-placeholder="搜索 provider / 模型" autocomplete="off" spellcheck="false">
-          <button id="refresh-models" class="ghost" title="重新读取 Pi 配置" data-i18n-title="重新读取 Pi 配置" data-i18n="刷新">刷新</button>
+          <span class="summary" data-i18n="协作实时日志">协作实时日志</span>
+          <button id="clear-team-log" class="ghost" data-i18n="清空">清空</button>
         </div>
-        <p id="model-summary" class="summary" data-i18n="读取本机 Pi 配置…">读取本机 Pi 配置…</p>
-        <select id="model-provider" class="filter-select" aria-label="按 provider 筛选" data-i18n-aria-label="按 provider 筛选">
-          <option value="" data-i18n="全部 provider">全部 provider</option>
-        </select>
-        <div id="model-list" class="list"></div>
-        <div class="stage">
-          <code id="command-preview" data-i18n="选择模型后生成命令">选择模型后生成命令</code>
-          <button id="send-command" disabled data-i18n="发送">发送</button>
-          <button id="copy-command" disabled data-i18n="复制">复制</button>
-          <button id="set-default" disabled title="写入 settings.json，新 Pi 会话生效" data-i18n-title="写入 settings.json，新 Pi 会话生效" data-i18n="设为默认">设为默认</button>
-        </div>
-        <p class="note" data-i18n-html="只读扫描 <code>settings.json</code> / <code>models.json</code> / <code>models-store.json</code>；密钥不读取、不显示。选择只生成 <code>/model</code> 命令；「发送」会写入终端并回车。">只读扫描 settings.json / models.json / models-store.json；密钥不读取、不显示。选择只生成 <code>/model</code> 命令；「发送」会写入终端并回车。</p>
-      </section>
-
-      <section id="pane-capability" role="tabpanel" class="pane" hidden>
-        <div class="pane-head">
-          <span class="summary" data-i18n="扩展 · Skills · MCP">扩展 · Skills · MCP</span>
-          <span class="pane-head-actions">
-            <button id="add-capability" class="ghost" data-i18n="添加">添加</button>
-            <button id="refresh-capabilities" class="ghost" title="刷新能力配置" data-i18n-title="刷新能力配置" data-i18n="刷新">刷新</button>
-          </span>
-        </div>
-        <form id="capability-form" class="module-form" autocomplete="off" hidden>
-          <div class="capability-row">
-            <select id="capability-kind" aria-label="类型" data-i18n-aria-label="类型">
-              <option value="skill">Skill</option>
-              <option value="mcp">MCP</option>
-            </select>
-            <select id="capability-scope" aria-label="作用域" data-i18n-aria-label="作用域">
-              <option value="project" data-i18n="项目">项目</option>
-              <option value="user" data-i18n="用户">用户</option>
-            </select>
-          </div>
-          <input id="capability-name" type="text" spellcheck="false" placeholder="名称，例如 code-review" data-i18n-placeholder="名称，例如 code-review">
-          <input id="capability-description" type="text" placeholder="描述（Skill）" data-i18n-placeholder="描述（Skill）">
-          <textarea id="capability-body" rows="3" spellcheck="false" placeholder="Skill 内容（Markdown）" data-i18n-placeholder="Skill 内容（Markdown）"></textarea>
-          <input id="capability-command" type="text" spellcheck="false" placeholder="启动命令（MCP），例如 npx" data-i18n-placeholder="启动命令（MCP），例如 npx" hidden>
-          <textarea id="capability-args" rows="2" spellcheck="false" placeholder="参数，每行一个" data-i18n-placeholder="参数，每行一个" hidden></textarea>
-          <textarea id="capability-env" rows="2" spellcheck="false" placeholder="环境变量，每行 KEY=VALUE" data-i18n-placeholder="环境变量，每行 KEY=VALUE" hidden></textarea>
-          <p id="capability-form-note" class="note"></p>
-          <div class="module-form-actions">
-            <button type="submit" class="primary" data-i18n="保存">保存</button>
-            <button id="cancel-capability" type="button" class="ghost" data-i18n="取消">取消</button>
-          </div>
-        </form>
-        <p id="capability-summary" class="summary" data-i18n="尚未选择项目">尚未选择项目</p>
-        <div id="capability-list" class="list"></div>
-      </section>
-
-      <section id="pane-provider" role="tabpanel" class="pane" hidden>
-        <div class="pane-head">
-          <span class="summary" data-i18n="第三方 API · 中转站">第三方 API · 中转站</span>
-          <button id="refresh-providers" class="ghost" data-i18n="刷新">刷新</button>
-        </div>
-        <p id="provider-summary" class="summary" data-i18n="读取接入配置…">读取接入配置…</p>
-        <div class="provider-actions">
-          <button id="add-provider" class="primary" data-i18n="新增自定义接入">新增自定义接入</button>
-          <button id="builtin-provider-key" class="ghost" data-i18n="配置内置 provider 密钥">配置内置 provider 密钥</button>
-        </div>
-        <form id="provider-form" class="provider-form" autocomplete="off" hidden>
-          <label class="field" id="field-name">
-            <span>Provider ID</span>
-            <input id="provider-id" type="text" spellcheck="false" placeholder="例如 my-relay" data-i18n-placeholder="例如 my-relay">
-          </label>
-          <label class="field" id="field-display">
-            <span data-i18n="显示名（可选）">显示名（可选）</span>
-            <input id="provider-display" type="text" spellcheck="false" placeholder="例如 我的中转站" data-i18n-placeholder="例如 我的中转站">
-          </label>
-          <label class="field" id="field-baseurl">
-            <span>Base URL</span>
-            <input id="provider-baseurl" type="text" spellcheck="false" placeholder="https://api.example.com/v1">
-          </label>
-          <label class="field" id="field-api">
-            <span data-i18n="API 类型">API 类型</span>
-            <select id="provider-api">
-              <option value="openai-completions" data-i18n="openai-completions（OpenAI 兼容）">openai-completions（OpenAI 兼容）</option>
-              <option value="openai-responses">openai-responses</option>
-              <option value="anthropic-messages" data-i18n="anthropic-messages（Claude 兼容）">anthropic-messages（Claude 兼容）</option>
-              <option value="google-generative-ai">google-generative-ai</option>
-              <option value="mistral-conversations">mistral-conversations</option>
-              <option value="azure-openai-responses">azure-openai-responses</option>
-            </select>
-          </label>
-          <label class="field" id="field-key">
-            <span>API Key</span>
-            <input id="provider-key" type="password" spellcheck="false" placeholder="留空则保留现有密钥" data-i18n-placeholder="留空则保留现有密钥">
-          </label>
-          <div id="headers-block">
-            <label class="toggle" id="headers-replace-row" hidden>
-              <input id="provider-headers-replace" type="checkbox"> <span id="headers-replace-label" data-i18n="替换额外请求头">替换额外请求头</span>
-            </label>
-            <label class="field" id="field-headers">
-              <span data-i18n="额外请求头（可选，每行 Key: Value）">额外请求头（可选，每行 Key: Value）</span>
-              <textarea id="provider-headers" rows="2" spellcheck="false" placeholder="X-Provider: value"></textarea>
-            </label>
-          </div>
-          <label class="field" id="field-models">
-            <span data-i18n="模型（每行一个：id | 显示名 | 上下文 | 是否思考）">模型（每行一个：id | 显示名 | 上下文 | 是否思考）</span>
-            <textarea id="provider-models" rows="5" spellcheck="false" placeholder="qwen3-coder-plus | Qwen3 Coder | 262144 | false"></textarea>
-          </label>
-          <div class="provider-form-actions">
-            <button id="fetch-models" type="button" class="ghost" data-i18n="从端点拉取模型">从端点拉取模型</button>
-            <button id="save-provider" type="submit" class="primary" data-i18n="保存">保存</button>
-            <button id="cancel-provider" type="button" class="ghost" data-i18n="取消">取消</button>
-            <button id="clear-provider-key" type="button" class="ghost danger" hidden data-i18n="清除密钥">清除密钥</button>
-            <button id="delete-provider" type="button" class="ghost danger" hidden data-i18n="删除">删除</button>
-          </div>
-          <p id="provider-form-note" class="note"></p>
-        </form>
-        <div id="provider-list" class="list"></div>
-        <p class="note" data-i18n-html="自定义接入写入本机真实 Pi 配置（<code>models.json</code> + <code>auth.json</code>，与隔离模式无关，与 <code>/login</code> 同一份凭据），保存前自动备份。新增 provider 需新开 Pi 会话后生效。">自定义接入写入本机真实 Pi 配置（<code>models.json</code> + <code>auth.json</code>，与隔离模式无关，与 <code>/login</code> 同一份凭据），保存前自动备份。新增 provider 需新开 Pi 会话后生效。</p>
-      </section>
-
-      <section id="pane-session" role="tabpanel" class="pane" hidden>        <div class="pane-head">
-          <span class="summary" data-i18n="Pi 原生会话">Pi 原生会话</span>
-          <button id="refresh-sessions" class="ghost" data-i18n="刷新">刷新</button>
-        </div>
-        <p id="session-summary" class="summary" data-i18n="尚未选择项目">尚未选择项目</p>
-        <div id="session-list" class="list"></div>
-        <p class="note" data-i18n-html="点击会话会在停止当前 Pi 后以 <code>--session</code> 恢复；会话文件不会被修改，除非继续对话。">点击会话会在停止当前 Pi 后以 <code>--session</code> 恢复；会话文件不会被修改，除非继续对话。</p>
-      </section>
-
-      <section id="pane-audit" role="tabpanel" class="pane" hidden>
-        <p class="summary" data-i18n="本地操作记录">本地操作记录</p>
-        <ol id="audit-log" class="audit"></ol>
+        <div id="team-log-live" class="team-log"></div>
+        <p id="team-log-empty" class="note" data-i18n="还没有协作输出。在左侧「协作」启动任务。">还没有协作输出。在左侧「协作」启动任务。</p>
       </section>
     </aside>
   </div>
