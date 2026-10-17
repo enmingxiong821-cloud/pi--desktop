@@ -6,7 +6,7 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import './style.css';
 import { applyStaticI18n, getLocale, initLocale, setLocale, t } from './i18n.js';
-import { initPanels, type PanelsController } from './panels.js';
+import { initPanels, type PanelsController, type UsageReport } from './panels.js';
 
 interface InstallInfo {
   version: string;
@@ -27,6 +27,20 @@ interface ImportedProject {
   name: string;
   path: string;
   lastUsed: number;
+}
+
+interface HabitEvent {
+  type: 'model' | 'permission' | 'autopilot' | 'memory-scope' | 'language';
+  value: string;
+  task?: string;
+}
+
+interface HabitSummary {
+  ok: boolean;
+  updatedAt?: string;
+  top?: Array<{ type: HabitEvent['type']; value: string; count: number; lastAt: string; task?: string }>;
+  profilePath?: string;
+  error?: string;
 }
 
 interface CustomLink {
@@ -106,6 +120,8 @@ interface CapabilityEntry {
   name: string;
   detail?: string;
   scope: 'user' | 'project';
+  category?: string;
+  tags?: string[];
 }
 
 interface SessionEntry {
@@ -170,6 +186,92 @@ interface SetupResult {
   installed?: boolean;
   version?: string;
   output?: string;
+  steps?: string[];
+  needsRestart?: boolean;
+  error?: string;
+}
+
+type PermissionLevel = 'allow' | 'ask' | 'deny';
+
+interface PermissionRules {
+  fileRead: PermissionLevel;
+  fileWrite: PermissionLevel;
+  shell: PermissionLevel;
+  network: PermissionLevel;
+  gitWrite: PermissionLevel;
+  packageInstall: PermissionLevel;
+}
+
+interface PermissionResult {
+  ok: boolean;
+  path?: string;
+  permissions?: {
+    version: 1;
+    project: string;
+    updatedAt: string;
+    rules: PermissionRules;
+    workspaceOnly: boolean;
+    autoApprove: boolean;
+    allowPaths: string[];
+    denyPaths: string[];
+  };
+  error?: string;
+}
+
+interface ArchiveMeta {
+  id: string;
+  label: string;
+  project: string;
+  createdAt: string;
+  branch: string;
+  head: string;
+  changedFiles: number;
+  untrackedFiles: number;
+  patchBytes: number;
+  untrackedBytes: number;
+}
+
+interface ArchiveResult {
+  ok: boolean;
+  archive?: ArchiveMeta;
+  archives?: ArchiveMeta[];
+  path?: string;
+  touched?: string[];
+  warnings?: string[];
+  error?: string;
+}
+
+interface MemoryHit {
+  id: string;
+  project: string;
+  sessionId: string;
+  role: 'user' | 'assistant';
+  timestamp: string;
+  text: string;
+  score: number;
+  snippet: string;
+}
+
+interface MemoryStats {
+  ok: true;
+  entries: number;
+  projects: number;
+  projectEntries: number;
+  updatedAt: string;
+  bytes: number;
+  path: string;
+}
+
+interface UpdateCheckResult {
+  ok: boolean;
+  app?: {
+    current: string; latest: string; hasUpdate: boolean; url: string;
+    notes: string; publishedAt: string;
+    asset?: { name: string; url: string; size: number };
+  };
+  pi?: { current: string; latest: string; hasUpdate: boolean };
+  settings?: { autoCheck: boolean; autoDownload: boolean };
+  checkedAt?: string;
   error?: string;
 }
 
@@ -202,6 +304,26 @@ interface ToolSettings {
 
 interface SearchResult {
   title: string;
+  url: string;
+  snippet: string;
+}
+
+interface RepoResult {
+  name: string;
+  fullName: string;
+  url: string;
+  description: string;
+  stars: number;
+  forks: number;
+  language: string;
+  updatedAt: string;
+  topics: string[];
+  license: string;
+}
+
+interface CodeResult {
+  repo: string;
+  path: string;
   url: string;
   snippet: string;
 }
@@ -363,6 +485,9 @@ interface PiDesktopApi {
     name: string;
     description?: string;
     body?: string;
+    category?: string;
+    tags?: string[];
+    source?: string;
   }): Promise<CapabilityResult>;
   removeSkill(input: { scope: 'user' | 'project'; cwd?: string; name: string }): Promise<CapabilityResult>;
   addMcp(input: {
@@ -372,6 +497,9 @@ interface PiDesktopApi {
     command: string;
     argsText?: string;
     envText?: string;
+    category?: string;
+    tags?: string[];
+    source?: string;
   }): Promise<CapabilityResult>;
   gitStatus(cwd: string): Promise<GitStatusResult>;
   openPath(target: string): Promise<{ ok: boolean; error?: string }>;
@@ -379,24 +507,49 @@ interface PiDesktopApi {
   openVSCode(target: string): Promise<{ ok: boolean; error?: string }>;
   probeEnvironment(): Promise<EnvironmentReport>;
   installPi(): Promise<SetupResult>;
+  setupEnvironment(): Promise<SetupResult>;
+  updatePi(): Promise<SetupResult>;
+  getPermissions(cwd: string): Promise<PermissionResult>;
+  savePermissions(input: { cwd: string; rules: PermissionRules; workspaceOnly?: boolean; autoApprove?: boolean; allowPaths?: string[]; denyPaths?: string[] }): Promise<PermissionResult>;
+  installPermissionGuard(): Promise<{ ok: boolean; path?: string; installed?: boolean; error?: string }>;
+  permissionGuardStatus(): Promise<{ installed: boolean; path: string }>;
+  listArchives(cwd: string): Promise<{ ok: boolean; archives?: ArchiveMeta[]; path?: string; error?: string }>;
+  createArchive(input: { cwd: string; label?: string }): Promise<ArchiveResult>;
+  restoreArchive(input: { cwd: string; id: string }): Promise<ArchiveResult>;
+  deleteArchive(input: { cwd: string; id: string }): Promise<ArchiveResult>;
+  ingestMemory(cwd: string): Promise<{ ok: boolean; path?: string; added?: number; error?: string }>;
+  searchMemory(input: { query: string; cwd?: string; scope?: 'project' | 'all'; limit?: number }): Promise<{ ok: boolean; hits?: MemoryHit[]; scanned?: number; error?: string }>;
+  memoryStats(cwd?: string): Promise<MemoryStats>;
+  recentMemory(cwd: string, limit?: number): Promise<MemoryHit[]>;
+  installMemorySkill(): Promise<{ ok: boolean; path?: string; error?: string }>;
+  recordHabit(input: HabitEvent): Promise<{ ok: boolean; error?: string }>;
+  habitSummary(): Promise<HabitSummary>;
+  checkUpdates(): Promise<UpdateCheckResult>;
+  downloadUpdate(input: { url: string; name: string }): Promise<{ ok: boolean; path?: string; error?: string }>;
+  getUpdateSettings(): Promise<{ autoCheck: boolean; autoDownload: boolean }>;
+  saveUpdateSettings(input: { autoCheck: boolean; autoDownload: boolean }): Promise<{ autoCheck: boolean; autoDownload: boolean }>;
   createShortcut(target?: string): Promise<{ ok: boolean; path?: string; error?: string }>;
   sessions(cwd: string): Promise<{ ok: boolean; sessions?: SessionEntry[]; error?: string }>;
+  usageReport(cwd: string): Promise<UsageReport | { ok: false; error: string }>;
+  applyTokenSavings(): Promise<{ ok: boolean; path?: string; backup?: string; applied?: Record<string, unknown>; error?: string }>;
   startPi(options: { cwd: string; cols: number; rows: number; sessionPath?: string; isolated?: boolean; model?: string; thinking?: string }): Promise<{
     ok: boolean;
+    key?: string;
     isolatedDir?: string;
     isolated?: boolean;
     install?: InstallInfo;
     error?: string;
   }>;
-  stopPi(): Promise<{ ok: boolean }>;
-  write(data: string): void;
-  resize(cols: number, rows: number): void;
-  ack(bytes: number): void;
+  stopPi(key?: string): Promise<{ ok: boolean }>;
+  livePi(): Promise<{ ok: boolean; sessions: Array<{ key: string; cwd: string; startedAt: number }> }>;
+  write(data: string, key?: string): void;
+  resize(cols: number, rows: number, key?: string): void;
+  ack(bytes: number, key?: string): void;
   readClipboard(): Promise<string>;
   writeClipboard(text: string): Promise<void>;
   openExternal(url: string): Promise<{ ok: boolean }>;
-  onData(callback: (data: string) => void): () => void;
-  onState(callback: (state: { status: string; exitCode?: number; cwd?: string }) => void): () => void;
+  onData(callback: (payload: string | { key?: string; data: string }) => void): () => void;
+  onState(callback: (state: { status: string; exitCode?: number; cwd?: string; key?: string }) => void): () => void;
   onOpenProject(callback: (projectPath: string) => void): () => void;
   catalog(): Promise<{ ok: boolean; catalog?: CatalogReport; agents?: AgentInfo[]; error?: string }>;
   searchMcpRegistry(query: string): Promise<{ ok: boolean; results: RegistryMcp[]; error?: string }>;
@@ -444,6 +597,8 @@ interface PiDesktopApi {
   getToolSettings(): Promise<{ ok: boolean; settings: ToolSettings }>;
   saveToolSettings(input: ToolSettings): Promise<{ ok: boolean; settings?: ToolSettings; error?: string }>;
   searchWeb(query: string): Promise<{ ok: boolean; results: SearchResult[]; error?: string }>;
+  searchRepos(query: string): Promise<{ ok: boolean; results: RepoResult[]; error?: string }>;
+  searchCode(query: string): Promise<{ ok: boolean; results: CodeResult[]; error?: string }>;
   fetchWebPage(url: string): Promise<{ ok: boolean; page?: PageContent; error?: string }>;
   crawlWeb(url: string): Promise<{ ok: boolean; pages: PageContent[]; links: string[]; error?: string }>;
   analyzePath(target: string): Promise<{ ok: boolean; lines?: string[]; error?: string }>;
@@ -652,7 +807,36 @@ terminal.onScroll(() => {
 
 let currentCwd = '';
 let running = false;
-let startPending = false;
+interface LiveView {
+  cwd: string;
+  status: 'starting' | 'running' | 'exited' | 'stopped';
+  buffer: string;
+}
+const liveByKey = new Map<string, LiveView>();
+const startingKeys = new Set<string>();
+const projectSessionCache = new Map<string, SessionEntry[]>();
+const expandedProjects = new Set<string>();
+const OUTPUT_LIMIT = 1_500_000;
+
+function keyFor(cwd: string): string {
+  return cwd.replace(/\\/g, '/').toLowerCase();
+}
+
+function activeLiveKey(): string {
+  return currentCwd ? keyFor(currentCwd) : '';
+}
+
+function activeLive(): LiveView | undefined {
+  const key = activeLiveKey();
+  return key ? liveByKey.get(key) : undefined;
+}
+
+function showLiveTerminal(key: string): void {
+  terminal.reset();
+  const live = key ? liveByKey.get(key) : undefined;
+  if (live?.buffer) terminal.write(live.buffer);
+}
+
 let fontSize = 15;
 let detectedVersion = '';
 let versionMissing = false;
@@ -688,6 +872,8 @@ const TASK_PREFERRED: Record<TaskKind, string[]> = {
   general: ['deepseek', 'moonshot', 'openai', 'anthropic', 'google', 'zhipu'],
 };
 let activeBoard: ModelBoard = 'cn';
+type ModelFilter = 'all' | 'added' | 'available';
+let modelFilter: ModelFilter = 'all';
 let routerEnabled = false;
 let routerMap: Partial<Record<TaskKind, string>> = {};
 let lastRoutedKey = '';
@@ -727,6 +913,7 @@ const collapsedCapabilityGroups = new Set<string>();
 const capabilityFormElement = $<HTMLFormElement>('capability-form');
 const capabilityKindSelect = $<HTMLSelectElement>('capability-kind');
 const capabilityScopeSelect = $<HTMLSelectElement>('capability-scope');
+const capabilityCategorySelect = $<HTMLSelectElement>('capability-category');
 const capabilityNameInput = $<HTMLInputElement>('capability-name');
 const capabilityDescriptionInput = $<HTMLInputElement>('capability-description');
 const capabilityBodyInput = $<HTMLTextAreaElement>('capability-body');
@@ -750,6 +937,7 @@ const routerMapElement = $('router-map');
 const routerNoteElement = $('router-note');
 const applyFreeButton = $<HTMLButtonElement>('apply-free-model');
 const boardTabs = [...document.querySelectorAll<HTMLButtonElement>('.board-tab')];
+const modelFilterElement = $('model-filter');
 const moduleListElement = $('module-list');
 const moduleFormElement = $<HTMLFormElement>('module-form');
 const moduleNameInput = $<HTMLInputElement>('module-name');
@@ -871,8 +1059,8 @@ function setSmartLevel(level: string): void {
     : '');
   const target = pickSmartModel(base);
   if (target && target !== shownModel) {
-    api.write(`/model ${target}\r`);
-    toast('已请求切换到 {model}', { model: target });
+    api.write(`/model ${target}\r`, activeLiveKey());
+    toast('已请求切换到 {model}；切换模型会重置 prompt cache', { model: target });
   } else if (next === 'auto') {
     toast('已保存，自动沿用当前模型');
   } else {
@@ -1117,7 +1305,7 @@ function doFit(): void {
     return;
   }
   updateSize();
-  if (running) api.resize(terminal.cols, terminal.rows);
+  if (running) api.resize(terminal.cols, terminal.rows, activeLiveKey());
 }
 
 function activateTab(id: string): void {
@@ -1173,13 +1361,22 @@ document.querySelectorAll<HTMLButtonElement>('.workspace-tabs [role=tab]').forEa
 
 function setProject(cwd: string): void {
   currentCwd = cwd;
+  const key = keyFor(cwd);
+  expandedProjects.add(key);
+  const live = liveByKey.get(key);
+  running = live?.status === 'running';
   rememberLastProject(cwd);
   projectPathElement.textContent = cwd;
   cwdElement.textContent = cwd;
   startButton.disabled = running;
   openFolderButton.disabled = false;
   openVSCodeButton.disabled = false;
-  if (!running) setTerminalHint('点击「新会话」启动 Pi');
+  showLiveTerminal(key);
+  if (!running) {
+    setTerminalHint(live?.status === 'exited' || live?.status === 'stopped'
+      ? '会话已结束 · 点击「新会话」或从项目树恢复'
+      : '点击「新会话」启动 Pi');
+  }
   audit('选择项目 {cwd}', { cwd });
   renderModules();
   todoItems = loadTodos();
@@ -1188,32 +1385,143 @@ function setProject(cwd: string): void {
   void refreshTaskGit();
   void refreshCapabilities();
   void refreshSessions();
+  renderProjects(lastProjects);
   panels?.setProject();
 }
 
 let lastProjects: ProjectRecord[] = [];
+const projectTreeLoading = new Set<string>();
+
+async function loadProjectTreeSessions(cwd: string): Promise<void> {
+  const key = keyFor(cwd);
+  if (projectSessionCache.has(key) || projectTreeLoading.has(key)) return;
+  projectTreeLoading.add(key);
+  try {
+    const result = await api.sessions(cwd);
+    projectSessionCache.set(key, result.ok && result.sessions ? result.sessions.slice(0, 8) : []);
+  } catch {
+    projectSessionCache.set(key, []);
+  } finally {
+    projectTreeLoading.delete(key);
+    renderProjects(lastProjects);
+  }
+}
 
 function renderProjects(projects: ProjectRecord[]): void {
   lastProjects = projects;
+  const list = [...projects];
+  if (currentCwd && !list.some((project) => project.path === currentCwd)) {
+    list.unshift({
+      path: currentCwd,
+      name: currentCwd.split(/[\\/]/).pop() || currentCwd,
+      lastUsed: Date.now(),
+      exists: true,
+    });
+  }
   recentElement.replaceChildren();
-  for (const project of projects) {
-    if (project.path === currentCwd) continue;
-    const button = document.createElement('button');
-    if (project.exists === false) button.classList.add('missing');
-    const head = document.createElement('span');
-    head.className = 'recent-head';
+  recentElement.classList.add('project-tree');
+  for (const project of list) {
+    const key = keyFor(project.path);
+    const live = liveByKey.get(key);
+    const active = project.path === currentCwd;
+    const expanded = expandedProjects.has(key);
+    const node = document.createElement('div');
+    node.className = 'project-node';
+    if (active) node.classList.add('active');
+    if (project.exists === false) node.classList.add('missing');
+
+    const row = document.createElement('div');
+    row.className = 'project-row';
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'project-toggle';
+    const chevron = document.createElement('span');
+    chevron.className = 'project-chevron';
+    chevron.textContent = '▸';
+    toggle.append(chevron);
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.title = t(expanded ? '收起会话' : '展开会话');
+    toggle.disabled = project.exists === false;
+    toggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (expanded) expandedProjects.delete(key);
+      else expandedProjects.add(key);
+      renderProjects(lastProjects);
+    });
+
+    const main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'project-main';
+    main.title = project.path;
+    const dot = document.createElement('span');
+    dot.className = 'project-dot';
+    if (live?.status === 'running' || live?.status === 'starting') dot.classList.add('live');
+    else if (live) dot.classList.add('done');
     const name = document.createElement('strong');
+    name.className = 'project-name';
     name.textContent = project.name;
-    const when = document.createElement('small');
-    when.className = 'recent-time';
-    when.textContent = project.lastUsed ? formatTime(new Date(project.lastUsed).toISOString()) : '';
-    head.append(name, when);
     const detail = document.createElement('small');
-    detail.textContent = project.exists === false ? `${t('路径无效')} · ${project.path}` : project.path;
-    button.append(head, detail);
-    button.title = project.path;
-    button.addEventListener('click', () => setProject(project.path));
-    recentElement.append(button);
+    detail.className = 'project-path';
+    detail.textContent = project.exists === false ? t('路径无效') : project.path;
+    main.append(dot, name, detail);
+    main.addEventListener('click', () => {
+      expandedProjects.add(key);
+      setProject(project.path);
+    });
+
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'project-new';
+    add.textContent = '+';
+    add.title = t('在此项目新建会话');
+    add.disabled = project.exists === false;
+    add.addEventListener('click', (event) => {
+      event.stopPropagation();
+      expandedProjects.add(key);
+      setProject(project.path);
+      void startSession();
+    });
+
+    row.append(toggle, main, add);
+    node.append(row);
+
+    if (expanded && project.exists !== false) {
+      const box = document.createElement('div');
+      box.className = 'project-sessions';
+      const sessions = projectSessionCache.get(key);
+      if (!sessions) {
+        const loading = document.createElement('div');
+        loading.className = 'project-session empty';
+        loading.textContent = t('读取会话…');
+        box.append(loading);
+        void loadProjectTreeSessions(project.path);
+      } else if (!sessions.length) {
+        const empty = document.createElement('div');
+        empty.className = 'project-session empty';
+        empty.textContent = t('暂无会话');
+        box.append(empty);
+      } else {
+        for (const session of sessions) {
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'project-session';
+          item.title = session.path;
+          const title = document.createElement('span');
+          title.textContent = formatTime(session.timestamp);
+          const id = document.createElement('small');
+          id.textContent = `${session.id.slice(0, 8)} · ${formatSize(session.size)}`;
+          item.append(title, id);
+          item.addEventListener('click', () => {
+            setProject(project.path);
+            void startSession(session.path);
+          });
+          box.append(item);
+        }
+      }
+      node.append(box);
+    }
+    recentElement.append(node);
   }
   if (!recentElement.children.length) {
     const empty = document.createElement('div');
@@ -1371,35 +1679,21 @@ async function runEnvironmentSetup(): Promise<void> {
   setupEnvButton.textContent = t('配置中…');
   let report: EnvironmentReport | null = null;
   try {
-    report = await api.probeEnvironment();
-    if (!report.node.ok) {
-      toast('未找到 Node.js，已打开下载页；安装后再次点击一键配置');
-      audit('环境异常：未找到 Node.js');
-      void api.openExternal('https://nodejs.org/zh-cn/download');
-      return;
-    }
-    if (!report.pi.ok) {
-      audit('开始安装 Pi');
-      const result = await api.installPi();
-      if (!result.ok) {
-        toast('Pi 安装失败：{error}', { error: result.error ?? t('未知错误') });
-        audit('Pi 安装失败：{error}', { error: result.error ?? t('未知错误') });
-        return;
-      }
-      audit(result.installed ? '已安装 Pi {version}' : 'Pi 已就绪 {version}', {
-        version: result.version ?? '',
-      });
-      toast('Pi 已就绪，正在重新检测环境');
-    } else {
-      audit('环境检查通过');
-    }
+    audit('开始一键配置环境');
+    const result = await api.setupEnvironment();
     report = await api.probeEnvironment();
     renderEnvironment(report);
     syncVersionFromEnvironment(report);
-    if (report.pi.ok) {
-      versionMissing = false;
-      if (!running) setState('idle', '未启动');
+    if (!result.ok) {
+      toast('环境配置未完成：{error}', { error: result.error ?? t('未知错误') });
+      audit('环境配置失败：{error}', { error: result.error ?? t('未知错误') });
+      if (result.needsRestart) toast('请重启工作台后再点一次一键配置');
+      return;
     }
+    toast('环境已就绪：Pi {version}', { version: result.version ?? '' });
+    audit(result.installed ? '已安装 Pi {version}' : 'Pi 已就绪 {version}', {
+      version: result.version ?? '',
+    });
   } catch (error) {
     toast('环境配置失败：{error}', { error: error instanceof Error ? error.message : String(error) });
   } finally {
@@ -1439,13 +1733,10 @@ function rememberLastProject(cwd: string): void {
 }
 
 async function openExternalProject(projectPath: string): Promise<void> {
-  if (running || startPending) {
-    await api.stopPi();
-    await new Promise((resolve) => window.setTimeout(resolve, 120));
-  }
   setProject(projectPath);
   void refreshProjects();
-  if (autoStartEnabled() && !versionMissing) void startSession();
+  const live = liveByKey.get(keyFor(projectPath));
+  if (autoStartEnabled() && !versionMissing && live?.status !== 'running') void startSession();
 }
 
 function contextLabel(value?: number): string {
@@ -1474,14 +1765,55 @@ function boardOf(model: ModelEntry): ModelBoard {
   return meta.region === 'cn' ? 'cn' : 'global';
 }
 
+function addedModelKeys(): Set<string> {
+  const keys = new Set<string>();
+  for (const module of modelModules) keys.add(`${module.provider}/${module.model}`);
+  for (const model of models) if (model.current) keys.add(`${model.provider}/${model.id}`);
+  return keys;
+}
+
+function availableProviderIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const provider of providers) {
+    if (provider.custom || provider.hasStoredKey || provider.keySource !== 'none') ids.add(provider.id);
+  }
+  return ids;
+}
+
+function renderModelFilter(counts: { all: number; added: number; available: number }): void {
+  for (const chip of modelFilterElement.querySelectorAll<HTMLButtonElement>('[data-model-filter]')) {
+    const id = chip.dataset.modelFilter as ModelFilter | undefined;
+    if (!id || !(id in counts)) continue;
+    chip.setAttribute('aria-pressed', String(id === modelFilter));
+    const label = id === 'added' ? t('已添加') : id === 'available' ? t('可用') : t('全部');
+    chip.textContent = `${label} ${counts[id]}`;
+  }
+}
+
 function renderModels(): void {
   modelListElement.replaceChildren();
   const query = modelSearchElement.value.trim().toLowerCase();
   const providerFilter = modelProviderElement.value;
-  const filtered = models.filter((model) => {
+  const boardModels = models.filter((model) => {
     if (boardOf(model) !== activeBoard) return false;
     if (providerFilter && model.provider !== providerFilter) return false;
     return query ? `${model.provider}/${model.id} ${model.name ?? ''}`.toLowerCase().includes(query) : true;
+  });
+  const addedKeys = addedModelKeys();
+  const availableIds = availableProviderIds();
+  const isAdded = (model: ModelEntry): boolean =>
+    addedKeys.has(`${model.provider}/${model.id}`) || Boolean(model.current);
+  const isAvailable = (model: ModelEntry): boolean =>
+    Boolean(model.free || model.current) || availableIds.has(model.provider);
+  renderModelFilter({
+    all: boardModels.length,
+    added: boardModels.filter(isAdded).length,
+    available: boardModels.filter(isAvailable).length,
+  });
+  const filtered = boardModels.filter((model) => {
+    if (modelFilter === 'added') return isAdded(model);
+    if (modelFilter === 'available') return isAvailable(model);
+    return true;
   });
 
   interface Group { key: string; label: string; tier: number; order: number; models: ModelEntry[] }
@@ -1505,7 +1837,7 @@ function renderModels(): void {
     head.type = 'button';
     head.className = 'vendor-head';
     const expanded = autoExpand || expandedVendors.has(group.key)
-      || group.models.some((model) => model.current);
+      || (selectedModel !== null && group.models.includes(selectedModel));
     head.setAttribute('aria-expanded', String(expanded));
     const name = document.createElement('span');
     name.className = 'vendor-name';
@@ -1556,6 +1888,12 @@ function renderModels(): void {
         tag.textContent = t('中转');
         tags.append(tag);
       }
+      if (addedKeys.has(`${model.provider}/${model.id}`) && !model.current) {
+        const tag = document.createElement('span');
+        tag.className = 'tag added';
+        tag.textContent = t('已添加');
+        tags.append(tag);
+      }
       if (model.current) {
         const tag = document.createElement('span');
         tag.className = 'tag current';
@@ -1588,9 +1926,17 @@ function renderModels(): void {
   if (!filtered.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = models.length
-      ? (activeBoard === 'free' ? t('未发现可判定的免费模型；可接入本地端点或 OpenRouter :free。') : t('没有匹配的模型。'))
-      : t('未读取到模型配置。');
+    if (!models.length) {
+      empty.textContent = t('未读取到模型配置。');
+    } else if (modelFilter === 'added') {
+      empty.textContent = t('这个板块还没有已添加的模型；在右侧「模型模块」里添加后会出现在这里。');
+    } else if (modelFilter === 'available') {
+      empty.textContent = t('没有已配置密钥的可用模型；未配置密钥的模型仍可在「全部」中查看。');
+    } else {
+      empty.textContent = activeBoard === 'free'
+        ? t('未发现可判定的免费模型；可接入本地端点或 OpenRouter :free。')
+        : t('没有匹配的模型。');
+    }
     modelListElement.append(empty);
   }
   renderRouterMap();
@@ -1626,6 +1972,38 @@ function stageModel(model: ModelEntry): void {
 }
 
 const ROUTER_KEY = 'pi-model-router';
+const MODEL_HABITS_KEY = 'pi-workbench-model-habits';
+let modelHabits: Record<string, Record<string, number>> = {};
+
+function loadModelHabits(): void {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MODEL_HABITS_KEY) ?? '{}') as Record<string, unknown>;
+    const result: Record<string, Record<string, number>> = {};
+    for (const task of TASK_KINDS) {
+      const bucket = raw[task.key];
+      if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) continue;
+      const counts: Record<string, number> = {};
+      for (const [key, value] of Object.entries(bucket as Record<string, unknown>)) {
+        if (typeof value === 'number' && value > 0) counts[key] = Math.min(20, value);
+      }
+      if (Object.keys(counts).length) result[task.key] = counts;
+    }
+    modelHabits = result;
+  } catch {
+    modelHabits = {};
+  }
+}
+
+function recordModelHabit(task: string, value: string): void {
+  const bucket = modelHabits[task] ?? {};
+  bucket[value] = Math.min(20, (bucket[value] ?? 0) + 1);
+  modelHabits[task] = bucket;
+  try {
+    localStorage.setItem(MODEL_HABITS_KEY, JSON.stringify(modelHabits));
+  } catch {
+    // storage is optional
+  }
+}
 
 function loadRouterConfig(): void {
   try {
@@ -1683,9 +2061,11 @@ function pickRouterModel(task: TaskKind): ModelEntry | null {
     if (match) return match;
   }
   const preferred = TASK_PREFERRED[task];
+  const learned = modelHabits[task] ?? {};
   const scored = models.map((model) => {
     const rank = preferred.indexOf(vendorKeyFor(model));
     let score = rank >= 0 ? (preferred.length - rank) * 100 : 0;
+    score += Math.min(5, learned[`${model.provider}/${model.id}`] ?? 0) * 25;
     if (model.free) score -= 40;
     if ((task === 'coding' || task === 'research' || task === 'data') && model.reasoning) score += 20;
     if (model.current) score += 5;
@@ -1732,6 +2112,10 @@ function renderRouterMap(): void {
       if (select.value) routerMap[task.key] = select.value;
       else delete routerMap[task.key];
       saveRouterConfig();
+      if (select.value) {
+        recordModelHabit(task.key, select.value);
+        void api.recordHabit({ type: 'model', value: select.value, task: t(task.label) });
+      }
     });
     row.append(name, select);
     routerMapElement.append(row);
@@ -1745,7 +2129,7 @@ async function maybeRouteModel(text: string): Promise<void> {
   if (!model) return;
   const key = `${model.provider}/${model.id}`;
   if (key === lastRoutedKey) return;
-  api.write(`/model ${key}\r`);
+  api.write(`/model ${key}\r`, activeLiveKey());
   lastRoutedKey = key;
   toast(t('总控：{task} → {model}', { task: t(taskLabel(task)), model: key }));
   audit('总控切换模型 · {task} → {model}', { task: t(taskLabel(task)), model: key });
@@ -1765,7 +2149,7 @@ function applyFreeModel(): void {
   const currentFree = free.find((model) => model.current);
   const pick = free.find((model) => !model.current) ?? currentFree ?? free[0];
   const key = `${pick.provider}/${pick.id}`;
-  api.write(`/model ${key}\r`);
+  api.write(`/model ${key}\r`, activeLiveKey());
   lastRoutedKey = key;
   toast(t('已切换到免费模型 {model}', { model: key }));
   audit('一键免费模型 · {model}（{reason}）', { model: key, reason: pick.freeReason ?? 'free' });
@@ -1788,12 +2172,21 @@ for (const tab of boardTabs) {
     renderModels();
   });
 }
+for (const chip of modelFilterElement.querySelectorAll<HTMLButtonElement>('[data-model-filter]')) {
+  chip.addEventListener('click', () => {
+    const value = chip.dataset.modelFilter;
+    if (value !== 'all' && value !== 'added' && value !== 'available') return;
+    modelFilter = value;
+    renderModels();
+  });
+}
 
 const MODULES_KEY = 'pi-model-modules';
 const BINDINGS_KEY = 'pi-project-models';
 modelModules = loadModelModules();
 projectModelBindings = loadProjectModelBindings();
 loadRouterConfig();
+loadModelHabits();
 
 function loadModelModules(): ModelModule[] {
   try {
@@ -1959,6 +2352,7 @@ function renderModules(): void {
   }
   projectModuleSelect.value = modelModules.some((module) => module.id === boundId) ? boundId : '';
   projectModuleSelect.disabled = !currentCwd;
+  renderModels();
 }
 
 function openModuleForm(module?: ModelModule): void {
@@ -2066,7 +2460,7 @@ function applyModule(module: ModelModule): void {
   });
   if (running) {
     const command = `/model ${module.provider}/${module.model}`;
-    api.write(`${command}\r`);
+    api.write(`${command}\r`, activeLiveKey());
     lastRoutedKey = `${module.provider}/${module.model}`;
     terminal.focus();
     toast('已切换模型 {model}', { model: `${module.provider}/${module.model}` });
@@ -2255,10 +2649,12 @@ async function refreshProviders(): Promise<void> {
     }
     providers = result.report.providers;
     renderProviders(result.report.warnings);
+    renderModels();
   } catch (error) {
     providerSummaryElement.textContent = error instanceof Error ? error.message : String(error);
     providers = [];
     providerListElement.replaceChildren();
+    renderModels();
   }
 }
 
@@ -2547,7 +2943,12 @@ function renderCapabilities(capabilities: CapabilityEntry[], warnings: string[])
   for (const kind of ['package', 'extension', 'skill', 'mcp'] as const) {
     const items = capabilities
       .filter((item) => item.kind === kind)
-      .filter((item) => !query || `${item.name} ${item.detail ?? ''}`.toLowerCase().includes(query));
+      .filter((item) => !query
+        || `${item.name} ${item.detail ?? ''} ${item.category ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase().includes(query))
+      .sort((left, right) => {
+        const byCategory = (left.category ?? '').localeCompare(right.category ?? '');
+        return byCategory !== 0 ? byCategory : left.name.localeCompare(right.name);
+      });
     if (!items.length) continue;
     shown += items.length;
     const group = document.createElement('details');
@@ -2567,7 +2968,21 @@ function renderCapabilities(capabilities: CapabilityEntry[], warnings: string[])
       else collapsedCapabilityGroups.add(kind);
     });
     group.append(head);
+    // 按大分类分段：全局安装后可以直接按分类定位并快速调用
+    let lastCategory = '';
     for (const item of items) {
+      const category = item.category?.trim() || t('未分类');
+      if (category !== lastCategory) {
+        lastCategory = category;
+        const subhead = document.createElement('div');
+        subhead.className = 'cap-subhead';
+        const label = document.createElement('span');
+        label.textContent = t(category);
+        const total = document.createElement('small');
+        total.textContent = String(items.filter((entry) => (entry.category?.trim() || t('未分类')) === category).length);
+        subhead.append(label, total);
+        group.append(subhead);
+      }
       const row = document.createElement('div');
       row.className = 'item';
       const main = document.createElement('span');
@@ -2578,10 +2993,30 @@ function renderCapabilities(capabilities: CapabilityEntry[], warnings: string[])
       detail.textContent = item.detail ?? item.kind;
       main.append(name, detail);
       const tags = document.createElement('span');
+      tags.className = 'cap-actions';
       const scope = document.createElement('span');
       scope.className = 'tag';
       scope.textContent = item.scope === 'user' ? t('用户') : t('项目');
       tags.append(scope);
+      if (kind === 'skill') {
+        const call = document.createElement('button');
+        call.type = 'button';
+        call.className = 'ghost small';
+        call.textContent = t('调用');
+        call.title = t('在 Pi 输入 /skill:{name}', { name: item.name });
+        call.addEventListener('click', async () => {
+          const command = `/skill:${item.name}`;
+          if (running) {
+            api.write(`${command}\r`, activeLiveKey());
+            terminal.focus();
+            toast(t('已调用技能 {name}', { name: item.name }));
+          } else {
+            await api.writeClipboard(command);
+            toast(t('已复制 {command}，启动 Pi 后粘贴即可', { command }));
+          }
+        });
+        tags.append(call);
+      }
       row.append(main, tags);
       group.append(row);
     }
@@ -2597,9 +3032,10 @@ function renderCapabilities(capabilities: CapabilityEntry[], warnings: string[])
     acc[item.kind] = (acc[item.kind] ?? 0) + 1;
     return acc;
   }, {});
+  const categories = new Set(capabilities.map((item) => item.category?.trim()).filter(Boolean));
   const parts = Object.entries(counts).map(([kind, count]) => `${t(KIND_LABELS[kind as CapabilityEntry['kind']])} ${count}`);
   capabilitySummaryElement.textContent = parts.length
-    ? `${parts.join(' · ')}${warnings.length ? ` · ${warnings.join('；')}` : ''}`
+    ? `${parts.join(' · ')}${categories.size ? ` · ${t('已分类 {count} 类', { count: categories.size })}` : ''}${warnings.length ? ` · ${warnings.join('；')}` : ''}`
     : t('未发现项目能力配置');
 }
 
@@ -2640,6 +3076,7 @@ function syncCapabilityFields(): void {
 function openCapabilityForm(): void {
   capabilityFormElement.hidden = false;
   capabilityScopeSelect.value = currentCwd ? 'project' : 'user';
+  capabilityCategorySelect.value = '自定义';
   setCapabilityNote('');
   syncCapabilityFields();
   capabilityNameInput.focus();
@@ -2671,6 +3108,7 @@ async function submitCapabilityForm(event: Event): Promise<void> {
     return;
   }
   setCapabilityNote('保存中…');
+  const category = capabilityCategorySelect.value || '自定义';
   try {
     const result = kind === 'mcp'
       ? await api.addMcp({
@@ -2680,6 +3118,9 @@ async function submitCapabilityForm(event: Event): Promise<void> {
         command: capabilityCommandInput.value.trim(),
         argsText: capabilityArgsInput.value,
         envText: capabilityEnvInput.value,
+        category,
+        tags: [category],
+        source: 'manual',
       })
       : await api.addSkill({
         scope,
@@ -2687,6 +3128,9 @@ async function submitCapabilityForm(event: Event): Promise<void> {
         name,
         description: capabilityDescriptionInput.value.trim(),
         body: capabilityBodyInput.value,
+        category,
+        tags: [category],
+        source: 'manual',
       });
     if (!result.ok) {
       setCapabilityNote(result.error ?? '保存失败', 'error');
@@ -3039,10 +3483,6 @@ function renderSessions(sessions: SessionEntry[]): void {
       tags.append(tag);
       button.append(main, tags);
       button.addEventListener('click', () => {
-        if (running) {
-          toast('先停止当前 Pi 再恢复会话');
-          return;
-        }
         void startSession(session.path);
       });
       list.append(button);
@@ -3078,12 +3518,16 @@ async function startSession(sessionPath?: string): Promise<void> {
     toast('先选择项目目录');
     return;
   }
-  if (running) {
+  const key = keyFor(currentCwd);
+  const projectCwd = currentCwd;
+  if (startingKeys.has(key)) return;
+  const existing = liveByKey.get(key);
+  if (existing?.status === 'running' && !sessionPath) {
     toast('Pi 已在运行');
     return;
   }
-  if (startPending) return;
-  startPending = true;
+  startingKeys.add(key);
+  liveByKey.set(key, { cwd: projectCwd, status: 'starting', buffer: '' });
   const projectModule = isolatedCheckbox.checked ? undefined : boundModule() ?? autoModule();
   setState('starting', '启动中');
   setTerminalHint('正在启动 Pi…');
@@ -3096,11 +3540,11 @@ async function startSession(sessionPath?: string): Promise<void> {
   alertBar.hidden = true;
   renderModels();
   activeModelElement.textContent = t('模型 —');
-  startButton.disabled = true;
+  if (currentCwd) startButton.disabled = true;
   terminal.reset();
   const baseModel = projectModule ? `${projectModule.provider}/${projectModule.model}` : '';
   const result = await api.startPi({
-    cwd: currentCwd,
+    cwd: projectCwd,
     cols: terminal.cols,
     rows: terminal.rows,
     sessionPath,
@@ -3111,33 +3555,50 @@ async function startSession(sessionPath?: string): Promise<void> {
     ok: false,
     error: error instanceof Error ? error.message : String(error),
   })).finally(() => {
-    startPending = false;
+    startingKeys.delete(key);
   });
   if (!result.ok) {
+    liveByKey.delete(key);
+    running = false;
     setState('error', '启动失败');
     startButton.disabled = false;
     setTerminalHint('启动失败，检查侧栏配置后重试');
     toast(result.error ?? t('启动失败'));
     audit('启动失败：{error}', { error: result.error ?? t('未知错误') });
+    renderProjects(lastProjects);
     return;
+  }
+  const resultKey = result.key || key;
+  const live = liveByKey.get(resultKey);
+  if (live) live.status = 'running';
+  else liveByKey.set(resultKey, { cwd: projectCwd, status: 'running', buffer: '' });
+  const stillActive = resultKey === activeLiveKey();
+  if (stillActive) {
+    running = true;
+    setState('running', '运行中');
+    setTerminalHint();
+    stopButton.disabled = false;
+    startButton.disabled = true;
   }
   isolatedDir = result.isolatedDir ?? '';
   isolatedElement.textContent = isolatedDir || '—';
   isolatedElement.title = isolatedElement.textContent;
-  setTerminalHint();
   if (sessionPath) audit('恢复 Pi 会话');
   else audit('启动 Pi {version}', { version: result.install?.version ?? '' });
   if (projectModule) {
     audit('按项目使用模型 {model}', { model: `${projectModule.provider}/${projectModule.model}` });
   }
-  doFit();
-  composerInput.focus();
-  updateComposerState();
+  if (stillActive) {
+    doFit();
+    composerInput.focus();
+    updateComposerState();
+  }
+  renderProjects(lastProjects);
   window.setTimeout(() => void refreshSessions(), 800);
 }
 
 terminal.onData((data) => {
-  if (running) api.write(data);
+  if (running) api.write(data, activeLiveKey());
 });
 
 function setFontSize(next: number): void {
@@ -3276,7 +3737,7 @@ composerInput.addEventListener('drop', (event) => {
 sendMessageButton.addEventListener('click', () => void sendComposerMessage());
 stopRunButton.addEventListener('click', () => {
   if (!running) return;
-  api.write('\x1b');
+  api.write('\x1b', activeLiveKey());
   toast('已发送中断');
   audit('中断当前生成');
 });
@@ -3483,7 +3944,7 @@ async function sendComposerMessage(): Promise<void> {
   if (!running) return;
   // Pi's TUI handles bracketed paste; multi-line input reaches the editor as one block.
   const payload = message.includes('\n') ? `\x1b[200~${message}\x1b[201~` : message;
-  api.write(`${payload}\r`);
+  api.write(`${payload}\r`, activeLiveKey());
   const attached = attachments.length;
   composerInput.value = '';
   attachments = [];
@@ -3688,7 +4149,7 @@ function executeNaturalIntent(intent: NaturalIntent): boolean {
       applyModule(target.module);
     } else if (running) {
       const command = `/model ${target.provider}/${target.model}`;
-      api.write(`${command}\r`);
+      api.write(`${command}\r`, activeLiveKey());
       lastRoutedKey = `${target.provider}/${target.model}`;
       terminal.focus();
       toast('已切换模型 {model}', { model: `${target.provider}/${target.model}` });
@@ -3719,13 +4180,13 @@ function executeNaturalIntent(intent: NaturalIntent): boolean {
     return true;
   }
   if (intent.kind === 'key') {
-    api.write(intent.data);
+    api.write(intent.data, activeLiveKey());
     terminal.focus();
     toast('已发送中断信号');
     audit('自然语言中断生成');
     return true;
   }
-  api.write(`${intent.command}\r`);
+  api.write(`${intent.command}\r`, activeLiveKey());
   terminal.focus();
   toast('已识别为 {command} · {label}', { command: intent.command, label: t(intent.label) });
   audit('自然语言执行 {command}', { command: intent.command });
@@ -3772,7 +4233,7 @@ function runPiCommand(command: string, insertOnly = false): void {
     toast('先启动 Pi 会话');
     return;
   }
-  api.write(`${command}\r`);
+  api.write(`${command}\r`, activeLiveKey());
   terminal.focus();
   audit('执行指令 {command}', { command });
 }
@@ -3927,13 +4388,46 @@ async function handleDroppedFiles(event: DragEvent): Promise<void> {
   }
 }
 
-api.onData((data) => {
+api.onData((payload) => {
+  const data = typeof payload === 'string' ? payload : payload.data;
+  const key = typeof payload === 'string' ? activeLiveKey() : (payload.key || activeLiveKey());
+  if (!data || !key) return;
+  let live = liveByKey.get(key);
+  if (!live) {
+    live = { cwd: currentCwd || key, status: 'running', buffer: '' };
+    liveByKey.set(key, live);
+  }
+  live.buffer = (live.buffer + data).slice(-OUTPUT_LIMIT);
+  if (key !== activeLiveKey()) {
+    api.ack(data.length, key);
+    return;
+  }
   lastOutputAt = Date.now();
   trackActiveModel(data);
-  terminal.write(data, () => api.ack(data.length));
+  terminal.write(data, () => api.ack(data.length, key));
 });
 
 api.onState((state) => {
+  const key = state.key || (state.cwd ? keyFor(state.cwd) : activeLiveKey());
+  if (!key) return;
+  let live = liveByKey.get(key);
+  if (!live) {
+    live = { cwd: state.cwd || currentCwd || key, status: 'running', buffer: '' };
+    liveByKey.set(key, live);
+  }
+  if (state.cwd) live.cwd = state.cwd;
+  if (state.status === 'running') live.status = 'running';
+  else if (state.status === 'exited' || state.status === 'stopped') live.status = state.status;
+
+  if (key !== activeLiveKey()) {
+    renderProjects(lastProjects);
+    if (state.status === 'exited') {
+      const name = live.cwd.split(/[\\/]/).pop() || live.cwd;
+      toast(t('后台项目 {name} 已退出', { name }));
+    }
+    return;
+  }
+
   if (state.status === 'running') {
     running = true;
     taskStartedAt = Date.now();
@@ -3972,6 +4466,7 @@ api.onState((state) => {
     void refreshTaskGit();
     window.setTimeout(() => void refreshSessions(), 500);
   }
+  renderProjects(lastProjects);
 });
 
 $('pick-project').addEventListener('click', async () => {
@@ -3986,7 +4481,7 @@ startButton.addEventListener('click', () => {
 });
 
 stopButton.addEventListener('click', async () => {
-  await api.stopPi();
+  await api.stopPi(activeLiveKey());
 });
 
 $('refresh-models').addEventListener('click', () => void refreshModels());
@@ -4090,6 +4585,7 @@ setDefaultButton.addEventListener('click', async () => {
     renderModels();
     toast('已设为默认模型；新 Pi 会话生效');
     audit('默认模型 {provider}/{model}', { provider, model: modelId });
+    void api.recordHabit({ type: 'model', value: `${provider}/${modelId}` });
   } finally {
     setDefaultButton.disabled = !selectedModel;
   }
@@ -4114,8 +4610,9 @@ sendButton.addEventListener('click', () => {
     toast('先启动 Pi');
     return;
   }
-  api.write(`${command}\r`);
+  api.write(`${command}\r`, activeLiveKey());
   lastRoutedKey = command.slice('/model '.length);
+  void api.recordHabit({ type: 'model', value: lastRoutedKey });
   terminal.focus();
   toast('已发送到终端');
   audit('终端执行 {command}', { command });
@@ -4200,6 +4697,7 @@ async function switchLocale(value: string): Promise<void> {
     // storage is optional
   }
   languageSelect.value = getLocale();
+  void api.recordHabit({ type: 'language', value: getLocale() });
   try {
     await api.setLocale(getLocale());
   } catch {
@@ -4278,6 +4776,13 @@ panels = initPanels({
   currentCwd: () => currentCwd,
   toast,
   refreshCapabilities: () => void refreshCapabilities(),
+  setRouterEnabled: (enabled) => {
+    routerEnabled = enabled;
+    routerToggleElement.checked = enabled;
+    saveRouterConfig();
+    renderRouterMap();
+  },
+  routerEnabled: () => routerEnabled,
 });
 
 const LAYOUT_KEY = 'pi-layout-widths';
@@ -4375,7 +4880,29 @@ function setupResizers(): void {
 
 setupResizers();
 
+// 渲染进程重载后，用后端在跑的项目补齐项目树上的运行状态（输出缓冲只在本次渲染进程内保留）
+async function hydrateLiveSessions(): Promise<void> {
+  try {
+    const result = await api.livePi();
+    if (!result.ok) return;
+    for (const session of result.sessions) {
+      const key = keyFor(session.cwd);
+      const existing = liveByKey.get(key);
+      if (!existing) liveByKey.set(key, { cwd: session.cwd, status: 'running', buffer: '' });
+      else if (existing.status !== 'running') existing.status = 'running';
+    }
+    if (currentCwd) {
+      const live = liveByKey.get(activeLiveKey());
+      running = live?.status === 'running';
+    }
+    renderProjects(lastProjects);
+  } catch {
+    // 后端尚未注册 IPC 时忽略，不影响正常启动
+  }
+}
+
 void (async () => {
+  await hydrateLiveSessions();
   await refreshProjects();
   const smokeCwd = new URLSearchParams(window.location.search).get('smokeCwd');
   if (smokeCwd) setProject(smokeCwd);

@@ -20,6 +20,12 @@ import type { CapabilityEntry, ModelReport, SessionEntry } from './inspect.js';
 import type { MediaResult } from './media.js';
 import type { FetchModelsResult, ProviderReport, SaveProviderResult } from './providers.js';
 import type { PageContent, SearchResult, ToolSettings } from './tools.js';
+import type { UsageReport } from './usage.js';
+import type { ArchiveMeta, ArchiveResult } from './archives.js';
+import type { MemoryHit, MemorySearchResult, MemoryStats, MemoryWriteResult } from './memory.js';
+import type { HabitEvent, HabitSummary } from './habits.js';
+import type { PermissionResult, ProjectPermissions } from './permissions.js';
+import type { UpdateCheckResult, UpdateSettings } from './updater.js';
 
 export interface LocateResult {
   ok: boolean;
@@ -29,6 +35,7 @@ export interface LocateResult {
 
 export interface StartResult {
   ok: boolean;
+  key?: string;
   isolatedDir?: string;
   isolated?: boolean;
   install?: { version: string; cliPath: string; nodePath: string };
@@ -40,6 +47,26 @@ export interface ProjectRecord {
   name: string;
   lastUsed: number;
   exists?: boolean;
+}
+
+export interface RepoResult {
+  name: string;
+  fullName: string;
+  url: string;
+  description: string;
+  stars: number;
+  forks: number;
+  language: string;
+  updatedAt: string;
+  topics: string[];
+  license: string;
+}
+
+export interface CodeResult {
+  repo: string;
+  path: string;
+  url: string;
+  snippet: string;
 }
 
 const api = {
@@ -84,9 +111,9 @@ const api = {
     ipcRenderer.invoke('catalog:search-mcp', query),
   searchExtensions: (query: string): Promise<{ ok: boolean; results: CatalogExtension[]; error?: string }> =>
     ipcRenderer.invoke('catalog:search-extensions', query),
-  installExtension: (name: string): Promise<{ ok: boolean; output: string; error?: string }> =>
-    ipcRenderer.invoke('catalog:install-extension', name),
-  importSkillUrl: (input: { url: string; scope: 'user' | 'project'; cwd?: string }): Promise<{ ok: boolean; path?: string; error?: string }> =>
+  installExtension: (input: string | { name: string; category?: string; tags?: string[]; source?: string }): Promise<{ ok: boolean; output: string; error?: string }> =>
+    ipcRenderer.invoke('catalog:install-extension', input),
+  importSkillUrl: (input: { url: string; scope: 'user' | 'project'; cwd?: string; category?: string; tags?: string[] }): Promise<{ ok: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('catalog:import-skill-url', input),
   listAgents: (refresh = false): Promise<{ ok: boolean; agents?: AgentInfo[]; error?: string }> =>
     ipcRenderer.invoke('agents:list', refresh),
@@ -144,6 +171,10 @@ const api = {
     ipcRenderer.invoke('tools:save-settings', input),
   searchWeb: (query: string): Promise<{ ok: boolean; results: SearchResult[]; error?: string }> =>
     ipcRenderer.invoke('tools:search', query),
+  searchRepos: (query: string): Promise<{ ok: boolean; results: RepoResult[]; error?: string }> =>
+    ipcRenderer.invoke('tools:search-repos', query),
+  searchCode: (query: string): Promise<{ ok: boolean; results: CodeResult[]; error?: string }> =>
+    ipcRenderer.invoke('tools:search-code', query),
   fetchWebPage: (url: string): Promise<{ ok: boolean; page?: PageContent; error?: string }> =>
     ipcRenderer.invoke('tools:fetch-page', url),
   crawlWeb: (url: string): Promise<{ ok: boolean; pages: PageContent[]; links: string[]; error?: string }> =>
@@ -170,6 +201,9 @@ const api = {
     name: string;
     description?: string;
     body?: string;
+    category?: string;
+    tags?: string[];
+    source?: string;
   }): Promise<CapabilityResult> => ipcRenderer.invoke('pi:add-skill', input),
   removeSkill: (input: { scope: 'user' | 'project'; cwd?: string; name: string }): Promise<CapabilityResult> =>
     ipcRenderer.invoke('pi:remove-skill', input),
@@ -180,6 +214,9 @@ const api = {
     command: string;
     argsText?: string;
     envText?: string;
+    category?: string;
+    tags?: string[];
+    source?: string;
   }): Promise<CapabilityResult> => ipcRenderer.invoke('pi:add-mcp', input),
   gitStatus: (cwd: string): Promise<GitStatusResult> => ipcRenderer.invoke('project:git-status', cwd),
   openPath: (target: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('app:open-path', target),
@@ -187,26 +224,68 @@ const api = {
   openVSCode: (target: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('app:open-vscode', target),
   probeEnvironment: (): Promise<EnvironmentReport> => ipcRenderer.invoke('env:probe'),
   installPi: (): Promise<SetupResult> => ipcRenderer.invoke('env:install-pi'),
+  setupEnvironment: (): Promise<SetupResult> => ipcRenderer.invoke('env:setup'),
+  updatePi: (): Promise<SetupResult> => ipcRenderer.invoke('env:update-pi'),
+  getPermissions: (cwd: string): Promise<PermissionResult> => ipcRenderer.invoke('permissions:get', cwd),
+  savePermissions: (input: {
+    cwd: string;
+    rules: ProjectPermissions['rules'];
+    workspaceOnly?: boolean;
+    autoApprove?: boolean;
+    allowPaths?: string[];
+    denyPaths?: string[];
+  }): Promise<PermissionResult> => ipcRenderer.invoke('permissions:save', input),
+  installPermissionGuard: (): Promise<{ ok: boolean; path?: string; installed?: boolean; error?: string }> =>
+    ipcRenderer.invoke('permissions:guard'),
+  permissionGuardStatus: (): Promise<{ installed: boolean; path: string }> =>
+    ipcRenderer.invoke('permissions:guard-status'),
+  listArchives: (cwd: string): Promise<{ ok: boolean; archives?: ArchiveMeta[]; path?: string; error?: string }> =>
+    ipcRenderer.invoke('archives:list', cwd),
+  createArchive: (input: { cwd: string; label?: string }): Promise<ArchiveResult> =>
+    ipcRenderer.invoke('archives:create', input),
+  restoreArchive: (input: { cwd: string; id: string }): Promise<ArchiveResult> =>
+    ipcRenderer.invoke('archives:restore', input),
+  deleteArchive: (input: { cwd: string; id: string }): Promise<ArchiveResult> =>
+    ipcRenderer.invoke('archives:delete', input),
+  ingestMemory: (cwd: string): Promise<MemoryWriteResult> => ipcRenderer.invoke('memory:ingest', cwd),
+  searchMemory: (input: { query: string; cwd?: string; scope?: 'project' | 'all'; limit?: number }): Promise<MemorySearchResult> =>
+    ipcRenderer.invoke('memory:search', input),
+  memoryStats: (cwd?: string): Promise<MemoryStats> => ipcRenderer.invoke('memory:stats', cwd),
+  recentMemory: (cwd: string, limit?: number): Promise<MemoryHit[]> => ipcRenderer.invoke('memory:recent', cwd, limit),
+  installMemorySkill: (): Promise<MemoryWriteResult> => ipcRenderer.invoke('memory:install-skill'),
+  recordHabit: (input: HabitEvent): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('habits:record', input),
+  habitSummary: (): Promise<HabitSummary> => ipcRenderer.invoke('habits:summary'),
+  checkUpdates: (): Promise<UpdateCheckResult> => ipcRenderer.invoke('update:check'),
+  downloadUpdate: (input: { url: string; name: string }): Promise<{ ok: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('update:download', input),
+  getUpdateSettings: (): Promise<UpdateSettings> => ipcRenderer.invoke('update:settings'),
+  saveUpdateSettings: (input: UpdateSettings): Promise<UpdateSettings> => ipcRenderer.invoke('update:save-settings', input),
   createShortcut: (target?: string): Promise<{ ok: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('app:create-shortcut', target),
   sessions: (cwd: string): Promise<{ ok: boolean; sessions?: SessionEntry[]; error?: string }> =>
     ipcRenderer.invoke('pi:sessions', cwd),
+  usageReport: (cwd: string): Promise<UsageReport | { ok: false; error: string }> =>
+    ipcRenderer.invoke('usage:report', cwd),
+  applyTokenSavings: (): Promise<{ ok: boolean; path?: string; backup?: string; applied?: Record<string, unknown>; error?: string }> =>
+    ipcRenderer.invoke('usage:apply-savings'),
   startPi: (options: { cwd: string; cols: number; rows: number; sessionPath?: string; isolated?: boolean; model?: string; thinking?: string }): Promise<StartResult> =>
     ipcRenderer.invoke('pi:start', options),
-  stopPi: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('pi:stop'),
-  write: (data: string): void => ipcRenderer.send('pi:write', data),
-  resize: (cols: number, rows: number): void => ipcRenderer.send('pi:resize', { cols, rows }),
-  ack: (bytes: number): void => ipcRenderer.send('pty:ack', bytes),
+  stopPi: (key?: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('pi:stop', key),
+  livePi: (): Promise<{ ok: boolean; sessions: Array<{ key: string; cwd: string; startedAt: number }> }> =>
+    ipcRenderer.invoke('pi:live'),
+  write: (data: string, key?: string): void => ipcRenderer.send('pi:write', { data, key }),
+  resize: (cols: number, rows: number, key?: string): void => ipcRenderer.send('pi:resize', { cols, rows, key }),
+  ack: (bytes: number, key?: string): void => ipcRenderer.send('pty:ack', { bytes, key }),
   readClipboard: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
   writeClipboard: (text: string): Promise<void> => ipcRenderer.invoke('clipboard:write', text),
   openExternal: (url: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('shell:open-external', url),
-  onData: (callback: (data: string) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, data: string) => callback(data);
+  onData: (callback: (payload: string | { key?: string; data: string }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: string | { key?: string; data: string }) => callback(payload);
     ipcRenderer.on('pty:data', listener);
     return () => ipcRenderer.removeListener('pty:data', listener);
   },
-  onState: (callback: (state: { status: string; exitCode?: number; cwd?: string }) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, state: { status: string; exitCode?: number; cwd?: string }) =>
+  onState: (callback: (state: { status: string; exitCode?: number; cwd?: string; key?: string }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: { status: string; exitCode?: number; cwd?: string; key?: string }) =>
       callback(state);
     ipcRenderer.on('pi:state', listener);
     return () => ipcRenderer.removeListener('pi:state', listener);

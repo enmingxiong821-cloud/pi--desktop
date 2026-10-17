@@ -32,6 +32,8 @@ export interface SetupResult {
   installed?: boolean;
   version?: string;
   output?: string;
+  steps?: string[];
+  needsRestart?: boolean;
   error?: string;
 }
 
@@ -94,12 +96,14 @@ export function probeEnvironment(): EnvironmentReport {
   return report;
 }
 
-export function installPi(): SetupResult {
-  try {
-    const existing = resolvePi();
-    return { ok: true, installed: false, version: existing.version };
-  } catch {
-    // not installed yet; continue
+export function installPi(force = false): SetupResult {
+  if (!force) {
+    try {
+      const existing = resolvePi();
+      return { ok: true, installed: false, version: existing.version };
+    } catch {
+      // not installed yet; continue
+    }
   }
 
   let nodePath: string;
@@ -133,4 +137,75 @@ export function installPi(): SetupResult {
       error: output || detail.message || String(error),
     };
   }
+}
+
+export function updatePi(): SetupResult {
+  return installPi(true);
+}
+
+// 一键配置：Windows 用 winget 补 Node LTS，再安装/更新 Pi；其他系统给出明确手动步骤
+export function setupEnvironment(): SetupResult {
+  const steps: string[] = [];
+  const initial = probeEnvironment();
+  if (initial.node.ok && initial.npm.ok) {
+    steps.push(t('Node.js 与 npm 已就绪'));
+  } else {
+    if (process.platform !== 'win32') {
+      return {
+        ok: false,
+        steps,
+        error: t('未检测到 Node.js/npm。请先安装 Node.js LTS，再回到工作台点「一键配置环境」。'),
+      };
+    }
+    steps.push(t('正在通过 winget 安装 Node.js LTS…'));
+    try {
+      execFileSync(
+        'winget',
+        [
+          'install', '--id', 'OpenJS.NodeJS.LTS', '-e',
+          '--accept-package-agreements', '--accept-source-agreements',
+          '--disable-interactivity',
+        ],
+        {
+          encoding: 'utf8',
+          windowsHide: true,
+          timeout: 20 * 60 * 1000,
+          maxBuffer: 16 * 1024 * 1024,
+        },
+      );
+      steps.push(t('Node.js LTS 安装完成'));
+    } catch (error) {
+      const detail = error as { stdout?: string; stderr?: string; message?: string };
+      const output = tail([detail.stdout ?? '', detail.stderr ?? ''].filter(Boolean).join('\n'));
+      return {
+        ok: false,
+        steps,
+        output,
+        error: output || t('winget 安装 Node.js 失败，请手动安装 Node.js LTS'),
+      };
+    }
+  }
+
+  const afterNode = probeEnvironment();
+  if (!afterNode.node.ok || !afterNode.npm.ok) {
+    return {
+      ok: false,
+      steps,
+      error: t('Node.js 已安装但当前进程尚未刷新 PATH，请重启工作台后再点一次。'),
+      needsRestart: true,
+    };
+  }
+
+  const pi = installPi(true);
+  steps.push(pi.ok
+    ? t('Pi 已安装/更新到 {version}', { version: pi.version ?? '' })
+    : t('Pi 安装失败：{error}', { error: pi.error ?? '' }));
+  return {
+    ok: pi.ok,
+    installed: pi.installed,
+    version: pi.version,
+    output: pi.output,
+    steps,
+    error: pi.ok ? undefined : pi.error,
+  };
 }

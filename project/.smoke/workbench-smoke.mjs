@@ -123,6 +123,7 @@ ipcMain.handle('pi:sessions', () => ({
     { id: 'session-old-0002', path: path.join(root, '.smoke', 'session-old.jsonl'), timestamp: new Date(Date.now() - 10 * 86400e3).toISOString(), cwd: root, size: 4096 },
   ],
 }));
+ipcMain.handle('pi:live', () => ({ ok: true, sessions: [] }));
 ipcMain.handle('project:git-status', () => ({ ok: true, repo: true, branch: 'main', ahead: 0, behind: 0, changes: [] }));
 ipcMain.handle('pi:add-skill', (_e, input) => { record('addSkill', input); return { ok: true, path: '.pi/skills/demo/SKILL.md' }; });
 ipcMain.handle('pi:add-mcp', (_e, input) => { record('addMcp', input); return { ok: true, path: '.pi/mcp.json' }; });
@@ -133,6 +134,22 @@ ipcMain.handle('catalog:install-extension', (_e, name) => { record('installExten
 ipcMain.handle('catalog:import-skill-url', (_e, input) => { record('importSkill', input); return { ok: true, path: '.pi/skills/demo/SKILL.md' }; });
 ipcMain.handle('pi:remove-skill', (_e, input) => { record('removeSkill', input); return { ok: true, path: '.pi/skills/demo/SKILL.md' }; });
 ipcMain.handle('tools:list-apps', (_e, refresh) => { record('listApps', refresh); return { ok: true, apps: localApps }; });
+ipcMain.handle('usage:report', (_e, cwd) => {
+  record('usageReport', cwd);
+  return {
+    ok: true,
+    sessions: [{
+      id: 'session-demo-1', path: 'C:\\sessions\\demo.jsonl',
+      startedAt: '2026-10-17T01:00:00.000Z', updatedAt: '2026-10-17T02:00:00.000Z', size: 2048,
+      cacheHitRate: 0.6,
+      totals: { input: 2000, output: 1500, cacheRead: 3000, cacheWrite: 400, totalTokens: 6900, cost: 0.12, requests: 4 },
+      models: [{ provider: 'demo', model: 'mini', input: 2000, output: 1500, cacheRead: 3000, cacheWrite: 400, totalTokens: 6900, cost: 0.12, requests: 4 }],
+    }],
+    totals: { input: 2000, output: 1500, cacheRead: 3000, cacheWrite: 400, totalTokens: 6900, cost: 0.12, requests: 4 },
+    cacheHitRate: 0.6,
+    generatedAt: '2026-10-17T02:00:00.000Z',
+  };
+});
 ipcMain.handle('tools:scan-apps', (_e, refresh) => {
   record('scanApps', refresh);
   return { ok: true, apps: [
@@ -173,6 +190,31 @@ ipcMain.handle('tools:search', (_e, query) => {
       { title: 'Agent orchestration guide', url: 'https://example.com/agents', snippet: 'How supervisors assign work.' },
     ],
   };
+});
+ipcMain.handle('tools:search-repos', (_e, query) => {
+  record('searchRepos', query);
+  return {
+    ok: true,
+    results: [{
+      name: 'pi-agent', fullName: 'example/pi-agent', url: 'https://github.com/example/pi-agent',
+      description: 'Desktop workbench for Pi', stars: 1200, forks: 80, language: 'TypeScript',
+      updatedAt: '2026-10-01T00:00:00.000Z', topics: ['desktop', 'agent'], license: 'MIT',
+    }],
+  };
+});
+ipcMain.handle('tools:search-code', (_e, query) => {
+  record('searchCode', query);
+  return {
+    ok: true,
+    results: [{
+      repo: 'example/pi-agent', path: 'src/main.ts', url: 'https://github.com/example/pi-agent/blob/main/src/main.ts',
+      snippet: 'const app = createWorkbench();',
+    }],
+  };
+});
+ipcMain.handle('usage:apply-savings', () => {
+  record('applyTokenSavings', true);
+  return { ok: true, path: 'C:\\Users\\demo\\.pi\\agent\\settings.json', backup: 'settings.json.bak', applied: {} };
 });
 ipcMain.handle('tools:fetch-page', (_e, url) => {
   record('fetchPage', url);
@@ -237,6 +279,46 @@ ipcMain.handle('clipboard:read', () => '');
 ipcMain.handle('clipboard:write', () => undefined);
 ipcMain.handle('shell:open-external', (_e, url) => { record('openExternal', url); return { ok: true }; });
 
+const emptyRules = { fileRead: 'allow', fileWrite: 'ask', shell: 'ask', network: 'ask', gitWrite: 'ask', packageInstall: 'deny' };
+ipcMain.handle('permissions:get', (_e, cwd) => ({ ok: true, path: path.join(cwd, '.pi', 'workbench-permissions.json'),
+  permissions: { version: 1, project: cwd, updatedAt: '', rules: emptyRules, allowPaths: [], denyPaths: [], workspaceOnly: true, autoApprove: false } }));
+ipcMain.handle('permissions:save', (_e, input) => { record('savePermissions', input);
+  return { ok: true, permissions: { version: 1, project: input.cwd, updatedAt: new Date().toISOString(), rules: input.rules, allowPaths: input.allowPaths ?? [], denyPaths: input.denyPaths ?? [], workspaceOnly: input.workspaceOnly !== false, autoApprove: input.autoApprove === true } }; });
+ipcMain.handle('permissions:guard-status', () => ({ installed: false, path: 'C:\\Users\\smoke\\.pi\\agent\\extensions\\workbench-permissions.ts' }));
+ipcMain.handle('permissions:guard', () => ({ ok: true, installed: true, path: 'C:\\Users\\smoke\\.pi\\agent\\extensions\\workbench-permissions.ts' }));
+ipcMain.handle('archives:list', (_e, cwd) => ({ ok: true, archives: [{
+  id: '20260101-000000-abcdef', label: 'smoke snapshot', project: cwd, createdAt: '2026-01-01T00:00:00.000Z',
+  branch: 'main', head: 'abc1234', changedFiles: 2, untrackedFiles: 1, patchBytes: 1200, untrackedBytes: 300,
+}] }));
+ipcMain.handle('archives:create', (_e, input) => { record('createArchive', input); return { ok: true, archive: {
+  id: '20260101-000000-abcdef', label: input.label || 'snapshot', project: input.cwd, createdAt: new Date().toISOString(),
+  branch: 'main', head: 'abc1234', changedFiles: 1, untrackedFiles: 0, patchBytes: 100, untrackedBytes: 0,
+} }; });
+ipcMain.handle('archives:restore', (_e, input) => { record('restoreArchive', input); return { ok: true, touched: ['a.ts'] }; });
+ipcMain.handle('archives:delete', (_e, input) => { record('deleteArchive', input); return { ok: true }; });
+ipcMain.handle('memory:stats', (_e, cwd) => ({ ok: true, entries: 4, projects: 1, projectEntries: cwd ? 4 : 0,
+  updatedAt: '2026-01-01T00:00:00.000Z', bytes: 512, path: 'C:\\Users\\smoke\\.pi\\agent\\workbench-memory\\entries.jsonl' }));
+ipcMain.handle('memory:recent', () => [{ id: 'm1', project: '', sessionId: 's1', role: 'user',
+  timestamp: '2026-01-01T00:00:00.000Z', text: '历史决策：使用本地记忆', score: 0, snippet: '历史决策：使用本地记忆' }]);
+ipcMain.handle('memory:ingest', () => ({ ok: true, added: 0 }));
+ipcMain.handle('memory:search', () => ({ ok: true, hits: [], scanned: 0 }));
+ipcMain.handle('memory:install-skill', () => ({ ok: true, path: 'C:\\Users\\smoke\\.pi\\agent\\skills\\workbench-memory' }));
+ipcMain.handle('habits:record', (_e, input) => { record('recordHabit', input); return { ok: true }; });
+ipcMain.handle('habits:summary', () => ({ ok: true, updatedAt: '2026-01-01T00:00:00.000Z',
+  top: [{ type: 'model', value: 'openai/gpt-5', count: 3, lastAt: '2026-01-01T00:00:00.000Z' },
+    { type: 'permission', value: '完全自动', count: 2, lastAt: '2026-01-01T00:00:00.000Z' }],
+  profilePath: 'C:\\Users\\smoke\\.pi\\agent\\workbench-memory\\profile.md' }));
+ipcMain.handle('update:settings', () => ({ autoCheck: false, autoDownload: false }));
+ipcMain.handle('update:save-settings', (_e, input) => input);
+ipcMain.handle('update:check', () => ({ ok: true,
+  app: { current: '1.0.0', latest: '1.1.0', hasUpdate: true, url: 'https://example.com/releases', notes: '', publishedAt: '2026-01-01T00:00:00.000Z',
+    asset: { name: 'Pi-Workbench-Setup.exe', url: 'https://example.com/Pi-Workbench-Setup.exe', size: 1024 } },
+  pi: { current: '1.0.0', latest: '1.0.0', hasUpdate: false }, checkedAt: '2026-01-01T00:00:00.000Z' }));
+ipcMain.handle('update:download', () => ({ ok: false, error: 'stub' }));
+ipcMain.handle('env:setup', () => ({ ok: true, installed: false, version: '1.0.0', steps: [] }));
+ipcMain.handle('env:update-pi', () => ({ ok: true, installed: true, version: '1.0.0' }));
+
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
@@ -265,12 +347,123 @@ async function run() {
   await wait(1200);
 
   const projectState = JSON.parse(await js(`JSON.stringify({
-    items: document.querySelectorAll('#recent-projects button').length,
-    missing: document.querySelectorAll('#recent-projects button.missing').length,
-    times: [...document.querySelectorAll('#recent-projects .recent-time')].map((el) => el.textContent),
+    items: document.querySelectorAll('#recent-projects .project-node').length,
+    missing: document.querySelectorAll('#recent-projects .project-node.missing').length,
+    names: [...document.querySelectorAll('#recent-projects .project-name')].map((el) => el.textContent),
   })`));
+  expect(projectState.items >= 2, `project tree groups rendered (${projectState.items})`);
   expect(projectState.missing >= 1, `invalid project path marked (${projectState.missing})`);
-  expect(projectState.times.every((value) => value), 'recent projects show last-used time');
+  expect(projectState.names.includes('旧项目'), `project names rendered (${projectState.names})`);
+
+  // 项目工具已迁入左侧栏：权限 / 存档 / 记忆 / 托管；更新在设置
+  const dockState = JSON.parse(await js(`JSON.stringify({
+    tabs: document.querySelectorAll('.dock-tab').length,
+    inSidebar: Boolean(document.querySelector('#project-dock')?.closest('.sidebar')),
+    permFields: document.querySelectorAll('#perm-grid .perm-field').length,
+    presets: document.querySelectorAll('#perm-presets .perm-preset').length,
+    presetChecked: [...document.querySelectorAll('#perm-presets .perm-preset')]
+      .filter((el) => el.getAttribute('aria-checked') === 'true').map((el) => el.querySelector('strong')?.textContent),
+    advancedOpen: document.getElementById('perm-advanced').open,
+    guardState: document.getElementById('perm-guard-state').textContent,
+    archives: document.querySelectorAll('#archive-list .archive-item').length,
+    memories: document.querySelectorAll('#memory-results .memory-hit').length,
+    permStatus: document.getElementById('perm-status').textContent,
+    resizer: Boolean(document.getElementById('dock-resizer')),
+    workspaceOnly: document.getElementById('perm-workspace-only')?.checked,
+    autoApprove: document.getElementById('perm-auto-approve')?.checked,
+    shortcutInSettings: Boolean(document.getElementById('create-shortcut')?.closest('#pane-settings')),
+    memoryScope: document.getElementById('memory-scope')?.value,
+    autopilot: Boolean(document.getElementById('autopilot-toggle')),
+    habits: document.getElementById('memory-habits')?.textContent,
+  })`));
+  expect(dockState.tabs === 4, `dock has four tabs (${dockState.tabs})`);
+  expect(dockState.inSidebar, 'project tools live in the left sidebar');
+  expect(dockState.permFields === 6, `permission grid rendered (${dockState.permFields})`);
+  expect(dockState.presets === 6, `permission presets rendered (${dockState.presets})`);
+  expect(dockState.presetChecked.join('|') === '标准', `standard preset selected (${dockState.presetChecked})`);
+  expect(dockState.advancedOpen === false, 'advanced permission details stay collapsed');
+  expect(dockState.guardState.includes('未安装'), `guard status warns when missing (${dockState.guardState})`);
+  expect(dockState.archives === 1, `archive list rendered (${dockState.archives})`);
+  expect(dockState.memories >= 1, `recent memory rendered (${dockState.memories})`);
+  expect(Boolean(dockState.permStatus), 'permission status text present');
+  expect(!dockState.resizer, 'dock resizer removed');
+  expect(dockState.workspaceOnly === true, 'workspace-only enabled by default');
+  expect(dockState.autoApprove === false, 'auto-approve is off by default');
+  expect(dockState.shortcutInSettings, 'desktop shortcut action moved into Settings');
+  expect(dockState.memoryScope === 'project', `memory defaults to project scope (${dockState.memoryScope})`);
+  expect(dockState.autopilot, 'autopilot panel present');
+  expect(String(dockState.habits).includes('习惯画像'), `habit profile rendered (${dockState.habits})`);
+
+  await js(`document.querySelectorAll('#perm-presets .perm-preset')[3]?.click()`);
+  await wait(300);
+  const presetApplied = JSON.parse(await js(`JSON.stringify({
+    checked: [...document.querySelectorAll('#perm-presets .perm-preset')]
+      .filter((el) => el.getAttribute('aria-checked') === 'true').map((el) => el.querySelector('strong')?.textContent),
+    grid: [...document.querySelectorAll('#perm-grid select')].map((el) => el.value),
+    workspaceOnly: document.getElementById('perm-workspace-only').checked,
+  })`));
+  expect(presetApplied.checked.join('|') === '完全自动', `preset click selects full auto (${presetApplied.checked})`);
+  expect(presetApplied.grid.every((value) => value === 'allow'), `full auto allows every action (${presetApplied.grid})`);
+  expect(presetApplied.workspaceOnly, 'full auto keeps writes inside the project');
+  expect(calls.some(([name]) => name === 'savePermissions'), 'preset click saves permissions');
+  expect(calls.some(([name]) => name === 'recordHabit'), 'preset click records a habit');
+
+  await js(`document.querySelectorAll('#perm-presets .perm-preset')[4]?.click()`);
+  await wait(300);
+  const fullAccess = JSON.parse(await js(`JSON.stringify({
+    checked: [...document.querySelectorAll('#perm-presets .perm-preset')]
+      .filter((el) => el.getAttribute('aria-checked') === 'true').map((el) => el.querySelector('strong')?.textContent),
+    workspaceOnly: document.getElementById('perm-workspace-only').checked,
+  })`));
+  const lastSave = [...calls].reverse().find(([name]) => name === 'savePermissions')?.[1];
+  expect(fullAccess.checked.join('|') === '完全访问', `full access preset selectable (${fullAccess.checked})`);
+  expect(!fullAccess.workspaceOnly, 'full access lifts the workspace boundary');
+  expect(lastSave?.workspaceOnly === false, `full access saves workspaceOnly=false (${JSON.stringify(lastSave?.workspaceOnly)})`);
+  await js(`(() => {
+    const el = document.getElementById('perm-auto-approve');
+    el.checked = true;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await wait(300);
+  const autoSave = [...calls].reverse().find(([name]) => name === 'savePermissions')?.[1];
+  expect(autoSave?.autoApprove === true, `auto approve is saved for the project (${JSON.stringify(autoSave?.autoApprove)})`);
+  await js(`document.getElementById('perm-reset').click()`);
+  await wait(200);
+  const afterReset = JSON.parse(await js(`JSON.stringify({
+    workspaceOnly: document.getElementById('perm-workspace-only').checked,
+    autoApprove: document.getElementById('perm-auto-approve').checked,
+    scope: document.getElementById('memory-scope').value,
+  })`));
+  expect(afterReset.workspaceOnly === true, 'reset restores workspace-only');
+  expect(afterReset.autoApprove === false, 'reset turns auto approve off');
+
+  await js(`(() => {
+    const scope = document.getElementById('memory-scope');
+    scope.value = 'all';
+    scope.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await wait(300);
+  const scopeState = JSON.parse(await js(`JSON.stringify({
+    stored: localStorage.getItem('pi-workbench-memory-scope'),
+    value: document.getElementById('memory-scope').value,
+  })`));
+  expect(scopeState.stored === 'all' && scopeState.value === 'all', `memory scope persists (${JSON.stringify(scopeState)})`);
+  await js(`(() => {
+    const scope = document.getElementById('memory-scope');
+    scope.value = 'project';
+    scope.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+
+  await js(`document.getElementById('update-check').click()`);
+  await wait(500);
+  const updateState = JSON.parse(await js(`JSON.stringify({
+    inSettings: Boolean(document.getElementById('update-check')?.closest('#pane-settings')),
+    items: document.querySelectorAll('#update-list .update-item').length,
+    downloadVisible: !document.getElementById('update-download').hidden,
+  })`));
+  expect(updateState.inSettings, 'update controls live in the settings pane');
+  expect(updateState.items === 2, `update list shows app and Pi (${updateState.items})`);
+  expect(updateState.downloadVisible, 'download button appears when an asset exists');
 
   // 从其他编辑器导入最近项目
   await js(`document.getElementById('import-projects-drawer').open = true`);
@@ -318,6 +511,28 @@ async function run() {
   expect(modelView.groups[0]?.name === 'Demo Labs', `domestic vendor first (${modelView.groups[0]?.name})`);
   expect(modelView.groups[0]?.models.length === 2, 'vendor group lists its models');
 
+  const filterChips = JSON.parse(await js(`JSON.stringify(
+    [...document.querySelectorAll('#model-filter [data-model-filter]')].map((el) => ({
+      id: el.dataset.modelFilter, text: el.textContent, pressed: el.getAttribute('aria-pressed'),
+    })))`));
+  expect(filterChips.length === 3, `model filter chips rendered (${filterChips.length})`);
+  expect(filterChips.find((chip) => chip.id === 'all')?.text === '全部 2', `all chip counts board models (${filterChips.map((chip) => chip.text).join(',')})`);
+  expect(filterChips.find((chip) => chip.id === 'added')?.text === '已添加 1', 'added chip counts saved models');
+  expect(filterChips.find((chip) => chip.id === 'available')?.text === '可用 1', 'available chip counts usable models');
+
+  await js(`document.querySelector('[data-model-filter="available"]').click()`);
+  await wait(150);
+  const availableView = await readGroups();
+  expect(availableView.groups.length === 1 && availableView.groups[0]?.models.length === 1,
+    `available filter keeps usable models only (${JSON.stringify(availableView.groups)})`);
+  expect(availableView.groups[0]?.models[0]?.includes('demo-model'), 'available filter keeps the current model');
+  await js(`document.querySelector('[data-model-filter="added"]').click()`);
+  await wait(150);
+  const addedView = await readGroups();
+  expect(addedView.groups[0]?.models.length === 1, 'added filter keeps default model');
+  await js(`document.querySelector('[data-model-filter="all"]').click()`);
+  await wait(150);
+
   await js(`document.querySelector('.board-tab[data-board="global"]').click()`);
   await wait(150);
   const globalView = await readGroups();
@@ -340,7 +555,7 @@ async function run() {
   await js(`document.getElementById('tab-market').click()`);
   await wait(500);
   const marketExtensions = await js(`JSON.stringify(document.querySelectorAll('#market-list .market-card').length)`);
-  expect(marketExtensions === '1', `market lists extensions by default (${marketExtensions})`);
+  expect(marketExtensions === '3', `market lists all capabilities by default (${marketExtensions})`);
 
   await js(`document.querySelector('.market-tab[data-market="skills"]').click()`);
   await wait(300);
@@ -583,6 +798,21 @@ async function run() {
   } catch (error) {
     console.log('visual screenshot skipped:', String(error));
   }
+
+  await js(`document.getElementById('tab-ws-cost').click()`);
+  await wait(400);
+  const usageState = JSON.parse(await js(`JSON.stringify({
+    visible: document.getElementById('pane-ws-cost').hidden === false,
+    cards: document.querySelectorAll('#usage-cards .usage-card').length,
+    tips: document.querySelectorAll('#usage-tips .usage-tip').length,
+    sessions: document.querySelectorAll('#usage-sessions .usage-session').length,
+    status: document.getElementById('usage-status').textContent,
+  })`));
+  expect(usageState.visible === true, 'token usage workspace opens');
+  expect(usageState.cards === 4, `usage cards rendered (${usageState.cards})`);
+  expect(usageState.tips >= 1, `usage tips rendered (${usageState.tips})`);
+  expect(usageState.sessions === 1, `usage sessions listed (${usageState.sessions})`);
+  expect(calls.some(([name]) => name === 'usageReport'), 'usage panel calls backend');
 
   await js(`document.getElementById('tab-settings').click()`);
   await js(`document.querySelector('[data-open-app="vscode"]').click()`);

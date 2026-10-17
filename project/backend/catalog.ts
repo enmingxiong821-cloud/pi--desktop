@@ -288,6 +288,456 @@ const SKILLS: CatalogSkill[] = [
       '不写内部工具署名。',
     ].join('\n'),
   },
+  {
+    id: 'tdd-workflow',
+    name: 'tdd-workflow',
+    title: '测试驱动开发',
+    description: '先写失败测试再实现，按红-绿-重构循环推进，每步保持可运行。',
+    tags: ['开发', '测试'],
+    body: [
+      '# 测试驱动开发',
+      '',
+      '1. 用最小用例复现需求，确认测试失败且失败原因正确。',
+      '2. 写刚好让测试通过的实现，不提前抽象。',
+      '3. 在测试保护下重构，每轮结束运行完整测试。',
+      '不修改测试来迁就实现；测试无法表达需求时先回到需求澄清。',
+    ].join('\n'),
+  },
+  {
+    id: 'unit-test-plan',
+    name: 'unit-test-plan',
+    title: '单元测试计划',
+    description: '按函数边界、分支与错误路径列出测试点，避免只覆盖正常流程。',
+    tags: ['测试', '质量'],
+    body: [
+      '# 单元测试计划',
+      '',
+      '列出：被测单元、输入域、分支条件、外部依赖与替身方式。',
+      '每个分支至少一个用例，错误路径与空值单独覆盖。',
+      '测试命名说明场景与预期；断言失败时必须能定位原因。',
+      '不追求覆盖率数字，优先覆盖会出错的边界。',
+    ].join('\n'),
+  },
+  {
+    id: 'e2e-plan',
+    name: 'e2e-plan',
+    title: '端到端测试计划',
+    description: '设计关键用户路径的浏览器级测试，覆盖登录、主流程与失败恢复。',
+    tags: ['测试', '浏览器'],
+    body: [
+      '# 端到端测试计划',
+      '',
+      '只保留 3–7 条最能代表用户价值的路径，避免把所有单元测试搬到浏览器。',
+      '每条路径写清：前置数据、操作步骤、可观察断言、失败后的清理。',
+      '选择稳定的定位方式（角色/文本优先），避免依赖样式与 DOM 层级。',
+      '外部服务使用本地假服务或录制样本，不调用付费接口。',
+    ].join('\n'),
+  },
+  {
+    id: 'api-test',
+    name: 'api-test',
+    title: '接口测试',
+    description: '覆盖状态码、错误结构、幂等与权限边界的接口测试设计。',
+    tags: ['测试', '开发', '文档'],
+    body: [
+      '# 接口测试',
+      '',
+      '每个接口验证：正常输入、缺失字段、类型错误、越权、重复提交与超限。',
+      '断言状态码之外，还要校验错误码、消息结构与副作用。',
+      '写操作测试使用独立测试数据，结束后回滚。',
+      '把请求示例同步到文档，避免文档与实现漂移。',
+    ].join('\n'),
+  },
+  {
+    id: 'perf-test',
+    name: 'perf-test',
+    title: '性能测试',
+    description: '定义可复现的负载模型，测量延迟、吞吐与资源占用并给出瓶颈结论。',
+    tags: ['测试', '质量'],
+    body: [
+      '# 性能测试',
+      '',
+      '先固定环境与数据规模，再测基线；不要在不同机器上比较绝对数字。',
+      '记录 p50/p95/p99 延迟、吞吐、错误率、CPU 与内存。',
+      '每次只改变一个变量，保留可复现脚本与原始数据。',
+      '结论必须指出瓶颈位置与下一步验证方式，不只看平均值。',
+    ].join('\n'),
+  },
+  {
+    id: 'test-data',
+    name: 'test-data',
+    title: '测试数据设计',
+    description: '构造可复现、无真实隐私的测试数据，覆盖空值、极值与异常组合。',
+    tags: ['测试', '数据'],
+    body: [
+      '# 测试数据设计',
+      '',
+      '使用合成数据，不复制真实用户信息、密钥或生产导出。',
+      '覆盖：空值、极值、超长文本、重复、乱序、时区与编码差异。',
+      '数据生成脚本入库，保证任何人可重建同一份数据。',
+      '涉及删除或写入时提供幂等重置方式。',
+    ].join('\n'),
+  },
+  {
+    id: 'flaky-triage',
+    name: 'flaky-triage',
+    title: '不稳定测试排查',
+    description: '定位随机失败的测试，区分环境、时序、数据与真实缺陷。',
+    tags: ['测试', '质量'],
+    body: [
+      '# 不稳定测试排查',
+      '',
+      '先收集失败率与失败日志，确认是否与执行顺序、并发或时间相关。',
+      '禁止用加重试掩盖问题；重试只能作为临时缓解并记录原因。',
+      '常见根因：共享状态、异步未等待、真实时钟、外部网络、随机端口。',
+      '修复后连续运行多轮验证，再恢复 CI 门禁。',
+    ].join('\n'),
+  },
+  {
+    id: 'threat-model',
+    name: 'threat-model',
+    title: '威胁建模',
+    description: '按资产、入口、信任边界与攻击路径梳理风险，给出最小缓解措施。',
+    tags: ['安全', '架构'],
+    body: [
+      '# 威胁建模',
+      '',
+      '列出资产（密钥、用户数据、构建产物）、入口（API、文件、URL、插件）与信任边界。',
+      '对每条路径标注：谁能触发、需要什么前提、影响范围。',
+      '按可利用性与影响排序，优先修复可远程触发且无需高权限的问题。',
+      '缓解措施要能验证；接受的风险写明理由与复查时间。',
+    ].join('\n'),
+  },
+  {
+    id: 'secrets-scan',
+    name: 'secrets-scan',
+    title: '密钥泄漏排查',
+    description: '检查源码、日志、配置与提交历史中的密钥痕迹，并给出轮换步骤。',
+    tags: ['安全', '质量'],
+    body: [
+      '# 密钥泄漏排查',
+      '',
+      '扫描源码、示例配置、日志、截图、构建产物与 git 历史。',
+      '发现疑似密钥时不要在回复中回显完整内容，只报告位置与类型。',
+      '给出处置顺序：立即轮换 → 清理历史 → 加忽略规则 → 增加提交前检查。',
+      '历史清理需要明确授权，避免误删他人提交。',
+    ].join('\n'),
+  },
+  {
+    id: 'dependency-audit',
+    name: 'dependency-audit',
+    title: '依赖审计',
+    description: '检查依赖的漏洞、维护状态、许可证与体积，给出升级或替换建议。',
+    tags: ['安全', '开发'],
+    body: [
+      '# 依赖审计',
+      '',
+      '先列出直接依赖，再查已知漏洞、最近发布时间、维护者与许可证。',
+      '区分运行时与开发依赖；能删的依赖优先删除。',
+      '升级前确认破坏性变更与替代方案，给出回滚路径。',
+      '不引入来源不明或许可证不兼容的包。',
+    ].join('\n'),
+  },
+  {
+    id: 'auth-review',
+    name: 'auth-review',
+    title: '认证授权审查',
+    description: '检查会话、令牌、权限边界与越权路径，按最小权限原则修正。',
+    tags: ['安全', '开发', '架构'],
+    body: [
+      '# 认证授权审查',
+      '',
+      '确认：谁能登录、令牌如何存储与过期、权限在哪一层校验。',
+      '重点检查水平/垂直越权、默认允许、客户端可控的角色字段。',
+      '敏感操作要求服务端再次校验，不信任前端隐藏按钮。',
+      '错误信息不泄漏账号是否存在等枚举线索。',
+    ].join('\n'),
+  },
+  {
+    id: 'web-security',
+    name: 'web-security',
+    title: 'Web 安全审查',
+    description: '覆盖 XSS、CSRF、SSRF、注入、开放重定向与文件上传边界。',
+    tags: ['安全', '浏览器'],
+    body: [
+      '# Web 安全审查',
+      '',
+      '按输入来源逐项检查：HTML 输出、URL 跳转、服务端请求、命令与查询拼接、上传文件。',
+      '默认拒绝：白名单协议与主机，限制重定向与内网地址。',
+      'Cookie 设置 HttpOnly/SameSite/Secure；CSP 最小放行。',
+      '给出可复现的触发条件与最小修复。',
+    ].join('\n'),
+  },
+  {
+    id: 'privacy-review',
+    name: 'privacy-review',
+    title: '隐私合规检查',
+    description: '核对数据采集范围、留存、脱敏与第三方共享，避免超范围收集。',
+    tags: ['安全', '文档'],
+    body: [
+      '# 隐私合规检查',
+      '',
+      '逐项列出采集字段、用途、存储位置、保留时长与访问者。',
+      '默认不采集与功能无关的数据；日志与埋点做脱敏。',
+      '第三方请求说明发送内容与目的，提供关闭方式。',
+      '删除与导出路径必须可用，并验证实际效果。',
+    ].join('\n'),
+  },
+  {
+    id: 'incident-response',
+    name: 'incident-response',
+    title: '故障应急',
+    description: '按止损、取证、恢复、复盘四步处理线上故障，保留可追溯记录。',
+    tags: ['安全', '系统'],
+    body: [
+      '# 故障应急',
+      '',
+      '1. 止损：先降级或回滚，避免扩大影响。',
+      '2. 取证：保留日志、时间线与变更记录，不覆盖现场。',
+      '3. 恢复：小步验证，确认核心路径后再全量。',
+      '4. 复盘：写清根因、影响、发现方式与改进项，改进项要有负责人和期限。',
+    ].join('\n'),
+  },
+  {
+    id: 'supply-chain',
+    name: 'supply-chain',
+    title: '供应链安全',
+    description: '检查构建来源、锁文件、安装脚本与发布流程，降低投毒风险。',
+    tags: ['安全', '架构'],
+    body: [
+      '# 供应链安全',
+      '',
+      '确认依赖来源、版本锁定与完整性校验；禁止无锁安装。',
+      '审查安装脚本与二进制下载地址，默认禁用不必要的 postinstall。',
+      '构建与发布使用最小权限令牌，产物可追溯。',
+      '发现可疑包时停止安装并给出替代方案。',
+    ].join('\n'),
+  },
+  {
+    id: 'design-tokens',
+    name: 'design-tokens',
+    title: '设计令牌',
+    description: '把颜色、间距、字号与层级整理成可复用令牌，统一主题与对比度。',
+    tags: ['设计', '前端'],
+    body: [
+      '# 设计令牌',
+      '',
+      '先盘点现有硬编码值，按语义命名（背景/文字/边界/强调/状态）。',
+      '深浅主题共用同一套语义令牌，不直接引用色值。',
+      '文字与背景对比度至少达到 WCAG AA；状态色同时提供图标或文字。',
+      '改动令牌后全量检查关键界面，避免局部失衡。',
+    ].join('\n'),
+  },
+  {
+    id: 'accessibility-review',
+    name: 'accessibility-review',
+    title: '无障碍审查',
+    description: '按键盘操作、焦点、语义与对比度检查界面，给出可验证的修复项。',
+    tags: ['设计', '质量'],
+    body: [
+      '# 无障碍审查',
+      '',
+      '检查：键盘可到达、焦点可见、语义标签正确、图片有替代文本、对比度达标。',
+      '自定义控件补齐 role、状态与键盘行为。',
+      '动效尊重 reduced-motion；错误提示不只用颜色表达。',
+      '每条问题给位置、影响与最小修复。',
+    ].join('\n'),
+  },
+  {
+    id: 'responsive-review',
+    name: 'responsive-review',
+    title: '响应式检查',
+    description: '在常见宽度与缩放下检查布局、触控目标与内容溢出。',
+    tags: ['设计', '浏览器'],
+    body: [
+      '# 响应式检查',
+      '',
+      '至少覆盖 360、768、1024、1440 宽度与 200% 缩放。',
+      '检查横向滚动、文字截断、固定宽度、触控目标小于 44px 等问题。',
+      '优先用流式布局与换行，不靠隐藏关键功能适配小屏。',
+      '给出复现步骤与最小修复。',
+    ].join('\n'),
+  },
+  {
+    id: 'component-spec',
+    name: 'component-spec',
+    title: '组件规格',
+    description: '描述组件的状态、变体、交互与边界，作为实现与验收的共同依据。',
+    tags: ['设计', '架构'],
+    body: [
+      '# 组件规格',
+      '',
+      '列出：用途、状态（默认/悬停/聚焦/禁用/加载/错误）、尺寸与密度。',
+      '说明键盘交互、无障碍属性、内容长度极限与空态。',
+      '定义组合规则与不可用组合，避免实现时临时发挥。',
+      '验收以状态矩阵为准，不以单张效果图为准。',
+    ].join('\n'),
+  },
+  {
+    id: 'ux-copy',
+    name: 'ux-copy',
+    title: '界面文案',
+    description: '把按钮、提示与错误信息改写成清晰、可行动的中文文案。',
+    tags: ['设计', '文档'],
+    body: [
+      '# 界面文案',
+      '',
+      '按钮用动词开头，说明结果；错误信息写清原因与下一步动作。',
+      '避免术语堆叠与模糊表达（“出错了”“请稍后”）。',
+      '保持同一概念同一称呼，中英文混排时加必要空格。',
+      '不夸大、不承诺无法验证的结果。',
+    ].join('\n'),
+  },
+  {
+    id: 'motion-review',
+    name: 'motion-review',
+    title: '动效审查',
+    description: '检查过渡的时长、缓动与信息作用，避免干扰操作或引发不适。',
+    tags: ['设计', '浏览器'],
+    body: [
+      '# 动效审查',
+      '',
+      '动效只服务于状态变化与空间关系，不做无意义装饰。',
+      '常规过渡 120–220ms，避免同时移动多个大区域。',
+      '必须支持 prefers-reduced-motion，并保留清晰的状态反馈。',
+      '检查动画是否阻塞输入、造成布局抖动或重复触发。',
+    ].join('\n'),
+  },
+  {
+    id: 'branch-plan',
+    name: 'branch-plan',
+    title: '分支规划',
+    description: '按改动风险拆分分支与提交，保证每个提交可独立验证和回滚。',
+    tags: ['Git', '架构'],
+    body: [
+      '# 分支规划',
+      '',
+      '先确定基线分支与发布节奏，再决定分支数量。',
+      '一个分支只做一件事；大改拆成可独立合并的步骤。',
+      '提交信息说明原因与影响，不混入格式化噪音。',
+      '合并前同步基线并跑完整验证，冲突时不覆盖他人改动。',
+    ].join('\n'),
+  },
+  {
+    id: 'pr-review',
+    name: 'pr-review',
+    title: 'PR 评审',
+    description: '按范围、正确性、安全与测试检查合并请求，给出可执行的评审意见。',
+    tags: ['Git', '质量'],
+    body: [
+      '# PR 评审',
+      '',
+      '先确认改动范围与目标一致，排除无关文件与生成物。',
+      '重点看边界、错误处理、权限、数据迁移与回滚。',
+      '评论指向具体行，说明触发条件与建议改法。',
+      '没有问题时说明验证过的场景，不写空泛的“LGTM”。',
+    ].join('\n'),
+  },
+  {
+    id: 'merge-conflict',
+    name: 'merge-conflict',
+    title: '合并冲突处理',
+    description: '理解双方意图后合并冲突，保留必要逻辑并补充验证。',
+    tags: ['Git', '开发'],
+    body: [
+      '# 合并冲突处理',
+      '',
+      '先读双方提交与相关测试，判断冲突是语义冲突还是格式冲突。',
+      '不要用“取一边”快速了事；逐段确认两边的业务意图。',
+      '解决后运行受影响范围的测试，并检查是否遗漏调用方。',
+      '不提交冲突标记、临时文件或调试代码。',
+    ].join('\n'),
+  },
+  {
+    id: 'history-audit',
+    name: 'history-audit',
+    title: '提交历史审计',
+    description: '检查历史中的密钥、大文件、误提交与许可证问题，给出处置建议。',
+    tags: ['Git', '安全'],
+    body: [
+      '# 提交历史审计',
+      '',
+      '检查：敏感信息、构建产物、超大文件、第三方代码与许可证头。',
+      '区分“需要重写历史”和“后续提交修正”两种情况。',
+      '重写历史必须获得授权，并提前通知协作者与备份。',
+      '报告只给位置与类型，不回显密钥内容。',
+    ].join('\n'),
+  },
+  {
+    id: 'ci-debug',
+    name: 'ci-debug',
+    title: 'CI 排查',
+    description: '从失败日志定位环境、依赖、缓存与并发问题，给出最小修复。',
+    tags: ['Git', '测试'],
+    body: [
+      '# CI 排查',
+      '',
+      '先找第一处真实错误，忽略后续级联失败。',
+      '对比本地与 CI 的版本、环境变量、缓存与文件大小写差异。',
+      '不通过跳过测试或放宽超时掩盖问题；确需调整时说明依据。',
+      '修复后连续观察两轮，确认不是偶发通过。',
+    ].join('\n'),
+  },
+  {
+    id: 'git-recover',
+    name: 'git-recover',
+    title: 'Git 恢复',
+    description: '在误删分支、误重置或丢失提交时，用 reflog 安全找回。',
+    tags: ['Git', '系统'],
+    body: [
+      '# Git 恢复',
+      '',
+      '先停止一切写操作，确认丢失范围与最后一次正确提交。',
+      '用 reflog / fsck 查找对象，先创建备份分支再恢复。',
+      '不直接 reset --hard 覆盖工作区；优先用 cherry-pick 或新分支。',
+      '恢复后核对文件内容与测试，再清理临时分支。',
+    ].join('\n'),
+  },
+  {
+    id: 'schema-design',
+    name: 'schema-design',
+    title: '数据模型设计',
+    description: '从查询与一致性需求反推表结构、索引与约束。',
+    tags: ['数据', '架构'],
+    body: [
+      '# 数据模型设计',
+      '',
+      '先列出核心查询与写入频率，再决定范式化与冗余。',
+      '明确主键、唯一约束、外键与级联策略。',
+      '为高频过滤与排序建索引，避免无谓索引拖慢写入。',
+      '给出迁移与回滚方案，兼容旧数据。',
+    ].join('\n'),
+  },
+  {
+    id: 'migration-review',
+    name: 'migration-review',
+    title: '迁移审查',
+    description: '检查数据库或配置迁移的可逆性、锁表风险与旧数据兼容。',
+    tags: ['数据', '开发'],
+    body: [
+      '# 迁移审查',
+      '',
+      '确认：迁移是否可逆、是否锁表、是否兼容旧版本读写。',
+      '大表变更分批执行，先加可空列再回填，最后加约束。',
+      '上线顺序：迁移 → 应用 → 清理，避免新旧版本同时写入出错。',
+      '准备回滚脚本并在预发验证。',
+    ].join('\n'),
+  },
+  {
+    id: 'etl-plan',
+    name: 'etl-plan',
+    title: '数据管道设计',
+    description: '设计抽取、清洗、校验与增量同步流程，保证可重跑与可观测。',
+    tags: ['数据', '架构'],
+    body: [
+      '# 数据管道设计',
+      '',
+      '明确数据源、变更频率、增量键与迟到数据策略。',
+      '每一步可重跑且幂等；失败可从中断点恢复。',
+      '记录行数、耗时、失败原因与数据质量指标。',
+      '敏感字段在入仓前脱敏，访问按最小权限。',
+    ].join('\n'),
+  },
 ];
 
 const MCPS: CatalogMcp[] = [
@@ -376,6 +826,250 @@ const MCPS: CatalogMcp[] = [
     envHint: 'BRAVE_API_KEY=',
     needsConfig: true,
   },
+  {
+    id: 'fetch',
+    name: 'fetch',
+    title: '网页抓取',
+    description: '把网页转成 Markdown 供模型阅读，适合查文档与单页资料；遵守目标站点规则。',
+    tags: ['搜索', '文档', '开发'],
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-fetch'],
+  },
+  {
+    id: 'git-server',
+    name: 'git',
+    title: 'Git 操作',
+    description: '查看提交、差异、分支与文件历史，只读优先。',
+    tags: ['Git', '开发'],
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-git', '--repository', '.'],
+  },
+  {
+    id: 'time',
+    name: 'time',
+    title: '时间与时区',
+    description: '获取当前时间、时区换算与日期计算，避免模型自行猜测日期。',
+    tags: ['系统', '协作'],
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-time'],
+  },
+  {
+    id: 'postgres',
+    name: 'postgres',
+    title: 'PostgreSQL',
+    description: '只读查询 PostgreSQL 数据库结构；数据库连接串需自行配置。',
+    tags: ['数据', '系统'],
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-postgres'],
+    envHint: 'DATABASE_URL=postgresql://user:pass@localhost:5432/db',
+    needsConfig: true,
+  },
+  {
+    id: 'puppeteer',
+    name: 'puppeteer',
+    title: 'Puppeteer 浏览器',
+    description: '无头浏览器导航、点击与截图，适合自动化验证；官方已标注为归档项目，优先用 Playwright。',
+    tags: ['浏览器', '测试'],
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-puppeteer'],
+  },
+  {
+    id: 'gitlab',
+    name: 'gitlab',
+    title: 'GitLab',
+    description: '读取 GitLab 项目、Issue 与合并请求；需要访问令牌。',
+    tags: ['Git', '协作'],
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-gitlab'],
+    envHint: 'GITLAB_PERSONAL_ACCESS_TOKEN=',
+    needsConfig: true,
+  },
+  {
+    id: 'sentry',
+    name: 'sentry',
+    title: 'Sentry 错误追踪',
+    description: '查询线上错误、堆栈与发布记录，定位真实故障；需要 Sentry 令牌。',
+    tags: ['质量', '安全', '系统'],
+    command: 'npx',
+    args: ['-y', '@sentry/mcp-server'],
+    envHint: 'SENTRY_ACCESS_TOKEN=',
+    needsConfig: true,
+  },
+  {
+    id: 'notion',
+    name: 'notion',
+    title: 'Notion 知识库',
+    description: '读取与更新 Notion 页面和数据库，适合接项目文档；需要集成令牌。',
+    tags: ['文档', '协作'],
+    command: 'npx',
+    args: ['-y', '@notionhq/notion-mcp-server'],
+    envHint: 'NOTION_API_KEY=',
+    needsConfig: true,
+  },
+  {
+    id: 'figma',
+    name: 'figma',
+    title: 'Figma 设计稿',
+    description: '读取设计稿结构、样式与切图信息，辅助还原界面；需要 Figma 访问令牌。',
+    tags: ['设计'],
+    command: 'npx',
+    args: ['-y', 'figma-developer-mcp'],
+    envHint: 'FIGMA_API_KEY=',
+    needsConfig: true,
+  },
+  {
+    id: 'firecrawl',
+    name: 'firecrawl',
+    title: 'Firecrawl 抓取',
+    description: '批量抓取网站并转为结构化文本；需要 API Key，遵守站点条款。',
+    tags: ['搜索', '浏览器'],
+    command: 'npx',
+    args: ['-y', 'firecrawl-mcp'],
+    envHint: 'FIRECRAWL_API_KEY=',
+    needsConfig: true,
+  },
+  {
+    id: 'exa',
+    name: 'exa',
+    title: 'Exa 语义搜索',
+    description: '按语义检索网页与资料，适合找同类项目与论文；需要 API Key。',
+    tags: ['搜索', '文档'],
+    command: 'npx',
+    args: ['-y', 'exa-mcp-server'],
+    envHint: 'EXA_API_KEY=',
+    needsConfig: true,
+  },
+  {
+    id: 'tavily',
+    name: 'tavily',
+    title: 'Tavily 搜索',
+    description: '面向 AI 的网页搜索与摘要，适合快速调研；需要 API Key。',
+    tags: ['搜索'],
+    command: 'npx',
+    args: ['-y', 'tavily-mcp'],
+    envHint: 'TAVILY_API_KEY=',
+    needsConfig: true,
+  },
+  {
+    id: 'markitdown',
+    name: 'markitdown',
+    title: '文档转换',
+    description: '把 PDF、Office、图片等转换为 Markdown，便于检索与引用。',
+    tags: ['文档', '数据'],
+    command: 'uvx',
+    args: ['markitdown-mcp'],
+  },
+  {
+    id: 'arxiv',
+    name: 'arxiv',
+    title: 'arXiv 论文',
+    description: '检索论文元数据与摘要，适合技术调研；下载全文前先确认授权。',
+    tags: ['文档', '搜索'],
+    command: 'uvx',
+    args: ['arxiv-mcp-server'],
+  },
+  {
+    id: 'duckduckgo',
+    name: 'duckduckgo',
+    title: 'DuckDuckGo 搜索',
+    description: '免密钥网页搜索，作为内置搜索源的补充。',
+    tags: ['搜索'],
+    command: 'uvx',
+    args: ['duckduckgo-mcp-server'],
+  },
+  {
+    id: 'deepwiki',
+    name: 'deepwiki',
+    title: '仓库文档问答',
+    description: '针对公开 GitHub 仓库生成结构化说明，快速理解项目设计。',
+    tags: ['文档', '搜索', '开发'],
+    command: 'npx',
+    args: ['-y', 'mcp-deepwiki@latest'],
+  },
+  {
+    id: 'supabase',
+    name: 'supabase',
+    title: 'Supabase',
+    description: '查询 Supabase 项目、表结构与日志；需要访问令牌。',
+    tags: ['数据', '架构'],
+    command: 'npx',
+    args: ['-y', '@supabase/mcp-server-supabase'],
+    envHint: 'SUPABASE_ACCESS_TOKEN=',
+    needsConfig: true,
+  },
+  {
+    id: 'kubernetes',
+    name: 'kubernetes',
+    title: 'Kubernetes',
+    description: '查看集群资源、Pod 状态与日志；权限较大，仅在本地 kubeconfig 可用时使用。',
+    tags: ['系统', '架构'],
+    command: 'npx',
+    args: ['-y', 'mcp-server-kubernetes'],
+  },
+  {
+    id: 'grafana',
+    name: 'grafana',
+    title: 'Grafana 监控',
+    description: '查询仪表盘、指标与告警，辅助定位性能问题；需要服务地址与令牌。',
+    tags: ['系统', '质量'],
+    command: 'npx',
+    args: ['-y', 'mcp-grafana'],
+    envHint: 'GRAFANA_URL=\nGRAFANA_API_KEY=',
+    needsConfig: true,
+  },
+  {
+    id: 'browserbase',
+    name: 'browserbase',
+    title: 'Browserbase 云端浏览器',
+    description: '在云端浏览器执行自动化任务；需要 API Key，不用于规避访问控制。',
+    tags: ['浏览器'],
+    command: 'npx',
+    args: ['-y', '@browserbasehq/mcp'],
+    envHint: 'BROWSERBASE_API_KEY=\nBROWSERBASE_PROJECT_ID=',
+    needsConfig: true,
+  },
+  {
+    id: 'apify',
+    name: 'apify',
+    title: 'Apify 数据采集',
+    description: '运行公开的采集 Actor 获取结构化数据；需要 API Key，遵守目标站点条款。',
+    tags: ['浏览器', '数据'],
+    command: 'npx',
+    args: ['-y', '@apify/actors-mcp-server'],
+    envHint: 'APIFY_TOKEN=',
+    needsConfig: true,
+  },
+  {
+    id: 'slack',
+    name: 'slack',
+    title: 'Slack 协作',
+    description: '读取频道消息与发送通知；需要 Bot 令牌，注意不要发送敏感内容。',
+    tags: ['协作'],
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-slack'],
+    envHint: 'SLACK_BOT_TOKEN=\nSLACK_TEAM_ID=',
+    needsConfig: true,
+  },
+  {
+    id: 'google-maps',
+    name: 'google-maps',
+    title: '地图与地点',
+    description: '地址解析、路线与地点检索；需要 Google Maps API Key。',
+    tags: ['搜索', '系统'],
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-google-maps'],
+    envHint: 'GOOGLE_MAPS_API_KEY=',
+    needsConfig: true,
+  },
+  {
+    id: 'everything',
+    name: 'everything',
+    title: 'MCP 示例工具集',
+    description: '官方示例服务器，用于验证 MCP 连接与调试工具调用。',
+    tags: ['系统', '开发'],
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-everything'],
+  },
 ];
 
 const EXTENSIONS: CatalogExtension[] = [
@@ -449,6 +1143,36 @@ const EXTENSIONS: CatalogExtension[] = [
     description: '模型在关键决策点以问卷形式向用户确认。',
     tags: ['交互'],
     builtin: true,
+    source: 'npm',
+  },
+  {
+    id: '@juicesharp/rpiv-todo',
+    name: '@juicesharp/rpiv-todo',
+    title: '任务清单',
+    description: '在对话中维护待办清单，压缩会话后仍能保留，适合长任务跟踪。',
+    tags: ['协作', '开发'],
+    builtin: true,
+    version: '2.13.9',
+    source: 'npm',
+  },
+  {
+    id: 'openwiki',
+    name: 'openwiki',
+    title: '项目文档生成',
+    description: '为代码库生成并维护结构化 Wiki，帮助快速理解项目设计。',
+    tags: ['文档', '开发'],
+    builtin: true,
+    version: '0.7.2',
+    source: 'npm',
+  },
+  {
+    id: 'context-mode',
+    name: 'context-mode',
+    title: '上下文压缩',
+    description: '通过语义检索与按需加载减少上下文占用，主打节省 token。',
+    tags: ['文档', '开发', '搜索'],
+    builtin: true,
+    version: '1.0.169',
     source: 'npm',
   },
 ];
@@ -618,35 +1342,107 @@ export async function installExtension(
   });
 }
 
+function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (!host || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return true;
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) {
+    const [a, b] = host.split('.').map(Number);
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+  }
+  if (host === '[::1]' || host.startsWith('fc') || host.startsWith('fd')) return true;
+  return false;
+}
+
+function githubSkillCandidates(parsed: URL): string[] {
+  const parts = parsed.pathname.split('/').filter(Boolean);
+  if (parsed.hostname === 'github.com' && parts.length >= 2) {
+    const [owner, repo, kind, ...rest] = parts;
+    if (kind === 'blob' && rest.length >= 2) {
+      return [`https://raw.githubusercontent.com/${owner}/${repo}/${rest[0]}/${rest.slice(1).join('/')}`];
+    }
+    if (kind === 'tree') {
+      const branch = rest[0] || 'main';
+      const prefix = rest.slice(1).join('/');
+      return [`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${prefix ? `${prefix}/` : ''}SKILL.md`];
+    }
+    if (!kind) {
+      return ['main', 'master'].map((branch) => `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/SKILL.md`);
+    }
+  }
+  return [parsed.toString()];
+}
+
+async function fetchSkillText(rawUrl: string): Promise<{ text?: string; error?: string }> {
+  let current: URL;
+  try {
+    current = new URL(rawUrl);
+  } catch {
+    return { error: t('链接无效') };
+  }
+  for (let hop = 0; hop < 4; hop += 1) {
+    if (current.protocol !== 'https:' || isPrivateHost(current.hostname)) {
+      return { error: t('只支持公网 https 链接') };
+    }
+    const response = await fetch(current, { redirect: 'manual', signal: AbortSignal.timeout(12_000) });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) return { error: t('链接跳转失败') };
+      current = new URL(location, current);
+      continue;
+    }
+    if (!response.ok) return { error: `HTTP ${response.status}` };
+    const text = (await response.text()).slice(0, 512_000);
+    return { text };
+  }
+  return { error: t('链接跳转次数过多') };
+}
+
+// 支持 GitHub 文件/目录/仓库链接与任意公网 SKILL.md 地址；只读取文本，不执行内容
 export async function fetchSkillFromUrl(
   rawUrl: string,
 ): Promise<{ ok: boolean; name?: string; description?: string; body?: string; error?: string }> {
   let parsed: URL;
   try {
-    parsed = new URL(rawUrl);
+    parsed = new URL(rawUrl.trim());
   } catch {
     return { ok: false, error: t('链接无效') };
   }
-  if (parsed.protocol !== 'https:' || !/^raw\.githubusercontent\.com$/i.test(parsed.hostname)) {
-    return { ok: false, error: t('只支持 raw.githubusercontent.com 的 SKILL.md 链接') };
-  }
-  try {
-    const response = await fetch(parsed, { signal: AbortSignal.timeout(12_000) });
-    if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
-    const text = (await response.text()).slice(0, 512_000);
-    const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
-    const meta: Record<string, string> = {};
-    if (frontmatter) {
-      for (const line of frontmatter[1].split(/\r?\n/)) {
-        const match = /^([A-Za-z_-]+):\s*(.+)$/.exec(line);
-        if (match) meta[match[1].toLowerCase()] = match[2].trim().replace(/^['"]|['"]$/g, '');
+  if (parsed.protocol !== 'https:') return { ok: false, error: t('只支持公网 https 链接') };
+  let lastError = t('读取失败');
+  for (const candidate of githubSkillCandidates(parsed)) {
+    try {
+      const fetched = await fetchSkillText(candidate);
+      if (!fetched.text) {
+        if (fetched.error) lastError = fetched.error;
+        continue;
       }
+      const text = fetched.text;
+      const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
+      const meta: Record<string, string> = {};
+      if (frontmatter) {
+        for (const line of frontmatter[1].split(/\r?\n/)) {
+          const match = /^([A-Za-z_-]+):\s*(.+)$/.exec(line);
+          if (match) meta[match[1].toLowerCase()] = match[2].trim().replace(/^['"]|['"]$/g, '');
+        }
+      }
+      const body = frontmatter ? text.slice(frontmatter[0].length).trim() : text.trim();
+      if (!body) {
+        lastError = t('链接内容为空');
+        continue;
+      }
+      const fallbackName = new URL(candidate).pathname.split('/').filter(Boolean).slice(-2, -1)[0] || 'imported-skill';
+      const name = (meta.name || fallbackName).replace(/[^\w.-]/g, '-').slice(0, 60);
+      if (!name) {
+        lastError = t('无法识别 Skill 名称');
+        continue;
+      }
+      return { ok: true, name, description: (meta.description || '').slice(0, 300), body };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
     }
-    const body = frontmatter ? text.slice(frontmatter[0].length).trim() : text.trim();
-    const fallbackName = parsed.pathname.split('/').filter(Boolean).slice(-2, -1)[0] || 'imported-skill';
-    const name = (meta.name || fallbackName).replace(/[^\w.-]/g, '-').slice(0, 60);
-    return { ok: true, name, description: (meta.description || '').slice(0, 300), body };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+  return { ok: false, error: lastError };
 }

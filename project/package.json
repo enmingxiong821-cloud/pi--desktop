@@ -1,9 +1,9 @@
 {
   "name": "pi-desktop-poc",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "Pi 桌面工作台技术 PoC：真实 Pi TUI + Electron 辅助面板",
+  "description": "Pi 桌面工作台：真实 Pi TUI + 图形辅助，多项目会话与项目级权限管理",
   "author": {
     "name": "Pi Desktop",
     "email": "pi-desktop@users.noreply.github.com"

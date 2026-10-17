@@ -90,7 +90,10 @@ ipcMain.handle('pi:stop', () => {
   stopRequested = true;
   return { ok: true };
 });
-ipcMain.on('pi:write', (_event, data) => writes.push(data));
+ipcMain.handle('pi:live', () => ({ ok: true, sessions: [] }));
+ipcMain.handle('habits:record', () => ({ ok: true }));
+ipcMain.handle('habits:summary', () => ({ ok: true, updatedAt: '', top: [] }));
+ipcMain.on('pi:write', (_event, data) => writes.push(typeof data === 'string' ? data : data?.data));
 ipcMain.handle('pi:fetch-provider-models', () => ({ ok: false, error: 'stub' }));
 ipcMain.handle('media:pick', () => ({ ok: false, error: 'stub' }));
 ipcMain.handle('media:clipboard-image', () => ({ ok: false, error: 'stub' }));
@@ -99,6 +102,26 @@ ipcMain.handle('media:open-external', () => ({ ok: true }));
 ipcMain.handle('clipboard:read', () => '');
 ipcMain.handle('clipboard:write', () => undefined);
 ipcMain.handle('shell:open-external', () => ({ ok: true }));
+ipcMain.handle('permissions:get', () => ({ ok: true, path: '.pi/workbench-permissions.json',
+  permissions: { rules: { fileRead: 'allow', fileWrite: 'ask', shell: 'ask', network: 'ask', gitWrite: 'ask', packageInstall: 'deny' }, allowPaths: [], denyPaths: [] } }));
+ipcMain.handle('permissions:save', (_event, input) => ({ ok: true, path: '.pi/workbench-permissions.json', permissions: { rules: input.rules, allowPaths: input.allowPaths ?? [], denyPaths: input.denyPaths ?? [] } }));
+ipcMain.handle('permissions:guard-status', () => ({ installed: false, path: 'C:\\Users\\smoke\\.pi\\agent\\extensions\\workbench-permissions.ts' }));
+ipcMain.handle('permissions:guard', () => ({ ok: true, installed: true, path: 'C:\\Users\\smoke\\.pi\\agent\\extensions\\workbench-permissions.ts' }));
+ipcMain.handle('archives:list', () => ({ ok: true, archives: [] }));
+ipcMain.handle('archives:create', () => ({ ok: true }));
+ipcMain.handle('archives:restore', () => ({ ok: true }));
+ipcMain.handle('archives:delete', () => ({ ok: true }));
+ipcMain.handle('memory:stats', () => ({ ok: true, entries: 0, projects: 0, projectEntries: 0, bytes: 0 }));
+ipcMain.handle('memory:recent', () => []);
+ipcMain.handle('memory:ingest', () => ({ ok: true, added: 0 }));
+ipcMain.handle('memory:search', () => ({ ok: true, hits: [], scanned: 0 }));
+ipcMain.handle('memory:install-skill', () => ({ ok: true, path: 'C:\\Users\\smoke\\.pi\\agent\\skills\\workbench-memory' }));
+ipcMain.handle('update:settings', () => ({ autoCheck: false, autoDownload: false }));
+ipcMain.handle('update:save-settings', (_event, input) => input);
+ipcMain.handle('update:check', () => ({ ok: true, app: { current: '1.0.0', latest: '1.0.0', hasUpdate: false, url: '', notes: '', publishedAt: '' }, pi: { current: '1.0.0', latest: '1.0.0', hasUpdate: false }, settings: { autoCheck: false, autoDownload: false }, checkedAt: new Date().toISOString() }));
+ipcMain.handle('update:download', () => ({ ok: false, error: 'stub' }));
+ipcMain.handle('env:setup', () => ({ ok: true, installed: false, version: '1.3.0', steps: [] }));
+ipcMain.handle('env:update-pi', () => ({ ok: true, installed: true, version: '1.3.0' }));
 ipcMain.handle('catalog:list', () => ({
   ok: true,
   catalog: { vendors: [], skills: [], mcps: [] },
@@ -119,6 +142,10 @@ ipcMain.handle('automation:delete-channel', () => ({ ok: true }));
 ipcMain.handle('automation:test-channel', () => ({ ok: false, error: 'stub' }));
 ipcMain.handle('tools:open-app', () => ({ ok: true }));
 ipcMain.handle('tools:list-links', () => ({ ok: true, links: [] }));
+ipcMain.handle('tools:list-apps', () => ({ ok: true, apps: [] }));
+ipcMain.handle('tools:get-settings', () => ({ ok: true, settings: {} }));
+ipcMain.handle('catalog:search-extensions', () => ({ ok: true, results: [] }));
+ipcMain.handle('agents:suggest-team', () => ({ ok: false, error: 'stub' }));
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -504,12 +531,12 @@ async function run() {
     pi: document.getElementById('pi-env')?.textContent ?? '',
     autostart: document.getElementById('auto-start')?.checked ?? null,
     setup: document.getElementById('setup-env')?.textContent ?? '',
-    shortcut: Boolean(document.getElementById('create-shortcut')),
+    shortcut: Boolean(document.getElementById('create-shortcut')?.closest('#pane-settings')),
   })`);
   expectText(envUi.pi.includes('1.3.0'), `environment shows Pi version (${JSON.stringify(envUi)})`);
   expectText(envUi.npm.includes('11.0.0'), 'environment shows npm version');
   expectText(envUi.autostart === true, 'autostart defaults on');
-  expectText(envUi.shortcut, 'desktop shortcut action present');
+  expectText(envUi.shortcut, 'desktop shortcut action present in Settings');
 
   writeFileSync(path.join(root, '.smoke', 'module-test.json'), JSON.stringify({
     startOptions, writes, stopRequested, applied, en, deleted,

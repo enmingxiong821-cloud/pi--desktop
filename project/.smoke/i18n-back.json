@@ -27,7 +27,7 @@
   "storedLocale": "zh-CN",
   "preview": "/model demo/mini",
   "modelSummary": "2 个模型 · 默认 demo/demo-model · 1 个中转站",
-  "modelNote": "按常用度排序；点击厂商展开模型，点击模型暂存 /model 命令。",
+  "modelNote": "按常用度排序；点击厂商展开具体模型，点击模型暂存 /model 命令。「已添加」指已保存为模型模块的模型。",
   "providerNote": "自定义接入写入本机真实 Pi 配置（models.json + auth.json），保存前自动备份。新增 provider 需新开 Pi 会话后生效。",
   "paletteHint": "直接执行的指令会写入终端并回车；需要补充参数的会先填入输入框。",
   "mediaHint": "滚轮缩放图片 · 拖动平移 · Esc 关闭",
@@ -42,7 +42,7 @@
     "×"
   ],
   "moduleBindingLabel": "本项目模型",
-  "moduleBindingValue": "m-mvcbg42m-gq5i",
+  "moduleBindingValue": "m-mvciv9u6-06r8",
   "moduleBindingOptions": [
     "Pi 默认",
     "快速修复 · demo/mini"

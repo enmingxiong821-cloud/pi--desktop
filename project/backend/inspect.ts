@@ -2,6 +2,7 @@ import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, s
 import os from 'node:os';
 import path from 'node:path';
 import { readJson, readJsonFile, realAgentDir } from './config.js';
+import { readInstalledMeta } from './capabilities.js';
 import { t } from './i18n.js';
 
 export type FreeReason = 'local' | 'openrouter' | 'zero-cost' | 'whitelist';
@@ -31,6 +32,8 @@ export interface CapabilityEntry {
   name: string;
   detail?: string;
   scope: 'user' | 'project';
+  category?: string;
+  tags?: string[];
 }
 
 export interface SessionEntry {
@@ -275,6 +278,20 @@ export function inspectCapabilities(cwd: string): { capabilities: CapabilityEntr
   scanMcp(path.join(agentDir, 'mcp-servers.json'), 'user', capabilities);
   scanMcp(path.join(projectPi, 'mcp.json'), 'project', capabilities);
   scanMcp(path.join(cwd, '.mcp.json'), 'project', capabilities);
+
+  const meta = new Map<string, { category?: string; tags: string[] }>();
+  for (const scope of ['user', 'project'] as const) {
+    for (const item of readInstalledMeta({ scope, cwd })) {
+      meta.set(`${scope}:${item.kind}:${item.name}`, { category: item.category, tags: item.tags });
+    }
+  }
+  for (const item of capabilities) {
+    const hit = meta.get(`${item.scope}:${item.kind}:${item.name}`);
+    if (hit) {
+      if (hit.category) item.category = hit.category;
+      if (hit.tags.length) item.tags = hit.tags;
+    }
+  }
 
   const warnings: string[] = [];
   if (!capabilities.some((item) => item.kind === 'extension')) warnings.push(t('未发现用户扩展。'));

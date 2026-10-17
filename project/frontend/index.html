@@ -9,7 +9,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="brand-mark">π</span><strong data-i18n="Pi 工作台">Pi 工作台</strong><span class="badge" data-i18n="技术 PoC">技术 PoC</span></div>
+    <div class="brand"><span class="brand-mark">π</span><strong data-i18n="Pi 工作台">Pi 工作台</strong><span class="badge" data-i18n="桌面版">桌面版</span></div>
     <div class="top-status">
       <select id="language-select" class="language-select" aria-label="界面语言" data-i18n-aria-label="界面语言" title="界面语言" data-i18n-title="界面语言">
         <option value="zh-CN">中文</option>
@@ -71,7 +71,6 @@
           </dl>
           <div class="env-actions">
             <button id="setup-env" class="ghost" data-i18n="一键配置环境">一键配置环境</button>
-            <button id="create-shortcut" class="ghost" data-i18n="创建桌面快捷方式">创建桌面快捷方式</button>
           </div>
           <label class="toggle"><input type="checkbox" id="auto-start" checked> <span data-i18n="打开时自动启动 Pi">打开时自动启动 Pi</span></label>
           <label class="toggle"><input type="checkbox" id="isolated-mode"> <span data-i18n="隔离模式">隔离模式</span></label>
@@ -107,6 +106,11 @@
             <button role="tab" class="board-tab" data-board="global" aria-selected="false" data-i18n="国外">国外</button>
             <button role="tab" class="board-tab" data-board="free" aria-selected="false" data-i18n="免费模型">免费模型</button>
           </div>
+          <div id="model-filter" class="model-filters" role="group" aria-label="模型筛选" data-i18n-aria-label="模型筛选">
+            <button type="button" class="filter-chip" data-model-filter="all" aria-pressed="true" data-i18n="全部">全部</button>
+            <button type="button" class="filter-chip" data-model-filter="added" aria-pressed="false" data-i18n="已添加">已添加</button>
+            <button type="button" class="filter-chip" data-model-filter="available" aria-pressed="false" data-i18n="可用">可用</button>
+          </div>
           <div class="model-quick">
             <button id="apply-free-model" type="button" class="ghost" data-i18n="一键使用免费模型">一键使用免费模型</button>
             <label class="toggle" title="发送前按任务自动切换模型" data-i18n-title="发送前按任务自动切换模型">
@@ -120,7 +124,7 @@
           <select id="model-provider" class="filter-select" aria-label="按 provider 筛选" data-i18n-aria-label="按 provider 筛选" hidden>
             <option value="" data-i18n="全部 provider">全部 provider</option>
           </select>
-          <p class="note" data-i18n="按常用度排序；点击厂商展开模型，点击模型暂存 /model 命令。">按常用度排序；点击厂商展开模型，点击模型暂存 /model 命令。</p>
+          <p class="note" data-i18n="按常用度排序；点击厂商展开具体模型，点击模型暂存 /model 命令。「已添加」指已保存为模型模块的模型。">按常用度排序；点击厂商展开具体模型，点击模型暂存 /model 命令。「已添加」指已保存为模型模块的模型。</p>
           <div id="model-list" class="vendor-list"></div>
           <div class="stage">
             <code id="command-preview" data-i18n="选择模型后生成命令">选择模型后生成命令</code>
@@ -203,7 +207,8 @@
           </div>
           <input id="market-search" type="search" placeholder="搜索插件 / 技能 / MCP，例如 浏览器、审查" data-i18n-placeholder="搜索插件 / 技能 / MCP，例如 浏览器、审查" autocomplete="off" spellcheck="false">
           <div class="market-tabs" role="tablist" aria-label="市场分类" data-i18n-aria-label="市场分类">
-            <button type="button" class="market-tab active" data-market="extensions" data-i18n="插件">插件</button>
+            <button type="button" class="market-tab active" data-market="all" data-i18n="全部">全部</button>
+            <button type="button" class="market-tab" data-market="extensions" data-i18n="插件">插件</button>
             <button type="button" class="market-tab" data-market="skills" data-i18n="技能">技能</button>
             <button type="button" class="market-tab" data-market="mcps" data-i18n="MCP">MCP</button>
           </div>
@@ -430,6 +435,22 @@
                 <option value="project" data-i18n="项目">项目</option>
                 <option value="user" data-i18n="用户">用户</option>
               </select>
+              <select id="capability-category" aria-label="分类" data-i18n-aria-label="分类">
+                <option value="自定义" data-i18n="自定义">自定义</option>
+                <option value="开发" data-i18n="开发">开发</option>
+                <option value="测试" data-i18n="测试">测试</option>
+                <option value="质量" data-i18n="质量">质量</option>
+                <option value="安全" data-i18n="安全">安全</option>
+                <option value="设计" data-i18n="设计">设计</option>
+                <option value="架构" data-i18n="架构">架构</option>
+                <option value="数据" data-i18n="数据">数据</option>
+                <option value="文档" data-i18n="文档">文档</option>
+                <option value="搜索" data-i18n="搜索">搜索</option>
+                <option value="浏览器" data-i18n="浏览器">浏览器</option>
+                <option value="系统" data-i18n="系统">系统</option>
+                <option value="Git" data-i18n="Git">Git</option>
+                <option value="协作" data-i18n="协作">协作</option>
+              </select>
             </div>
             <input id="capability-name" type="text" spellcheck="false" placeholder="名称，例如 code-review" data-i18n-placeholder="名称，例如 code-review">
             <input id="capability-description" type="text" placeholder="描述（Skill）" data-i18n-placeholder="描述（Skill）">
@@ -464,6 +485,11 @@
           <div class="pane-head">
             <span class="summary" data-i18n="全网实时检索">全网实时检索</span>
             <button id="refresh-search" class="ghost" data-i18n="刷新">刷新</button>
+          </div>
+          <div class="market-tabs search-modes" role="tablist" aria-label="搜索类型" data-i18n-aria-label="搜索类型">
+            <button type="button" class="market-tab active" data-search-mode="web" data-i18n="全网">全网</button>
+            <button type="button" class="market-tab" data-search-mode="repos" data-i18n="GitHub 项目">GitHub 项目</button>
+            <button type="button" class="market-tab" data-search-mode="code" data-i18n="相关代码">相关代码</button>
           </div>
           <div class="field-inline">
             <input id="search-query" type="search" placeholder="搜索最新信息、文档或新闻" data-i18n-placeholder="搜索最新信息、文档或新闻" />
@@ -587,6 +613,11 @@
             <button id="open-project-pi" class="ghost" data-i18n="项目 .pi 目录">项目 .pi 目录</button>
             <button id="open-user-data" class="ghost" data-i18n="数据目录">数据目录</button>
           </div>
+          <p class="summary" data-i18n="快捷方式">快捷方式</p>
+          <div class="env-actions">
+            <button id="create-shortcut" class="ghost" data-i18n="创建桌面快捷方式">创建桌面快捷方式</button>
+          </div>
+          <p class="note" data-i18n="首次安装或配置完成后会自动生成桌面快捷方式；如果被误删，可以在这里补建。">首次安装或配置完成后会自动生成桌面快捷方式；如果被误删，可以在这里补建。</p>
           <label class="field">
             <span data-i18n="用浏览器打开">用浏览器打开</span>
             <input id="tool-url" type="url" placeholder="https://…" spellcheck="false">
@@ -598,8 +629,121 @@
           </label>
           <button id="tool-open-path" class="ghost" data-i18n="打开路径">打开路径</button>
           <p class="note" data-i18n="只调用系统默认程序，不执行任意脚本；Agent 需要更复杂的控制时通过 MCP 扩展。">只调用系统默认程序，不执行任意脚本；Agent 需要更复杂的控制时通过 MCP 扩展。</p>
+          <div class="group-label"><span data-i18n="更新">更新</span></div>
+          <div class="settings-updates">
+            <div class="dock-toolbar">
+              <span id="update-status" class="dock-summary" data-i18n="尚未检查更新">尚未检查更新</span>
+              <span class="dock-spacer"></span>
+              <button id="update-check" class="ghost" data-i18n="检查更新">检查更新</button>
+              <button id="update-download" class="primary" hidden data-i18n="下载安装包">下载安装包</button>
+              <button id="update-pi-btn" class="ghost" data-i18n="更新 Pi">更新 Pi</button>
+            </div>
+            <div class="dock-toolbar">
+              <label class="toggle"><input type="checkbox" id="update-auto-check" checked> <span data-i18n="启动时自动检查更新">启动时自动检查更新</span></label>
+              <label class="toggle"><input type="checkbox" id="update-auto-download"> <span data-i18n="自动下载工作台安装包">自动下载工作台安装包</span></label>
+            </div>
+            <div id="update-list" class="update-list"></div>
+            <p class="note" data-i18n="工作台更新来自 GitHub Releases，Pi 更新来自 npm。下载与安装都需要你点击确认；自动下载只在发现新版本时把安装包存到 Downloads/Pi-Workbench-updates。">工作台更新来自 GitHub Releases，Pi 更新来自 npm。下载与安装都需要你点击确认；自动下载只在发现新版本时把安装包存到 Downloads/Pi-Workbench-updates。</p>
+          </div>
         </section>
       </div>
+
+      <section id="project-dock" class="project-dock sidebar-tools" aria-label="项目工具" data-i18n-aria-label="项目工具">
+        <div class="dock-head">
+          <span class="dock-title" data-i18n="项目工具">项目工具</span>
+          <div class="dock-tabs" role="tablist" aria-label="项目工具" data-i18n-aria-label="项目工具">
+            <button role="tab" class="dock-tab" data-dock="permissions" aria-selected="true" data-i18n="权限">权限</button>
+            <button role="tab" class="dock-tab" data-dock="archives" aria-selected="false" data-i18n="存档">存档</button>
+            <button role="tab" class="dock-tab" data-dock="memory" aria-selected="false" data-i18n="长期记忆">长期记忆</button>
+            <button role="tab" class="dock-tab" data-dock="autopilot" aria-selected="false" data-i18n="托管">托管</button>
+          </div>
+          <button id="dock-toggle" class="dock-toggle" aria-expanded="true" data-i18n="收起">收起</button>
+        </div>
+        <div id="dock-body" class="dock-body">
+          <div class="dock-body-inner">
+          <div class="dock-panel" data-dock-panel="permissions">
+            <div class="dock-toolbar">
+              <span id="perm-status" class="dock-summary" data-i18n="未绑定项目">未绑定项目</span>
+              <span id="perm-guard-state" class="dock-summary warn" data-i18n="护栏未安装，权限暂不生效">护栏未安装，权限暂不生效</span>
+              <span class="dock-spacer"></span>
+              <button id="perm-guard" class="ghost" data-i18n="安装 Pi 护栏">安装 Pi 护栏</button>
+              <button id="perm-save" class="primary" data-i18n="保存权限">保存权限</button>
+            </div>
+            <div id="perm-presets" class="perm-presets" role="radiogroup" aria-label="权限预设" data-i18n-aria-label="权限预设"></div>
+            <p id="perm-preset-note" class="note"></p>
+            <label class="toggle auto-approve-toggle" title="自动同意项目内的读写与命令（含联网、装依赖、本地提交）；账号/密钥、外传、删除/重置、Git 推送、系统目录仍会拦截或询问" data-i18n-title="自动同意项目内的读写与命令（含联网、装依赖、本地提交）；账号/密钥、外传、删除/重置、Git 推送、系统目录仍会拦截或询问">
+              <input type="checkbox" id="perm-auto-approve">
+              <span data-i18n="自动同意（按项目所需）">自动同意（按项目所需）</span>
+            </label>
+            <p class="note" data-i18n="开启后按项目所需自动同意文件读写、普通命令、联网与依赖安装；账号/密钥文件、疑似外传、删除/重置、Git 推送、系统目录与关机命令仍会拦截或询问。">开启后按项目所需自动同意文件读写、普通命令、联网与依赖安装；账号/密钥文件、疑似外传、删除/重置、Git 推送、系统目录与关机命令仍会拦截或询问。</p>
+            <details id="perm-advanced" class="perm-advanced">
+              <summary data-i18n="高级：逐项权限与路径例外">高级：逐项权限与路径例外</summary>
+              <div id="perm-grid" class="perm-grid"></div>
+              <label class="toggle" title="开启后，自动放行时只能写入当前项目；关闭等同于完全访问" data-i18n-title="开启后，自动放行时只能写入当前项目；关闭等同于完全访问">
+                <input type="checkbox" id="perm-workspace-only" checked>
+                <span data-i18n="自动模式仅允许写入项目目录">自动模式仅允许写入项目目录</span>
+              </label>
+              <div class="perm-paths">
+                <label><span data-i18n="额外允许写入的路径">额外允许写入的路径</span>
+                  <input id="perm-allow-paths" type="text" spellcheck="false" placeholder="src, docs/notes" data-i18n-placeholder="src, docs/notes">
+                </label>
+                <label><span data-i18n="禁止访问的路径">禁止访问的路径</span>
+                  <input id="perm-deny-paths" type="text" spellcheck="false" placeholder=".env, secrets/, dist" data-i18n-placeholder=".env, secrets/, dist">
+                </label>
+              </div>
+              <div class="dock-toolbar">
+                <button id="perm-reset" class="ghost" data-i18n="恢复默认">恢复默认</button>
+              </div>
+              <p class="note" data-i18n="路径用逗号分隔，相对于项目根目录。允许：直接放行；询问：Pi 交互模式下弹窗确认；禁止：直接阻止。策略保存在项目 .pi/workbench-permissions.json，可在仓库内共享。">路径用逗号分隔，相对于项目根目录。允许：直接放行；询问：Pi 交互模式下弹窗确认；禁止：直接阻止。策略保存在项目 .pi/workbench-permissions.json，可在仓库内共享。</p>
+            </details>
+            <p id="perm-guard-note" class="note" data-i18n="「安装 Pi 护栏」会在全局 Pi 扩展目录写入一个只读策略执行器：Pi 每次调用工具前读取当前项目的权限文件。不修改 Pi 的其他配置。">「安装 Pi 护栏」会在全局 Pi 扩展目录写入一个只读策略执行器：Pi 每次调用工具前读取当前项目的权限文件。不修改 Pi 的其他配置。</p>
+          </div>
+          <div class="dock-panel" data-dock-panel="archives" hidden>
+            <div class="dock-toolbar">
+              <input id="archive-label" type="text" spellcheck="false" placeholder="存档备注（可选）" data-i18n-placeholder="存档备注（可选）">
+              <button id="archive-create" class="primary" data-i18n="创建存档">创建存档</button>
+              <span id="archive-status" class="dock-summary"></span>
+            </div>
+            <p class="note" data-i18n="把当前未提交的改动与未跟踪文件打包到本机存档目录，不产生 Git 提交、不推送远端。恢复前会自动再存一份，避免覆盖工作区。">把当前未提交的改动与未跟踪文件打包到本机存档目录，不产生 Git 提交、不推送远端。恢复前会自动再存一份，避免覆盖工作区。</p>
+            <div id="archive-list" class="archive-list"></div>
+          </div>
+          <div class="dock-panel" data-dock-panel="memory" hidden>
+            <div class="dock-toolbar">
+              <span id="memory-stats" class="dock-summary" data-i18n="读取记忆库…">读取记忆库…</span>
+              <span class="dock-spacer"></span>
+              <button id="memory-ingest" class="ghost" data-i18n="摄取当前项目会话">摄取当前项目会话</button>
+              <button id="memory-skill" class="ghost" data-i18n="安装记忆 Skill">安装记忆 Skill</button>
+            </div>
+            <div class="dock-toolbar">
+              <input id="memory-query" type="search" spellcheck="false" placeholder="搜索历史会话、决策、报错、文件路径" data-i18n-placeholder="搜索历史会话、决策、报错、文件路径">
+              <select id="memory-scope" aria-label="默认检索范围" data-i18n-aria-label="默认检索范围" title="选择后长期记住；决定默认检索项目本地还是全局记忆" data-i18n-title="选择后长期记住；决定默认检索项目本地还是全局记忆">
+                <option value="project" data-i18n="项目本地">项目本地</option>
+                <option value="all" data-i18n="全局（所有项目）">全局（所有项目）</option>
+              </select>
+              <button id="memory-search" class="primary" data-i18n="搜索">搜索</button>
+            </div>
+            <p class="note" data-i18n="离线索引本机 Pi 会话，不调用模型、不上传数据。检索范围会记住你的选择：项目本地只看当前项目，全局可跨项目回忆。记忆 Skill 默认自动装配；工作台只在本机统计模型、权限、托管等使用习惯，用于生成偏好画像，不记录对话内容。">离线索引本机 Pi 会话，不调用模型、不上传数据。检索范围会记住你的选择：项目本地只看当前项目，全局可跨项目回忆。记忆 Skill 默认自动装配；工作台只在本机统计模型、权限、托管等使用习惯，用于生成偏好画像，不记录对话内容。</p>
+            <p id="memory-habits" class="dock-summary" data-i18n="习惯画像：使用一段时间后自动生成">习惯画像：使用一段时间后自动生成</p>
+            <div id="memory-results" class="memory-results"></div>
+          </div>
+          <div class="dock-panel" data-dock-panel="autopilot" hidden>
+            <label class="toggle">
+              <input type="checkbox" id="autopilot-toggle">
+              <span data-i18n="全权托管：按项目和任务自动选模型">全权托管：按项目和任务自动选模型</span>
+            </label>
+            <div class="dock-toolbar">
+              <select id="autopilot-mode" aria-label="托管权限" data-i18n-aria-label="托管权限">
+                <option value="safe" data-i18n="工作区自动（推荐）">工作区自动（推荐）</option>
+                <option value="full" data-i18n="整机完全访问">整机完全访问</option>
+              </select>
+              <button id="autopilot-config" class="ghost" data-i18n="配置任务路由">配置任务路由</button>
+            </div>
+            <p id="autopilot-status" class="dock-summary" data-i18n="未启用">未启用</p>
+            <p class="note" data-i18n="开启后：发送消息前按任务类型自动切换最优模型，并应用对应权限预设，减少逐次确认。系统目录、破坏性命令与关机命令始终禁止；账号、密码、密钥文件仍会询问。">开启后：发送消息前按任务类型自动切换最优模型，并应用对应权限预设，减少逐次确认。系统目录、破坏性命令与关机命令始终禁止；账号、密码、密钥文件仍会询问。</p>
+          </div>
+          </div>
+        </div>
+      </section>
     </aside>
 
     <div id="resizer-left" class="resizer" role="separator" aria-orientation="vertical" tabindex="0" aria-label="调整左侧栏宽度" data-i18n-aria-label="调整左侧栏宽度" title="拖动调整左侧栏宽度，双击恢复默认" data-i18n-title="拖动调整左侧栏宽度，双击恢复默认"></div>
@@ -685,6 +829,7 @@
         <button role="tab" id="tab-ws-interact" aria-controls="pane-ws-interact" aria-selected="false" data-i18n="交互">交互</button>
         <button role="tab" id="tab-ws-collab" aria-controls="pane-ws-collab" aria-selected="false" data-i18n="协作日志">协作日志</button>
         <button role="tab" id="tab-ws-visual" aria-controls="pane-ws-visual" aria-selected="false" data-i18n="可视化">可视化</button>
+        <button role="tab" id="tab-ws-cost" aria-controls="pane-ws-cost" aria-selected="false" data-i18n="省 Token">省 Token</button>
       </div>
 
       <section id="pane-ws-edit" role="tabpanel" class="pane">
@@ -694,6 +839,16 @@
           <button class="ghost" data-open-app="explorer" data-i18n="资源管理器">资源管理器</button>
           <button class="ghost" data-open-app="terminal" data-i18n="终端">终端</button>
         </div>
+        <div class="group-label">
+          <span data-i18n="常用软件与工具">常用软件与工具</span>
+          <span class="group-tools">
+            <span id="edit-app-count" class="count"></span>
+            <button id="edit-scan-all" class="ghost small" data-i18n="扫描全部">扫描全部</button>
+            <button id="edit-add-app" class="ghost small" data-i18n="+ 自定义">+ 自定义</button>
+          </span>
+        </div>
+        <input id="edit-app-search" class="list-search" type="search" placeholder="搜索软件或分类" data-i18n-placeholder="搜索软件或分类" autocomplete="off" spellcheck="false">
+        <div id="edit-apps" class="app-groups"></div>
         <label class="field">
           <span data-i18n="打开文件或目录">打开文件或目录</span>
           <input id="ws-path" type="text" placeholder="绝对路径或项目内相对路径" data-i18n-placeholder="绝对路径或项目内相对路径" spellcheck="false">
@@ -720,6 +875,16 @@
         <div class="group-label"><span data-i18n="变更文件">变更文件</span><span id="git-count" class="count"></span></div>
         <div id="git-list" class="list"></div>
         <p class="note" data-i18n="点击文件可直接在 VS Code 中打开；提交与回滚仍在 Git 中确认。">点击文件可直接在 VS Code 中打开；提交与回滚仍在 Git 中确认。</p>
+        <div class="group-label">
+          <span data-i18n="常用工具">常用工具</span>
+          <span class="group-tools">
+            <span id="review-app-count" class="count"></span>
+            <button id="review-scan-all" class="ghost small" data-i18n="扫描全部">扫描全部</button>
+            <button id="review-add-app" class="ghost small" data-i18n="+ 自定义">+ 自定义</button>
+          </span>
+        </div>
+        <input id="review-app-search" class="list-search" type="search" placeholder="搜索软件或分类" data-i18n-placeholder="搜索软件或分类" autocomplete="off" spellcheck="false">
+        <div id="review-apps" class="app-groups"></div>
       </section>
 
       <section id="pane-ws-interact" role="tabpanel" class="pane" hidden>
@@ -760,11 +925,17 @@
         <div class="group-label">
           <span data-i18n="本机创作软件">本机创作软件</span>
           <span class="group-tools">
+            <span id="visual-scan-time" class="note"></span>
             <span id="visual-app-count" class="count"></span>
             <button id="visual-add-app" class="ghost small" data-i18n="+ 自定义">+ 自定义</button>
           </span>
         </div>
         <input id="visual-app-search" class="list-search" type="search" placeholder="搜索软件或分类" data-i18n-placeholder="搜索软件或分类" autocomplete="off" spellcheck="false">
+        <div class="market-tabs visual-filters" role="tablist" aria-label="软件筛选" data-i18n-aria-label="软件筛选">
+          <button type="button" class="market-tab active" data-visual-filter="all" data-i18n="全部">全部</button>
+          <button type="button" class="market-tab" data-visual-filter="installed" data-i18n="已安装">已安装</button>
+          <button type="button" class="market-tab" data-visual-filter="missing" data-i18n="未安装">未安装</button>
+        </div>
         <div id="visual-apps" class="app-groups"></div>
         <div class="group-label"><span data-i18n="自定义网站">自定义网站</span></div>
         <div id="custom-links" class="app-grid"></div>
@@ -822,6 +993,39 @@
           </div>
         </details>
         <p class="note" data-i18n="内置目录检测常见安装位置与注册表；未安装的应用可通过 winget 一键安装（需用户点击确认）；扫描全部软件读取开始菜单快捷方式。启动时以当前项目目录作为工作目录。">内置目录检测常见安装位置与注册表；未安装的应用可通过 winget 一键安装（需用户点击确认）；扫描全部软件读取开始菜单快捷方式。启动时以当前项目目录作为工作目录。</p>
+      </section>
+
+      <section id="pane-ws-cost" role="tabpanel" class="pane" hidden>
+        <div class="pane-head">
+          <span class="summary" data-i18n="Token 用量与缓存">Token 用量与缓存</span>
+          <span class="group-tools">
+            <button id="usage-refresh" class="ghost small" data-i18n="刷新">刷新</button>
+            <button id="usage-apply-savings" class="primary small" data-i18n="全局应用省 Token 配置">全局应用省 Token 配置</button>
+            <button id="usage-copy-config" class="ghost small" data-i18n="复制省 Token 配置">复制省 Token 配置</button>
+          </span>
+        </div>
+        <p id="usage-status" class="summary" data-i18n="只读统计本机 Pi 会话的用量，不读取消息正文，不上传。">只读统计本机 Pi 会话的用量，不读取消息正文，不上传。</p>
+        <div id="usage-cards" class="usage-cards"></div>
+        <div class="group-label">
+          <span data-i18n="优化建议">优化建议</span>
+          <span id="usage-tips-count" class="count"></span>
+        </div>
+        <div id="usage-tips" class="usage-tips"></div>
+        <div class="group-label">
+          <span data-i18n="最近会话">最近会话</span>
+          <span id="usage-session-count" class="count"></span>
+        </div>
+        <div id="usage-sessions" class="usage-sessions"></div>
+        <details class="drawer">
+          <summary data-i18n="省 Token 做法">省 Token 做法</summary>
+          <ul class="usage-guide">
+            <li data-i18n="先用大分类收窄 Skills / MCP，再把具体能力装进当前项目，只加载需要的说明。">先用大分类收窄 Skills / MCP，再把具体能力装进当前项目，只加载需要的说明。</li>
+            <li data-i18n="探索代码先看项目结构和局部文件，避免把整个仓库读入上下文。">探索代码先看项目结构和局部文件，避免把整个仓库读入上下文。</li>
+            <li data-i18n="长会话接近上下文上限时新开会话并附上结论摘要，保留最近文件与未解问题。">长会话接近上下文上限时新开会话并附上结论摘要，保留最近文件与未解问题。</li>
+            <li data-i18n="同一会话内尽量不切换模型或推理度，避免 prompt cache 失效。">同一会话内尽量不切换模型或推理度，避免 prompt cache 失效。</li>
+            <li data-i18n="检索、总结、批量命名交给低价模型，难题再升级到旗舰模型。">检索、总结、批量命名交给低价模型，难题再升级到旗舰模型。</li>
+          </ul>
+        </details>
       </section>
     </aside>
   </div>

@@ -11,6 +11,9 @@ export interface AddSkillInput {
   name: string;
   description?: string;
   body?: string;
+  category?: string;
+  tags?: string[];
+  source?: string;
 }
 
 export interface AddMcpInput {
@@ -20,7 +23,21 @@ export interface AddMcpInput {
   command: string;
   argsText?: string;
   envText?: string;
+  category?: string;
+  tags?: string[];
+  source?: string;
 }
+
+export interface InstalledMeta {
+  kind: 'skill' | 'mcp' | 'extension';
+  name: string;
+  category?: string;
+  tags: string[];
+  source?: string;
+  installedAt: string;
+}
+
+const META_FILE = 'workbench-catalog.json';
 
 export interface CapabilityResult {
   ok: boolean;
@@ -47,6 +64,66 @@ function cleanName(value: string): string {
     throw new Error(t('名称只能包含字母、数字、点、下划线、短横线，最多 64 字符'));
   }
   return name;
+}
+
+// 分类元数据单独存放，Pi 读取 skills/mcp.json 时不会解析到它
+function metadataPath(input: { scope: CapabilityScope; cwd?: string }): string {
+  return path.join(scopeDir(input), META_FILE);
+}
+
+function isMeta(value: unknown): value is InstalledMeta {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (record.kind === 'skill' || record.kind === 'mcp' || record.kind === 'extension')
+    && typeof record.name === 'string';
+}
+
+export function recordInstalledMeta(input: {
+  scope: CapabilityScope;
+  cwd?: string;
+  kind: InstalledMeta['kind'];
+  name: string;
+  category?: string;
+  tags?: string[];
+  source?: string;
+}): void {
+  try {
+    const file = metadataPath(input);
+    const existing = readJsonFile(file, true);
+    const source = existing.data !== null && typeof existing.data === 'object' && !Array.isArray(existing.data)
+      ? existing.data as Record<string, unknown>
+      : {};
+    const list = Array.isArray(source.installed) ? source.installed.filter(isMeta) : [];
+    const name = input.name.trim().slice(0, 120);
+    if (!name) return;
+    const category = input.category?.trim().slice(0, 20) || undefined;
+    const tags = [...new Set((input.tags ?? []).map((item) => item.trim()).filter(Boolean))].slice(0, 8);
+    const next = list.filter((item) => !(item.kind === input.kind && item.name === name));
+    next.push({
+      kind: input.kind,
+      name,
+      ...(category ? { category } : {}),
+      tags,
+      ...(input.source ? { source: input.source.slice(0, 200) } : {}),
+      installedAt: new Date().toISOString(),
+    });
+    mkdirSync(path.dirname(file), { recursive: true });
+    backupAndWrite(file, `${JSON.stringify({ ...source, installed: next }, null, 2)}\n`);
+  } catch {
+    // 元数据写入失败不影响安装本身
+  }
+}
+
+export function readInstalledMeta(input: { scope: CapabilityScope; cwd?: string }): InstalledMeta[] {
+  try {
+    const parsed = readJsonFile(metadataPath(input), true);
+    const source = parsed.data !== null && typeof parsed.data === 'object' && !Array.isArray(parsed.data)
+      ? parsed.data as Record<string, unknown>
+      : {};
+    return Array.isArray(source.installed) ? source.installed.filter(isMeta) : [];
+  } catch {
+    return [];
+  }
 }
 
 function singleLine(value: string, label: string, max: number): string {
@@ -76,6 +153,15 @@ export function addSkill(input: AddSkillInput): CapabilityResult {
     ].join('\n');
     const file = path.join(dir, 'SKILL.md');
     writeFileSync(file, front, 'utf8');
+    recordInstalledMeta({
+      scope: input.scope,
+      cwd: input.cwd,
+      kind: 'skill',
+      name,
+      category: input.category,
+      tags: input.tags,
+      source: input.source,
+    });
     return { ok: true, path: file };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -159,6 +245,15 @@ export function addMcpServer(input: AddMcpInput): CapabilityResult {
     };
     mkdirSync(baseDir, { recursive: true });
     backupAndWrite(file, `${JSON.stringify({ ...source, [key]: servers }, null, 2)}\n`);
+    recordInstalledMeta({
+      scope: input.scope,
+      cwd: input.cwd,
+      kind: 'mcp',
+      name,
+      category: input.category,
+      tags: input.tags,
+      source: input.source,
+    });
     return { ok: true, path: file };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

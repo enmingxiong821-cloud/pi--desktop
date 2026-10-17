@@ -43,21 +43,21 @@
       }
     ],
     "bindingLabel": "本项目模型",
-    "bindingValue": "m-mvcbg42m-gq5i",
+    "bindingValue": "m-mvciv9u6-06r8",
     "bindingOptions": [
       {
         "value": "",
         "text": "Pi 默认"
       },
       {
-        "value": "m-mvcbg42m-gq5i",
+        "value": "m-mvciv9u6-06r8",
         "text": "快速修复 · demo/mini"
       }
     ],
     "bindingDisabled": false,
     "storedModules": [
       {
-        "id": "m-mvcbg42m-gq5i",
+        "id": "m-mvciv9u6-06r8",
         "name": "快速修复",
         "provider": "demo",
         "model": "mini",
@@ -65,7 +65,7 @@
       }
     ],
     "storedBindings": {
-      "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project": "m-mvcbg42m-gq5i"
+      "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project": "m-mvciv9u6-06r8"
     },
     "preview": "/model demo/mini",
     "toast": "模块已暂存，启动 Pi 后发送"
@@ -99,7 +99,7 @@
     "storedLocale": "en",
     "preview": "/model demo/mini",
     "modelSummary": "2 models · Default demo/demo-model · 1 relays",
-    "modelNote": "Sorted by popularity; click a vendor to expand models, click a model to stage the /model command.",
+    "modelNote": "Sorted by popularity; click a vendor to expand its models, click a model to stage the /model command. “Added” means saved as a model module.",
     "providerNote": "Custom providers are written to the real local Pi config (models.json + auth.json) with an automatic backup; new providers take effect after a new Pi session.",
     "paletteHint": "Commands that run directly are written to the terminal with Enter; ones that need arguments are placed in the composer.",
     "mediaHint": "Scroll to zoom · drag to pan · Esc to close",
@@ -114,7 +114,7 @@
       "×"
     ],
     "moduleBindingLabel": "Model for this project",
-    "moduleBindingValue": "m-mvcbg42m-gq5i",
+    "moduleBindingValue": "m-mvciv9u6-06r8",
     "moduleBindingOptions": [
       "Pi default",
       "快速修复 · demo/mini"

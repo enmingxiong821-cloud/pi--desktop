@@ -20,8 +20,13 @@ import { appCatalog, configureCustomApps, installLocalApp, launchLocalApp, launc
 import { configureCustomLinks, listCustomLinks, removeCustomLink, saveCustomLink } from './links.js';
 import { listImportedProjects } from './projects-import.js';
 import { fetchSkillFromUrl, installExtension, listCatalog, searchMcpRegistry, searchNpmExtensions } from './catalog.js';
-import { addMcpServer, addSkill, removeSkill } from './capabilities.js';
-import { installPi, probeEnvironment } from './env.js';
+import { addMcpServer, addSkill, recordInstalledMeta, removeSkill } from './capabilities.js';
+import { installPi, probeEnvironment, setupEnvironment, updatePi } from './env.js';
+import { createArchive, deleteArchive, listArchives, restoreArchive } from './archives.js';
+import { ingestMemory, ensureMemorySkill, installMemorySkill, memoryStats, recentMemory, searchMemory } from './memory.js';
+import { habitSummary, recordHabit } from './habits.js';
+import { guardInstalled, installPermissionGuard, permissionGuardPath, readProjectPermissions, saveProjectPermissions } from './permissions.js';
+import { checkUpdates, downloadUpdate, getUpdateSettings, saveUpdateSettings } from './updater.js';
 import { gitStatus } from './git.js';
 import { inspectCapabilities, inspectModels, isSafeSessionPath, listSessions } from './inspect.js';
 import { setBackendLocale, t } from './i18n.js';
@@ -50,6 +55,8 @@ import {
   saveToolSettings,
   searchWeb,
 } from './tools.js';
+import { searchCode, searchRepos } from './search-extra.js';
+import { applyGlobalTokenSavings, usageReport } from './usage.js';
 
 interface ProjectRecord {
   path: string;
@@ -58,8 +65,28 @@ interface ProjectRecord {
 }
 
 let win: BrowserWindow | null = null;
-let session: PiSession | null = null;
-let unackedBytes = 0;
+
+interface LiveSession {
+  session: PiSession;
+  cwd: string;
+  unackedBytes: number;
+  startedAt: number;
+}
+
+const liveSessions = new Map<string, LiveSession>();
+let activeKey: string | null = null;
+const MAX_LIVE_SESSIONS = 4;
+
+function sessionKey(cwd: string): string {
+  return path.resolve(cwd).replace(/\\/g, '/').toLowerCase();
+}
+
+function findLiveSession(key?: unknown): LiveSession | undefined {
+  if (typeof key === 'string' && key) {
+    return liveSessions.get(key) ?? liveSessions.get(sessionKey(key));
+  }
+  return activeKey ? liveSessions.get(activeKey) : undefined;
+}
 
 const HIGH_WATER = 512 * 1024;
 const LOW_WATER = 128 * 1024;
@@ -181,13 +208,15 @@ async function executeAutomation(job: AutomationJob): Promise<RunResult> {
   if (action.type === 'pi-prompt') {
     const project = job.cwd && existsSync(job.cwd) ? job.cwd : loadProjects()[0]?.path;
     if (!project) return { ok: false, message: t('未设置项目目录') };
-    if (!session) {
+    const key = sessionKey(project);
+    if (!liveSessions.has(key)) {
       const started = startSession({ cwd: project, cols: 120, rows: 32, isolated: true });
       if (!started.ok) return { ok: false, message: started.error || t('Pi 启动失败') };
       await delay(6000);
     }
-    if (!session) return { ok: false, message: t('Pi 未运行') };
-    session.write(action.prompt.replace(/\r?\n/g, '\r') + '\r');
+    const live = liveSessions.get(key);
+    if (!live) return { ok: false, message: t('Pi 未运行') };
+    live.session.write(action.prompt.replace(/\r?\n/g, '\r') + '\r');
     return { ok: true, message: t('已发送到 Pi 终端') };
   }
   if (action.type === 'agent') {
@@ -238,12 +267,14 @@ function focusWindow(): void {
   win.focus();
 }
 
-function stopSession(): void {
-  if (!session) return;
-  const current = session;
-  session = null;
-  current.stop();
-  send('pi:state', { status: 'stopped' });
+function stopSession(key?: string): void {
+  const live = key ? findLiveSession(key) : findLiveSession();
+  if (!live) return;
+  const targetKey = sessionKey(live.cwd);
+  liveSessions.delete(targetKey);
+  if (activeKey === targetKey) activeKey = liveSessions.keys().next().value ?? null;
+  live.session.stop();
+  send('pi:state', { status: 'stopped', key: targetKey, cwd: live.cwd });
 }
 
 interface StartOptions {
@@ -256,12 +287,16 @@ interface StartOptions {
   thinking?: string;
 }
 
-function startSession(options: StartOptions): { ok: boolean; isolatedDir?: string; isolated?: boolean; install?: unknown; error?: string } {
-  stopSession();
+function startSession(options: StartOptions): { ok: boolean; key?: string; isolatedDir?: string; isolated?: boolean; install?: unknown; error?: string } {
   try {
     if (!options || typeof options.cwd !== 'string' || !options.cwd) {
       throw new Error(t('缺少项目目录'));
     }
+    const key = sessionKey(options.cwd);
+    if (!liveSessions.has(key) && liveSessions.size >= MAX_LIVE_SESSIONS) {
+      return { ok: false, error: t('最多同时运行 {count} 个项目的 Pi，请先停止一个', { count: MAX_LIVE_SESSIONS }) };
+    }
+    if (liveSessions.has(key)) stopSession(key);
     const isolated = options.isolated !== false;
     const agentDir = isolated ? isolatedAgentDir() : resolvePi().agentDir;
     mkdirSync(agentDir, { recursive: true });
@@ -290,13 +325,19 @@ function startSession(options: StartOptions): { ok: boolean; isolatedDir?: strin
       model: model || undefined,
       thinking: thinking || undefined,
     });
-    session = next;
-    unackedBytes = 0;
+    const live: LiveSession = {
+      session: next,
+      cwd: options.cwd,
+      unackedBytes: 0,
+      startedAt: Date.now(),
+    };
+    liveSessions.set(key, live);
+    activeKey = key;
 
     next.onData((data) => {
-      unackedBytes += data.length;
-      send('pty:data', data);
-      if (unackedBytes > HIGH_WATER) {
+      live.unackedBytes += data.length;
+      send('pty:data', { key, data });
+      if (live.unackedBytes > HIGH_WATER) {
         try {
           next.pause();
         } catch {
@@ -306,15 +347,17 @@ function startSession(options: StartOptions): { ok: boolean; isolatedDir?: strin
     });
 
     next.onExit(({ exitCode }) => {
-      if (session === next) {
-        session = null;
-        send('pi:state', { status: 'exited', exitCode });
+      if (liveSessions.get(key) === live) {
+        liveSessions.delete(key);
+        if (activeKey === key) activeKey = liveSessions.keys().next().value ?? null;
+        send('pi:state', { status: 'exited', exitCode, key, cwd: live.cwd });
       }
     });
 
-    send('pi:state', { status: 'running', cwd: options.cwd });
+    send('pi:state', { status: 'running', cwd: options.cwd, key });
     return {
       ok: true,
+      key,
       isolatedDir: agentDir,
       isolated,
       install: {
@@ -756,6 +799,26 @@ ipcMain.handle('pi:sessions', (_event, cwd: unknown) => {
   }
 });
 
+// 只读汇总会话用量；与 pi:sessions 使用同一批会话目录
+ipcMain.handle('usage:report', (_event, cwd: unknown) => {
+  try {
+    if (typeof cwd !== 'string' || !cwd) throw new Error(t('缺少项目目录'));
+    const isolatedSessions = path.join(isolatedAgentDir(), 'sessions');
+    return usageReport(cwd, [isolatedSessions]);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+// 用户点击后才会写入全局设置；保留其他键并自动备份
+ipcMain.handle('usage:apply-savings', () => {
+  try {
+    return applyGlobalTokenSavings();
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
 ipcMain.handle('pi:add-skill', (_event, input: unknown) => addSkill(input as Parameters<typeof addSkill>[0]));
 ipcMain.handle('pi:remove-skill', (_event, input: unknown) => removeSkill(input as Parameters<typeof removeSkill>[0]));
 ipcMain.handle('pi:add-mcp', (_event, input: unknown) => addMcpServer(input as Parameters<typeof addMcpServer>[0]));
@@ -773,10 +836,24 @@ ipcMain.handle('catalog:list', () => {
 ipcMain.handle('catalog:search-mcp', (_event, query: unknown) => searchMcpRegistry(typeof query === 'string' ? query : ''));
 ipcMain.handle('catalog:search-extensions', (_event, query: unknown) =>
   searchNpmExtensions(typeof query === 'string' ? query : ''));
-ipcMain.handle('catalog:install-extension', async (_event, name: unknown) => {
-  if (typeof name !== 'string') return { ok: false, output: '', error: t('参数无效') };
+ipcMain.handle('catalog:install-extension', async (_event, input: unknown) => {
+  const source = input !== null && typeof input === 'object' && !Array.isArray(input)
+    ? input as Record<string, unknown>
+    : {};
+  const name = typeof input === 'string' ? input : typeof source.name === 'string' ? source.name : '';
+  if (!name) return { ok: false, output: '', error: t('参数无效') };
   const result = await installExtension(name, (line) => send('catalog:install-event', { name, line }));
-  if (result.ok) send('catalog:changed', {});
+  if (result.ok) {
+    recordInstalledMeta({
+      scope: 'user',
+      kind: 'extension',
+      name,
+      category: typeof source.category === 'string' ? source.category : undefined,
+      tags: Array.isArray(source.tags) ? source.tags.filter((item): item is string => typeof item === 'string') : [],
+      source: typeof source.source === 'string' ? source.source : 'npm',
+    });
+    send('catalog:changed', {});
+  }
   return result;
 });
 ipcMain.handle('catalog:import-skill-url', async (_event, input: unknown) => {
@@ -793,6 +870,9 @@ ipcMain.handle('catalog:import-skill-url', async (_event, input: unknown) => {
     name: fetched.name,
     description: fetched.description,
     body: fetched.body,
+    category: typeof source.category === 'string' ? source.category : '自定义',
+    tags: Array.isArray(source.tags) ? source.tags.filter((item): item is string => typeof item === 'string') : [],
+    source: typeof source.url === 'string' ? source.url : 'url',
   });
 });
 
@@ -979,6 +1059,10 @@ ipcMain.handle('tools:save-settings', (_event, input: unknown) => saveToolSettin
 ipcMain.handle('tools:search', (_event, query: unknown) =>
   searchWeb(typeof query === 'string' ? query : ''));
 
+// 项目与代码检索：只发送查询词到 GitHub / grep.app，不在本机读取密钥
+ipcMain.handle('tools:search-repos', (_event, query: unknown) => searchRepos(query));
+ipcMain.handle('tools:search-code', (_event, query: unknown) => searchCode(query));
+
 ipcMain.handle('tools:fetch-page', (_event, url: unknown) =>
   fetchPage(typeof url === 'string' ? url : ''));
 
@@ -1059,7 +1143,7 @@ function quoteArg(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
 }
 
-function createDesktopShortcut(target: unknown): { ok: boolean; path?: string; error?: string } {
+function createDesktopShortcut(target?: unknown): { ok: boolean; path?: string; error?: string } {
   try {
     const project = typeof target === 'string' && target.trim() ? safeOpenTarget(target) : undefined;
     const args = shortcutArgs(project);
@@ -1096,8 +1180,88 @@ function createDesktopShortcut(target: unknown): { ok: boolean; path?: string; e
   }
 }
 
+// 首次安装/配置后自动生成桌面快捷方式；已存在时保留用户自己的，不覆盖
+function ensureDesktopShortcut(): void {
+  try {
+    if (process.platform !== 'win32' && process.platform !== 'linux') return;
+    const name = process.platform === 'win32' ? 'Pi 工作台.lnk' : 'pi-workbench.desktop';
+    if (existsSync(path.join(app.getPath('desktop'), name))) return;
+    createDesktopShortcut();
+  } catch {
+    // 桌面目录不可写时静默跳过，设置里仍可手动补建
+  }
+}
+
 ipcMain.handle('env:probe', () => probeEnvironment());
 ipcMain.handle('env:install-pi', () => installPi());
+ipcMain.handle('env:setup', async () => {
+  const result = await setupEnvironment();
+  if (result.ok) ensureDesktopShortcut();
+  return result;
+});
+ipcMain.handle('env:update-pi', () => updatePi());
+
+ipcMain.handle('permissions:get', (_event, cwd: unknown) => readProjectPermissions(cwd));
+ipcMain.handle('permissions:save', (_event, input: unknown) => saveProjectPermissions(input));
+ipcMain.handle('permissions:guard', () => ({
+  ...installPermissionGuard(),
+  installed: guardInstalled(),
+  path: permissionGuardPath(),
+}));
+ipcMain.handle('permissions:guard-status', () => ({ installed: guardInstalled(), path: permissionGuardPath() }));
+
+ipcMain.handle('archives:list', (_event, cwd: unknown) =>
+  listArchives(typeof cwd === 'string' ? cwd : ''));
+ipcMain.handle('archives:create', (_event, input: unknown) => {
+  const source = input !== null && typeof input === 'object' ? input as Record<string, unknown> : {};
+  return createArchive(
+    typeof source.cwd === 'string' ? source.cwd : '',
+    typeof source.label === 'string' ? source.label : undefined,
+  );
+});
+ipcMain.handle('archives:restore', (_event, input: unknown) => {
+  const source = input !== null && typeof input === 'object' ? input as Record<string, unknown> : {};
+  return restoreArchive(
+    typeof source.cwd === 'string' ? source.cwd : '',
+    typeof source.id === 'string' ? source.id : '',
+  );
+});
+ipcMain.handle('archives:delete', (_event, input: unknown) => {
+  const source = input !== null && typeof input === 'object' ? input as Record<string, unknown> : {};
+  return deleteArchive(
+    typeof source.cwd === 'string' ? source.cwd : '',
+    typeof source.id === 'string' ? source.id : '',
+  );
+});
+
+ipcMain.handle('memory:ingest', (_event, cwd: unknown) => ingestMemory(cwd));
+ipcMain.handle('memory:search', (_event, input: unknown) => {
+  const source = input !== null && typeof input === 'object' ? input as Record<string, unknown> : {};
+  return searchMemory(source);
+});
+ipcMain.handle('memory:stats', (_event, cwd: unknown) => memoryStats(cwd));
+ipcMain.handle('memory:recent', (_event, cwd: unknown, limit: unknown) =>
+  recentMemory(cwd, typeof limit === 'number' ? limit : 12));
+ipcMain.handle('memory:install-skill', () => installMemorySkill());
+ipcMain.handle('habits:record', (_event, input: unknown) => recordHabit(input));
+ipcMain.handle('habits:summary', () => habitSummary());
+
+ipcMain.handle('update:check', () => {
+  let piVersion = '0.0.0';
+  try {
+    piVersion = resolvePi().version;
+  } catch {
+    // Pi 未安装时仍检查工作台更新
+  }
+  return checkUpdates(app.getVersion(), piVersion);
+});
+ipcMain.handle('update:download', (_event, input: unknown) => {
+  const source = input !== null && typeof input === 'object' ? input as Record<string, unknown> : {};
+  return downloadUpdate(source);
+});
+ipcMain.handle('update:settings', () => getUpdateSettings());
+ipcMain.handle('update:save-settings', (_event, input: unknown) => saveUpdateSettings(input));
+
 ipcMain.handle('app:create-shortcut', (_event, target: unknown) => createDesktopShortcut(target));
 
 ipcMain.handle('app:open-path', async (_event, target: unknown) => {
@@ -1133,40 +1297,58 @@ ipcMain.handle('app:open-vscode', async (_event, target: unknown) => {
 
 ipcMain.handle('pi:start', (_event, options: StartOptions) => startSession(options));
 
-ipcMain.handle('pi:stop', () => {
-  stopSession();
+ipcMain.handle('pi:stop', (_event, key: unknown) => {
+  stopSession(typeof key === 'string' ? key : undefined);
   return { ok: true };
 });
 
-ipcMain.on('pi:write', (_event, data: unknown) => {
-  if (!session || typeof data !== 'string' || data.length > 65536) return;
+ipcMain.handle('pi:live', () => ({
+  ok: true,
+  sessions: [...liveSessions.entries()].map(([key, live]) => ({
+    key,
+    cwd: live.cwd,
+    startedAt: live.startedAt,
+  })),
+}));
+
+ipcMain.on('pi:write', (_event, payload: unknown) => {
+  const source = payload !== null && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+  const data = typeof payload === 'string' ? payload : source.data;
+  if (typeof data !== 'string' || data.length > 65536) return;
+  const live = findLiveSession(source.key);
+  if (!live) return;
+  activeKey = sessionKey(live.cwd);
   try {
-    session.write(data);
+    live.session.write(data);
   } catch {
     // the renderer will show the exit state
   }
 });
 
-ipcMain.on('pi:resize', (_event, size: { cols?: unknown; rows?: unknown }) => {
-  if (!session) return;
-  const cols = Number(size?.cols);
-  const rows = Number(size?.rows);
+ipcMain.on('pi:resize', (_event, payload: { key?: unknown; cols?: unknown; rows?: unknown }) => {
+  const live = findLiveSession(payload?.key);
+  if (!live) return;
+  const cols = Number(payload?.cols);
+  const rows = Number(payload?.rows);
   if (!Number.isInteger(cols) || !Number.isInteger(rows)) return;
   if (cols < 20 || rows < 5 || cols > 1000 || rows > 500) return;
   try {
-    session.resize(cols, rows);
+    live.session.resize(cols, rows);
   } catch {
     // ignore resize errors on an exiting child
   }
 });
 
-ipcMain.on('pty:ack', (_event, bytes: unknown) => {
-  const amount = Number(bytes);
+ipcMain.on('pty:ack', (_event, payload: unknown) => {
+  const source = payload !== null && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+  const amount = Number(typeof payload === 'number' ? payload : source.bytes);
   if (!Number.isFinite(amount) || amount <= 0) return;
-  unackedBytes = Math.max(0, unackedBytes - amount);
-  if (session && unackedBytes < LOW_WATER) {
+  const live = findLiveSession(source.key);
+  if (!live) return;
+  live.unackedBytes = Math.max(0, live.unackedBytes - amount);
+  if (live.unackedBytes < LOW_WATER) {
     try {
-      session.resume();
+      live.session.resume();
     } catch {
       // ignore
     }
@@ -1218,6 +1400,12 @@ if (!singleInstance) {
     configureCustomAgents(path.join(app.getPath('userData'), 'custom-agents.json'));
     configureCustomApps(path.join(app.getPath('userData'), 'custom-apps.json'));
     configureCustomLinks(path.join(app.getPath('userData'), 'custom-links.json'));
+    try {
+      ensureMemorySkill();
+    } catch {
+      // 记忆 Skill 装配失败不阻塞启动
+    }
+    ensureDesktopShortcut();
     installMediaProtocol();
     automationStore().start();
     createWindow();

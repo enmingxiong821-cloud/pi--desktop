@@ -9,4 +9,6 @@ poc-*.log
 .smoke/live-user-data/
 .smoke/live-app.log
 .smoke/workbench-test.json
+.smoke/features-smoke.mjs
+.smoke/guard-check.mjs
 .smoke/**/*.bak-*

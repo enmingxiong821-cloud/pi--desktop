@@ -27,7 +27,7 @@ node node_modules/electron/install.js
 
 | 模块 | 内容 |
 | --- | --- |
-| 项目 | 选择/切换项目目录、最近项目（标记路径失效）、从 VS Code / Cursor / TRAE / Windsurf / JetBrains 导入最近项目、Git 分支与变更、项目级 Skill/MCP |
+| 项目 | 选择/切换项目目录、多项目会话树（可同时运行多个项目）、最近项目（标记路径失效）、从 VS Code / Cursor / TRAE / Windsurf / JetBrains 导入最近项目、Git 分支与变更、项目级 Skill/MCP；左栏「项目工具」集中权限、存档、长期记忆与托管 |
 | 模型 | 按厂商强弱分层排序，点击厂商展开模型；第三方 API / 中转站接入整合在同一面板；支持搜索与设为默认 |
 | 市场 | Skills / MCP / 在线目录，支持搜索、一键安装到当前项目或用户目录；安装前展示启动命令与所需环境变量 |
 | 自动化 | 定时任务（cron、间隔、每日、每周）与消息通道（Webhook、企业微信、飞书、Telegram），支持手动运行与执行记录 |
