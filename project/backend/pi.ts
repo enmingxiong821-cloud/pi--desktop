@@ -141,7 +141,8 @@ function buildEnv(options: PiLaunchOptions, install: PiInstall): NodeJS.ProcessE
   }
   env.PI_CODING_AGENT_DIR = options.agentDir;
   if (install.installRoot) env.PI_MANAGED_INSTALL_ROOT = install.installRoot;
-  env.PI_OFFLINE = '1';
+  // 真实配置会话需要联网刷新模型目录，否则新接入的 provider 不会出现在 /model 中。
+  if (options.isolated) env.PI_OFFLINE = '1';
   env.TERM = 'xterm-256color';
   env.COLORTERM = 'truecolor';
   return env;

@@ -1,4 +1,5 @@
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -298,8 +299,34 @@ interface ToolSettings {
   webSearch: boolean;
   crawl: boolean;
   reverse: boolean;
+  security: boolean;
   searchProvider: 'duckduckgo' | 'searxng';
   searxngUrl: string;
+}
+
+type ToolId = 'trafilatura' | 'radare2' | 'semgrep' | 'trivy' | 'gitleaks' | 'nuclei' | 'bandit' | 'gosec';
+
+interface ToolStatus {
+  id: ToolId;
+  label: string;
+  installed: boolean;
+  version?: string;
+  path?: string;
+  installable: boolean;
+  source: 'uv' | 'winget' | 'zip';
+  sizeHint: string;
+  note: string;
+  manualHint: string;
+  error?: string;
+}
+
+interface InstallResult {
+  ok: boolean;
+  id: ToolId;
+  status?: ToolStatus;
+  output?: string;
+  error?: string;
+  canceled?: boolean;
 }
 
 interface SearchResult {
@@ -332,6 +359,153 @@ interface PageContent {
   url: string;
   title: string;
   text: string;
+}
+
+type CrawlMode = 'search' | 'page' | 'site';
+
+interface CrawlOptions {
+  mode: CrawlMode;
+  query?: string;
+  url?: string;
+  maxPages?: number;
+  maxDepth?: number;
+  js?: boolean;
+}
+
+interface CrawlPage {
+  url: string;
+  title: string;
+  text: string;
+  engine: 'trafilatura' | 'builtin' | 'browser';
+  depth: number;
+  bytes: number;
+  links: number;
+}
+
+interface CrawlProgress {
+  runId: string;
+  phase: 'searching' | 'fetching' | 'done' | 'error' | 'canceled';
+  visited: number;
+  queued: number;
+  currentUrl?: string;
+  page?: CrawlPage;
+  pages?: CrawlPage[];
+  links?: string[];
+  message?: string;
+}
+
+interface TriageReport {
+  file: {
+    path: string; size: number; sha256: string; format: string; arch: string;
+    bits: number; os: string; type: string; stripped: boolean; compiler: string;
+  };
+  entry: number | null;
+  sections: Array<{ name: string; size: number; vsize: number; perm: string; vaddr: number }>;
+  imports: Array<{ name: string; library: string; type: string; plt?: number }>;
+  exports: Array<{ name: string; address: number; type: string }>;
+  strings: Array<{ value: string; length: number; type: string; vaddr: number }>;
+  functions: Array<{ name: string; size: number; cc: number; bbs: number }>;
+  xrefs: Array<{ import: string; refs: Array<{ from: number; type: string; opcode: string }> }>;
+  packer: { score: number; reasons: string[] };
+  durationMs: number;
+  truncated: boolean;
+  warnings: string[];
+}
+
+interface TriageResult {
+  ok: boolean;
+  triage?: TriageReport;
+  error?: string;
+  installed?: boolean;
+}
+
+type AuditSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+type AuditScanner = 'semgrep' | 'trivy' | 'gitleaks' | 'bandit' | 'gosec';
+
+interface AuditFinding {
+  id: string;
+  tool: AuditScanner;
+  severity: AuditSeverity;
+  title: string;
+  message: string;
+  file?: string;
+  line?: number;
+  ruleId?: string;
+  category?: string;
+}
+
+interface AuditReport {
+  runId: string;
+  root: string;
+  startedAt: string;
+  finishedAt: string;
+  findings: AuditFinding[];
+  scanners: Array<{ id: AuditScanner; installed: boolean; ok: boolean; count: number; skipped?: boolean; error?: string }>;
+  canceled: boolean;
+  truncated: boolean;
+}
+
+interface AuditProgress {
+  runId: string;
+  phase: 'starting' | 'scanning' | 'done' | 'error' | 'canceled';
+  message: string;
+  percent?: number;
+  count?: number;
+}
+
+interface PentestFinding {
+  id: string;
+  severity: AuditSeverity;
+  title: string;
+  detail: string;
+  category: 'transport' | 'headers' | 'cookies' | 'exposure' | 'template';
+  ruleId?: string;
+  url?: string;
+}
+
+interface PentestProgress {
+  runId: string;
+  phase: 'starting' | 'checking' | 'scanning' | 'done' | 'error' | 'canceled';
+  message: string;
+  percent?: number;
+  count?: number;
+  findings?: PentestFinding[];
+}
+
+interface AuthorizationTicket {
+  ok: boolean;
+  token?: string;
+  target?: { url: string; host: string; port: number; scheme: 'http' | 'https' };
+  ips?: string[];
+  expiresAt?: string;
+  error?: string;
+}
+
+interface AuditLogEntry {
+  runId: string;
+  at: string;
+  kind: 'passive' | 'active';
+  target: { url: string; host: string; port: number; scheme: 'http' | 'https' };
+  ips: string[];
+  allowLocal: boolean;
+  note?: string;
+  tool: string;
+  argv: string[];
+  rulesHash?: string;
+  requests: number;
+  durationMs: number;
+  exitCode?: number;
+  findings: number;
+  outcome: 'ok' | 'error' | 'canceled' | 'timeout';
+  prevHash: string;
+  hash: string;
+}
+
+interface AuditLogReport {
+  ok: boolean;
+  entries: AuditLogEntry[];
+  chainValid: boolean;
+  error?: string;
 }
 
 interface VendorInfo {
@@ -446,6 +620,7 @@ interface AutomationJob {
 
 interface PiDesktopApi {
   locate(): Promise<{ ok: boolean; install?: InstallInfo; error?: string }>;
+  appInfo(): Promise<{ version: string; electron: string; platform: string }>;
   setLocale(locale: string): Promise<{ ok: boolean; locale: string }>;
   pickProject(): Promise<{ ok: boolean; path?: string }>;
   projects(): Promise<{ ok: boolean; projects: ProjectRecord[] }>;
@@ -596,12 +771,32 @@ interface PiDesktopApi {
   removeApp(id: string): Promise<{ ok: boolean; error?: string }>;
   getToolSettings(): Promise<{ ok: boolean; settings: ToolSettings }>;
   saveToolSettings(input: ToolSettings): Promise<{ ok: boolean; settings?: ToolSettings; error?: string }>;
+  toolStatus(): Promise<ToolStatus[]>;
+  installTool(id: ToolId): Promise<InstallResult>;
   searchWeb(query: string): Promise<{ ok: boolean; results: SearchResult[]; error?: string }>;
   searchRepos(query: string): Promise<{ ok: boolean; results: RepoResult[]; error?: string }>;
   searchCode(query: string): Promise<{ ok: boolean; results: CodeResult[]; error?: string }>;
   fetchWebPage(url: string): Promise<{ ok: boolean; page?: PageContent; error?: string }>;
   crawlWeb(url: string): Promise<{ ok: boolean; pages: PageContent[]; links: string[]; error?: string }>;
+  startCrawl(options: CrawlOptions): Promise<{ ok: boolean; runId?: string; error?: string }>;
+  cancelCrawl(runId: string): Promise<{ ok: boolean; error?: string }>;
+  onCrawlProgress(callback: (event: CrawlProgress) => void): () => void;
   analyzePath(target: string): Promise<{ ok: boolean; lines?: string[]; error?: string }>;
+  triage(target: string): Promise<TriageResult>;
+  securityPickPath(): Promise<{ ok: boolean; path?: string }>;
+  runAudit(input: { path: string }): Promise<{ ok: boolean; runId?: string; error?: string }>;
+  stopAudit(): Promise<{ ok: boolean; error?: string }>;
+  auditFindings(): Promise<{ ok: boolean; report?: AuditReport }>;
+  exportAudit(format: 'sarif' | 'json'): Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }>;
+  onSecurityProgress(callback: (event: AuditProgress) => void): () => void;
+  authorizeTarget(input: {
+    url: string; hostConfirm: string; statement: boolean; note: string; allowLocal?: boolean;
+  }): Promise<AuthorizationTicket>;
+  runPassive(input: { url: string; allowLocal?: boolean }): Promise<{ ok: boolean; runId?: string; error?: string }>;
+  runPentest(input: { token: string }): Promise<{ ok: boolean; runId?: string; error?: string }>;
+  stopPentest(): Promise<{ ok: boolean; error?: string }>;
+  auditLog(): Promise<AuditLogReport>;
+  onPentestProgress(callback: (event: PentestProgress) => void): () => void;
   pickAnalyzePath(): Promise<{ ok: boolean; path?: string }>;
   onAgentEvent(callback: (event: AgentEvent) => void): () => void;
 }
@@ -733,7 +928,7 @@ const terminal = new Terminal({
   fontFamily: '"Cascadia Mono", "Consolas", "Microsoft YaHei", monospace',
   fontSize: 15,
   lineHeight: 1.2,
-  scrollback: 10000,
+  scrollback: 5000,
   allowProposedApi: true,
   scrollOnUserInput: true,
   linkHandler: {
@@ -762,6 +957,28 @@ terminal.loadAddon(new WebLinksAddon((_event, uri) => {
 }));
 terminal.unicode.activeVersion = '11';
 terminal.open(terminalElement);
+
+// WebGL 渲染器显著降低长输出滚动时的 CPU 占用。驱动重置会丢失上下文，
+// 有限次重建；仍失败则退回 DOM 并降低 scrollback，避免持续 occupying 显存。
+let webglRetries = 0;
+function loadWebglRenderer(): void {
+  try {
+    const webgl = new WebglAddon();
+    webgl.onContextLoss(() => {
+      webgl.dispose();
+      if (webglRetries < 2) {
+        webglRetries += 1;
+        window.setTimeout(loadWebglRenderer, 800);
+      } else {
+        terminal.options.scrollback = 2000;
+      }
+    });
+    terminal.loadAddon(webgl);
+  } catch {
+    terminal.options.scrollback = 2000;
+  }
+}
+loadWebglRenderer();
 
 const imeTextarea = terminalElement.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
 const terminalScreen = terminalElement.querySelector<HTMLElement>('.xterm-screen');
@@ -810,7 +1027,8 @@ let running = false;
 interface LiveView {
   cwd: string;
   status: 'starting' | 'running' | 'exited' | 'stopped';
-  buffer: string;
+  chunks: string[];
+  bytes: number;
 }
 const liveByKey = new Map<string, LiveView>();
 const startingKeys = new Set<string>();
@@ -834,7 +1052,7 @@ function activeLive(): LiveView | undefined {
 function showLiveTerminal(key: string): void {
   terminal.reset();
   const live = key ? liveByKey.get(key) : undefined;
-  if (live?.buffer) terminal.write(live.buffer);
+  if (live?.chunks.length) terminal.write(live.chunks.join(''));
 }
 
 let fontSize = 15;
@@ -844,6 +1062,8 @@ let isolatedDir = '';
 let selectedModel: ModelEntry | null = null;
 let models: ModelEntry[] = [];
 let providers: ProviderInfo[] = [];
+let providerWarnings: string[] = [];
+const providerModelOpen = new Map<string, boolean>();
 let providerMode: 'new' | 'edit' | 'builtin' = 'new';
 let providerEditingId = '';
 let providerBusy = false;
@@ -877,6 +1097,9 @@ let modelFilter: ModelFilter = 'all';
 let routerEnabled = false;
 let routerMap: Partial<Record<TaskKind, string>> = {};
 let lastRoutedKey = '';
+let modelPool = new Set<string>();
+// 厂商 → 它自动接手的任务类型；总控选模时优先使用这些厂商。
+let vendorTasks: Partial<Record<string, TaskKind[]>> = {};
 
 const versionElement = $('pi-version');
 const activeModelElement = $('active-model');
@@ -936,6 +1159,11 @@ const routerToggleElement = $<HTMLInputElement>('router-toggle');
 const routerMapElement = $('router-map');
 const routerNoteElement = $('router-note');
 const applyFreeButton = $<HTMLButtonElement>('apply-free-model');
+const modelPoolChips = $('model-pool-chips');
+const modelPoolCount = $('model-pool-count');
+const modelPoolEmpty = $('model-pool-empty');
+const modelPoolAllButton = $<HTMLButtonElement>('model-pool-all');
+const modelPoolClearButton = $<HTMLButtonElement>('model-pool-clear');
 const boardTabs = [...document.querySelectorAll<HTMLButtonElement>('.board-tab')];
 const modelFilterElement = $('model-filter');
 const moduleListElement = $('module-list');
@@ -990,6 +1218,59 @@ const resetAppearanceButton = $<HTMLButtonElement>('reset-appearance');
 const settingsReasoningSelect = $<HTMLSelectElement>('settings-reasoning');
 const settingsSmartSelect = $<HTMLSelectElement>('settings-smart');
 const startupSplash = $('startup-splash');
+const aboutAppVersion = $('about-app-version');
+const aboutPiVersion = $('about-pi-version');
+const aboutElectron = $('about-electron');
+const aboutPlatform = $('about-platform');
+const openProviderSettingsButton = $<HTMLButtonElement>('open-provider-settings');
+const copyDiagnosticsButton = $<HTMLButtonElement>('copy-diagnostics');
+
+let appVersion = '';
+let appElectron = '';
+let appPlatform = '';
+let appInfoLoaded = false;
+
+async function loadAppInfo(): Promise<void> {
+  if (!appInfoLoaded) {
+    try {
+      const info = await api.appInfo();
+      appVersion = info.version;
+      appElectron = info.electron;
+      appPlatform = info.platform;
+      appInfoLoaded = true;
+    } catch {
+      // 版本信息失败不影响其它设置
+    }
+  }
+  aboutAppVersion.textContent = appVersion ? `v${appVersion}` : '—';
+  aboutElectron.textContent = appElectron ? `Electron ${appElectron}` : '—';
+  aboutPlatform.textContent = appPlatform || '—';
+  aboutPiVersion.textContent = detectedVersion
+    ? `Pi ${detectedVersion}`
+    : (versionMissing ? t('未安装') : '—');
+}
+
+async function copyDiagnostics(): Promise<void> {
+  const text = [
+    `Pi 工作台 ${appVersion || '—'}`,
+    `Pi ${detectedVersion || t('未安装')}`,
+    `Electron ${appElectron || '—'}`,
+    `平台 ${appPlatform || '—'}`,
+    `当前模型 ${shownModel || '—'}`,
+    `当前项目 ${currentCwd || '—'}`,
+  ].join('\n');
+  await api.writeClipboard(text);
+  toast('诊断信息已复制（不含密钥）');
+}
+
+function openFeedbackMail(email: string): void {
+  const subject = encodeURIComponent(t('Pi 工作台反馈'));
+  void api.openExternal(`mailto:${email}?subject=${subject}`).then((result) => {
+    if (result.ok) return;
+    void api.writeClipboard(email);
+    toast('无法打开邮件客户端，邮箱已复制：{email}', { email });
+  });
+}
 
 let splashTimer: number | undefined;
 
@@ -1086,14 +1367,22 @@ function applyAppearance(): void {
 }
 
 function selectSettingsSection(id: string): void {
+  const previous = settingsTabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.id;
+  const from = settingsTabs.findIndex((tab) => tab.id === previous);
+  const to = settingsTabs.findIndex((tab) => tab.id === id);
+  let shown: HTMLElement | null = null;
   for (const tab of settingsTabs) {
     const selected = tab.id === id;
     tab.setAttribute('aria-selected', String(selected));
     tab.tabIndex = selected ? 0 : -1;
     const pane = document.getElementById(tab.getAttribute('aria-controls') ?? '');
     if (pane) pane.hidden = !selected;
+    if (selected) shown = pane;
   }
+  animatePaneEntry(shown, from === to || from < 0 ? 0 : to > from ? 1 : -1);
   if (id === 'settings-tab-market') panels?.refreshMarket();
+  if (id === 'settings-tab-provider') void refreshProviders();
+  if (id === 'settings-tab-about') void loadAppInfo();
 }
 
 function openSettings(section = 'settings-tab-general'): void {
@@ -1353,6 +1642,78 @@ function doFit(): void {
   if (running) api.resize(terminal.cols, terminal.rows, activeLiveKey());
 }
 
+const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+let activeMainTab = 'tab-project';
+
+function animatePaneEntry(pane: HTMLElement | null, direction = 0): void {
+  if (!pane || motionQuery.matches) return;
+  pane.classList.remove('pane-enter', 'pane-enter-back');
+  void pane.offsetWidth;
+  Array.from(pane.children).forEach((child, index) => {
+    if (index < 12) (child as HTMLElement).style.setProperty('--stagger-i', String(index));
+  });
+  if (direction < 0) pane.classList.add('pane-enter-back');
+  pane.classList.add('pane-enter');
+  window.setTimeout(() => pane.classList.remove('pane-enter', 'pane-enter-back'), 640);
+}
+
+function initPaneScrollProgress(): void {
+  for (const pane of document.querySelectorAll<HTMLElement>('.pane')) {
+    if (pane.querySelector(':scope > .pane-progress')) continue;
+    const track = document.createElement('div');
+    track.className = 'pane-progress';
+    track.setAttribute('aria-hidden', 'true');
+    const fill = document.createElement('i');
+    track.append(fill);
+    pane.prepend(track);
+    let scheduled = false;
+    const update = (): void => {
+      scheduled = false;
+      const max = pane.scrollHeight - pane.clientHeight;
+      const ratio = max > 4 ? Math.min(1, Math.max(0, pane.scrollTop / max)) : 0;
+      fill.style.transform = `scaleX(${ratio})`;
+      pane.classList.toggle('has-scroll', max > 4);
+      track.classList.toggle('at-end', ratio > 0.985);
+    };
+    const schedule = (): void => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(update);
+    };
+    pane.addEventListener('scroll', schedule, { passive: true });
+    new ResizeObserver(schedule).observe(pane);
+    new MutationObserver(schedule).observe(pane, { childList: true, subtree: true });
+    update();
+  }
+}
+
+function initPointerSpotlight(): void {
+  if (motionQuery.matches) return;
+  const selector = '.item, .market-card, .app-card, .usage-card, .feedback-link, .about-grid, .command-item';
+  let frame = 0;
+  let card: HTMLElement | null = null;
+  let x = 0;
+  let y = 0;
+  document.addEventListener('pointermove', (event) => {
+    const target = event.target instanceof Element ? event.target.closest<HTMLElement>(selector) : null;
+    if (!target) {
+      card = null;
+      return;
+    }
+    card = target;
+    x = event.clientX;
+    y = event.clientY;
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (!card) return;
+      const rect = card.getBoundingClientRect();
+      card.style.setProperty('--mx', `${x - rect.left}px`);
+      card.style.setProperty('--my', `${y - rect.top}px`);
+    });
+  }, { passive: true });
+}
+
 function activateTab(id: string): void {
   if (id.startsWith('tab-ws-')) {
     panels?.activateWorkspace(id);
@@ -1366,6 +1727,10 @@ function activateTab(id: string): void {
     openSettings(id === 'tab-market' ? 'settings-tab-market' : 'settings-tab-general');
     return;
   }
+  const navTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.nav-list [role=tab]'));
+  const from = navTabs.findIndex((tab) => tab.id === activeMainTab);
+  const to = navTabs.findIndex((tab) => tab.id === id);
+  activeMainTab = id;
   document.querySelectorAll<HTMLButtonElement>('.nav-list [role=tab]').forEach((tab) => {
     const selected = tab.id === id;
     tab.setAttribute('aria-selected', String(selected));
@@ -1373,9 +1738,14 @@ function activateTab(id: string): void {
     const pane = document.getElementById(tab.getAttribute('aria-controls') ?? '');
     if (pane) pane.hidden = !selected;
   });
+  const shown = document.getElementById(
+    navTabs.find((tab) => tab.id === id)?.getAttribute('aria-controls') ?? '',
+  );
+  animatePaneEntry(shown, from === to || from < 0 ? 0 : to > from ? 1 : -1);
   if (id === 'tab-model') void refreshProviders();
   if (id === 'tab-automation') void panels?.refreshAutomation();
   if (id === 'tab-team') void panels?.refreshAgents();
+  if (id === 'tab-security') void panels?.activateSecurity();
   if (id === 'tab-task' || id === 'tab-ws-review') {
     refreshTaskPane();
     void refreshTaskGit();
@@ -1386,8 +1756,11 @@ document.querySelectorAll<HTMLButtonElement>('.nav-list [role=tab]').forEach((ta
   tab.addEventListener('click', () => activateTab(tab.id));
   tab.addEventListener('keydown', (event) => {
     let next: HTMLButtonElement | undefined;
+    // 导航为两列网格：上下键按行移动，左右键按相邻项移动
     if (event.key === 'ArrowRight') next = tabs[(index + 1) % tabs.length];
     if (event.key === 'ArrowLeft') next = tabs[(index + tabs.length - 1) % tabs.length];
+    if (event.key === 'ArrowDown') next = tabs[Math.min(index + 2, tabs.length - 1)];
+    if (event.key === 'ArrowUp') next = tabs[Math.max(index - 2, 0)];
     if (event.key === 'Home') next = tabs[0];
     if (event.key === 'End') next = tabs[tabs.length - 1];
     if (next) {
@@ -1400,6 +1773,13 @@ document.querySelectorAll<HTMLButtonElement>('.nav-list [role=tab]').forEach((ta
 
 document.querySelectorAll<HTMLButtonElement>('.workspace-tabs [role=tab]').forEach((tab) => {
   tab.addEventListener('click', () => {
+    const panes = Array.from(document.querySelectorAll<HTMLElement>('.workspace .pane'));
+    const from = panes.findIndex((pane) => !pane.hidden);
+    const targetId = tab.getAttribute('aria-controls') ?? '';
+    const to = panes.findIndex((pane) => pane.id === targetId);
+    requestAnimationFrame(() => {
+      animatePaneEntry(document.getElementById(targetId), from === to || from < 0 ? 0 : to > from ? 1 : -1);
+    });
     if (tab.id === 'tab-ws-review') {
       refreshTaskPane();
       void refreshTaskGit();
@@ -1876,42 +2256,106 @@ function renderModels(): void {
     group.models.push(model);
   }
   const ordered = [...groups.values()].sort((a, b) => a.tier - b.tier || a.order - b.order || a.label.localeCompare(b.label));
-  const autoExpand = Boolean(query || providerFilter) || ordered.length === 1;
+  // 三个板块固定列出常见厂商：即使本机还没配置，也能看到入口和缺口。
+  const showAllVendors = modelFilter === 'all' && !query && !providerFilter && activeBoard !== 'free';
+  if (showAllVendors) {
+    catalogVendors.forEach((vendor, index) => {
+      if (vendor.region !== activeBoard || groups.has(vendor.key)) return;
+      groups.set(vendor.key, { key: vendor.key, label: vendor.label, tier: vendor.tier, order: index, models: [] });
+    });
+  }
+  const allOrdered = [...groups.values()].sort((a, b) => a.tier - b.tier || a.order - b.order || a.label.localeCompare(b.label));
+  const autoExpand = Boolean(query || providerFilter) || allOrdered.length === 1;
 
-  for (const group of ordered) {
+  for (const group of allOrdered) {
     const wrapper = document.createElement('div');
     wrapper.className = 'vendor-group';
-    const head = document.createElement('button');
-    head.type = 'button';
+    const head = document.createElement('div');
     head.className = 'vendor-head';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'vendor-toggle';
     const expanded = autoExpand || expandedVendors.has(group.key)
       || (selectedModel !== null && group.models.includes(selectedModel));
-    head.setAttribute('aria-expanded', String(expanded));
+    toggle.setAttribute('aria-expanded', String(expanded));
     const name = document.createElement('span');
     name.className = 'vendor-name';
     name.textContent = group.label;
     const count = document.createElement('span');
     count.className = 'vendor-count';
     count.textContent = `${group.models.length}`;
+    const assignedLabels = vendorTasksFor(group.key).map((task) => t(taskLabel(task)));
     const arrow = document.createElement('span');
     arrow.className = 'vendor-arrow';
     arrow.textContent = expanded ? '▾' : '▸';
-    head.append(name, count, arrow);
+    toggle.append(name);
+    if (assignedLabels.length) {
+      const badge = document.createElement('span');
+      badge.className = 'vendor-task-badge';
+      badge.textContent = t('自动：{tasks}', { tasks: assignedLabels.join(' · ') });
+      badge.title = t('自动调用：{tasks}', { tasks: assignedLabels.join(' · ') });
+      toggle.append(badge);
+    }
+    toggle.append(count, arrow);
+    head.append(toggle);
 
     const body = document.createElement('div');
     body.className = 'vendor-models';
     body.hidden = !expanded;
+    if (!group.models.length) {
+      const empty = document.createElement('p');
+      empty.className = 'note vendor-empty';
+      empty.textContent = t('还没有该厂商的模型。到 设置 → 接入 配置后点刷新。');
+      body.append(empty);
+    } else {
+      const routing = document.createElement('div');
+      routing.className = 'vendor-routing';
+      const routingLabel = document.createElement('span');
+      routingLabel.className = 'vendor-routing-label';
+      routingLabel.textContent = t('自动调用');
+      const routingChips = document.createElement('span');
+      routingChips.className = 'vendor-routing-chips';
+      const assigned = new Set(vendorTasksFor(group.key));
+      for (const task of TASK_KINDS) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'routing-chip';
+        chip.setAttribute('aria-pressed', String(assigned.has(task.key)));
+        chip.textContent = t(task.label);
+        chip.title = t('让 {vendor} 在「{task}」任务前自动启用', { vendor: group.label, task: t(task.label) });
+        chip.addEventListener('click', () => toggleVendorTaskKind(group.key, task.key));
+        routingChips.append(chip);
+      }
+      routing.append(routingLabel, routingChips);
+      const bulk = document.createElement('button');
+      bulk.type = 'button';
+      bulk.className = 'routing-action';
+      bulk.textContent = t('全部加入');
+      bulk.title = t('把 {vendor} 的全部模型加入快捷池', { vendor: group.label });
+      bulk.addEventListener('click', () => {
+        for (const model of group.models) modelPool.add(`${model.provider}/${model.id}`);
+        saveModelPool();
+        renderModels();
+        renderProviders();
+        toast(t('已把 {vendor} 的 {count} 个模型加入快捷池', { vendor: group.label, count: group.models.length }));
+      });
+      routing.append(bulk);
+      body.append(routing);
+    }
     for (const model of group.models) {
-      const button = document.createElement('button');
-      button.className = 'item';
-      button.setAttribute('aria-pressed', String(Boolean(selectedModel
+      const key = `${model.provider}/${model.id}`;
+      const row = document.createElement('div');
+      row.className = 'item model-item';
+      row.setAttribute('role', 'button');
+      row.tabIndex = 0;
+      row.setAttribute('aria-pressed', String(Boolean(selectedModel
         && selectedModel.provider === model.provider
         && selectedModel.id === model.id)));
 
       const main = document.createElement('span');
       main.className = 'item-main';
       const modelName = document.createElement('strong');
-      modelName.textContent = `${model.provider}/${model.id}`;
+      modelName.textContent = key;
       const meta = document.createElement('small');
       meta.textContent = [
         contextLabel(model.contextWindow),
@@ -1936,7 +2380,7 @@ function renderModels(): void {
         tag.textContent = t('中转');
         tags.append(tag);
       }
-      if (addedKeys.has(`${model.provider}/${model.id}`) && !model.current) {
+      if (addedKeys.has(key) && !model.current) {
         const tag = document.createElement('span');
         tag.className = 'tag added';
         tag.textContent = t('已添加');
@@ -1948,21 +2392,52 @@ function renderModels(): void {
         tag.textContent = t('默认');
         tags.append(tag);
       }
-      if (failedModel && `${model.provider}/${model.id}` === failedModel) {
+      if (failedModel && key === failedModel) {
         const tag = document.createElement('span');
         tag.className = 'tag failed';
         tag.textContent = t('密钥无效');
         tags.append(tag);
       }
-      button.append(main, tags);
-      button.addEventListener('click', () => stageModel(model));
-      body.append(button);
+
+      const actions = document.createElement('span');
+      actions.className = 'item-actions model-actions';
+      const useButton = document.createElement('button');
+      useButton.type = 'button';
+      useButton.className = 'ghost small use-model';
+      useButton.textContent = model.current ? t('使用中') : t('使用');
+      useButton.disabled = Boolean(model.current);
+      useButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        useModelNow(model);
+      });
+      const poolButton = document.createElement('button');
+      poolButton.type = 'button';
+      poolButton.className = 'ghost small pool-toggle';
+      const inPool = modelPool.has(key);
+      poolButton.setAttribute('aria-pressed', String(inPool));
+      poolButton.textContent = inPool ? t('已快捷') : t('快捷');
+      poolButton.title = t('加入快捷模型池，按任务自动选择');
+      poolButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleModelPool(key);
+      });
+      actions.append(useButton, poolButton);
+
+      row.append(main, tags, actions);
+      row.addEventListener('click', () => stageModel(model));
+      row.addEventListener('keydown', (event) => {
+        if (event.target !== row) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        stageModel(model);
+      });
+      body.append(row);
     }
 
-    head.addEventListener('click', () => {
+    toggle.addEventListener('click', () => {
       const next = body.hidden;
       body.hidden = !next;
-      head.setAttribute('aria-expanded', String(next));
+      toggle.setAttribute('aria-expanded', String(next));
       arrow.textContent = next ? '▾' : '▸';
       if (next) expandedVendors.add(group.key);
       else expandedVendors.delete(group.key);
@@ -1971,7 +2446,7 @@ function renderModels(): void {
     modelListElement.append(wrapper);
   }
 
-  if (!filtered.length) {
+  if (!filtered.length && !showAllVendors) {
     const empty = document.createElement('div');
     empty.className = 'empty';
     if (!models.length) {
@@ -1988,6 +2463,7 @@ function renderModels(): void {
     modelListElement.append(empty);
   }
   renderRouterMap();
+  renderModelPool();
 }
 
 function renderProviderFilter(): void {
@@ -2017,6 +2493,303 @@ function stageModel(model: ModelEntry): void {
   renderModels();
   toast('已暂存命令，未写入终端');
   audit('暂存 {command}', { command });
+}
+
+const MODEL_POOL_KEY = 'pi-model-pool';
+
+function loadModelPool(): void {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MODEL_POOL_KEY) ?? '[]') as unknown;
+    modelPool = new Set(Array.isArray(raw)
+      ? raw.filter((value): value is string => typeof value === 'string' && value.includes('/')).slice(0, 300)
+      : []);
+  } catch {
+    modelPool = new Set();
+  }
+}
+
+function saveModelPool(): void {
+  try {
+    localStorage.setItem(MODEL_POOL_KEY, JSON.stringify([...modelPool]));
+  } catch {
+    // storage is optional
+  }
+}
+
+function toggleModelPool(key: string): void {
+  if (modelPool.has(key)) modelPool.delete(key);
+  else modelPool.add(key);
+  saveModelPool();
+  renderModels();
+  renderProviders();
+  audit(modelPool.has(key) ? '加入快捷模型池 · {model}' : '移出快捷模型池 · {model}', { model: key });
+}
+
+const VENDOR_TASKS_KEY = 'pi-vendor-tasks';
+
+function loadVendorTasks(): void {
+  try {
+    const raw = JSON.parse(localStorage.getItem(VENDOR_TASKS_KEY) ?? '{}') as unknown;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+    const known = new Set(TASK_KINDS.map((task) => task.key));
+    const result: Partial<Record<string, TaskKind[]>> = {};
+    for (const [vendor, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (!vendor || !Array.isArray(value)) continue;
+      const tasks = value.filter((task): task is TaskKind => typeof task === 'string' && known.has(task as TaskKind));
+      if (tasks.length) result[vendor.slice(0, 80)] = [...new Set(tasks)];
+    }
+    vendorTasks = result;
+  } catch {
+    vendorTasks = {};
+  }
+}
+
+function saveVendorTasks(): void {
+  try {
+    localStorage.setItem(VENDOR_TASKS_KEY, JSON.stringify(vendorTasks));
+  } catch {
+    // storage is optional
+  }
+}
+
+function vendorTasksFor(vendor: string): TaskKind[] {
+  return vendorTasks[vendor] ?? [];
+}
+
+function toggleVendorTaskKind(vendor: string, task: TaskKind): void {
+  const current = new Set(vendorTasksFor(vendor));
+  if (current.has(task)) current.delete(task);
+  else current.add(task);
+  if (current.size) vendorTasks[vendor] = [...current];
+  else delete vendorTasks[vendor];
+  saveVendorTasks();
+  if (!routerEnabled && current.size) {
+    routerEnabled = true;
+    routerToggleElement.checked = true;
+    saveRouterConfig();
+    toast(t('已开启总控：{vendor} 负责 {task}', { vendor: vendorMeta(vendor, vendor).label, task: t(taskLabel(task)) }));
+  }
+  renderModels();
+  renderRouterMap();
+  audit(current.has(task) ? '厂商自动调用 · {vendor} + {task}' : '厂商自动调用 · {vendor} - {task}', {
+    vendor: vendorMeta(vendor, vendor).label,
+    task: t(taskLabel(task)),
+  });
+}
+
+type ModelSwitchResult = 'ok' | 'auth' | 'missing' | 'stopped';
+
+interface PendingModelSwitch {
+  key: string;
+  liveKey: string;
+  retried: boolean;
+  timer: number;
+  settle: (result: ModelSwitchResult) => void;
+}
+
+let pendingModelSwitch: PendingModelSwitch | null = null;
+let switchingKey: string | null = null;
+let switchingLiveKey = '';
+let switchingPromise: Promise<ModelSwitchResult> | null = null;
+
+// 复用正在进行的切换：输入时预切换，发送时只等一小段，避免每条消息都卡满超时。
+function switchModel(key: string, liveKey: string, timeout: number): Promise<ModelSwitchResult> {
+  if (switchingKey === key && switchingLiveKey === liveKey && switchingPromise) return switchingPromise;
+  switchingKey = key;
+  switchingLiveKey = liveKey;
+  let promise: Promise<ModelSwitchResult>;
+  promise = requestModelSwitch(key, liveKey, timeout).finally(() => {
+    if (switchingPromise === promise) {
+      switchingPromise = null;
+      switchingKey = null;
+      switchingLiveKey = '';
+    }
+  });
+  switchingPromise = promise;
+  return promise;
+}
+
+// 只看尾部：选择器关掉后，旧文本仍会留在回滚缓冲里。
+function probeTail(limit = 1600): string {
+  const clean = modelProbe
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  return clean.slice(-limit);
+}
+
+// Pi 的模型选择器（以及 /switch 之类的扩展选择器）会拦截键入内容，
+// 直接写入 /model 会被当成搜索词。先识别选择器，再发 Esc 关闭。
+function piSelectorOpen(): boolean {
+  return selectorVisible(probeTail());
+}
+
+function selectorVisible(tail: string): boolean {
+  return /No matching models/i.test(tail)
+    || /Model Name:\s*\S/.test(tail)
+    || /Enter to select.*(?:Escape|Ctrl\+C) to cancel/s.test(tail)
+    || /Only showing models from configured providers/i.test(tail);
+}
+
+function settleModelSwitch(result: ModelSwitchResult): void {
+  const pending = pendingModelSwitch;
+  if (!pending) return;
+  window.clearTimeout(pending.timer);
+  pendingModelSwitch = null;
+  pending.settle(result);
+}
+
+function clearPendingModelSwitch(): void {
+  settleModelSwitch('stopped');
+}
+
+function sendModelCommand(key: string, liveKey: string, dismissFirst: boolean): void {
+  const write = (): void => {
+    if (!running || activeLiveKey() !== liveKey) return;
+    // Ctrl+E 到行尾、Ctrl+U 逐行清空编辑器：残留文字会把 /model 拼成普通聊天内容。
+    // 再用括号粘贴一次性送入命令：Pi 的斜杠补全会吞掉逐字符输入后的第一个 Enter。
+    api.write(`\x05\x15\x15\x1b[200~/model ${key}\x1b[201~\r`, liveKey);
+    // 丢掉选择器的旧回显，避免下一次切换误判它仍然打开。
+    modelProbe = '';
+  };
+  if (!dismissFirst) {
+    write();
+    return;
+  }
+  // Esc 只用于关闭已经确认打开的模型选择器；生成中按 Esc 会中断当前任务。
+  api.write('\x1b', liveKey);
+  modelProbe = '';
+  window.setTimeout(write, 160);
+}
+
+// Pi 1.3 首次 /model 会联网刷新模型目录（最长 15s），中途按 Esc 会打断刷新。
+// 因此这里只轮询、不盲目重发；确认选择器卡住时才 Esc + 重发一次。
+const MODEL_SWITCH_TIMEOUT = 20_000;
+const MODEL_SWITCH_POLL = 600;
+
+function requestModelSwitch(key: string, liveKey: string, timeout = MODEL_SWITCH_TIMEOUT): Promise<ModelSwitchResult> {
+  clearPendingModelSwitch();
+  sendModelCommand(key, liveKey, piSelectorOpen());
+  const startedAt = Date.now();
+  let retried = false;
+
+  return new Promise((resolve) => {
+    const closeSelector = (): void => {
+      if (piSelectorOpen()) api.write('\x1b', liveKey);
+    };
+    const check = (): void => {
+      if (!pendingModelSwitch || pendingModelSwitch.key !== key) return;
+      if (!running || activeLiveKey() !== liveKey) {
+        settleModelSwitch('stopped');
+        return;
+      }
+      if (shownModel === key) {
+        settleModelSwitch('ok');
+        return;
+      }
+      const elapsed = Date.now() - startedAt;
+      const tail = probeTail();
+      const refreshing = /Refreshing model catalogs/i.test(tail);
+      const selector = selectorVisible(tail);
+      if (selector && !retried) {
+        retried = true;
+        if (pendingModelSwitch) pendingModelSwitch.retried = true;
+        sendModelCommand(key, liveKey, true);
+        if (pendingModelSwitch) pendingModelSwitch.timer = window.setTimeout(check, MODEL_SWITCH_POLL);
+        return;
+      }
+      if (!refreshing && elapsed > 1200 && /No API key|Incorrect API key|invalid_api_key|API error \(401\)/i.test(tail)) {
+        closeSelector();
+        settleModelSwitch('auth');
+        return;
+      }
+      if (selector && retried && /No matching models/i.test(tail)) {
+        closeSelector();
+        settleModelSwitch('missing');
+        return;
+      }
+      if (!refreshing && selector && retried && elapsed > 4000) {
+        closeSelector();
+        settleModelSwitch('missing');
+        return;
+      }
+      if (elapsed >= timeout) {
+        closeSelector();
+        settleModelSwitch('missing');
+        return;
+      }
+      if (pendingModelSwitch) pendingModelSwitch.timer = window.setTimeout(check, MODEL_SWITCH_POLL);
+    };
+    pendingModelSwitch = {
+      key,
+      liveKey,
+      retried: false,
+      timer: window.setTimeout(check, MODEL_SWITCH_POLL),
+      settle: resolve,
+    };
+  });
+}
+
+function reportModelSwitch(result: ModelSwitchResult, key: string): void {
+  if (result === 'ok') {
+    toast(t('已切换模型 {model}', { model: key }));
+    return;
+  }
+  if (result === 'auth') {
+    toast(t('未能切换到 {model}：该 provider 没有有效密钥（401）。请到 设置 → 接入 补全密钥。', { model: key }));
+    return;
+  }
+  if (result === 'missing') {
+    toast(t('未能切换到 {model}：Pi 的可用模型里没有它。请检查该 provider 的密钥，或在 Pi 里执行 /model 查看。', { model: key }));
+  }
+}
+
+function useModelNow(model: ModelEntry): void {
+  const key = `${model.provider}/${model.id}`;
+  if (!running) {
+    selectedModel = model;
+    previewElement.textContent = `/model ${key}`;
+    copyButton.disabled = false;
+    sendButton.disabled = true;
+    setDefaultButton.disabled = false;
+    toast(t('Pi 未运行：已暂存 {command}，启动后可发送', { command: `/model ${key}` }));
+    return;
+  }
+  lastRoutedKey = key;
+  void api.recordHabit({ type: 'model', value: key });
+  toast(t('正在切换模型 {model}…', { model: key }));
+  audit('快捷使用模型 · {model}', { model: key });
+  void requestModelSwitch(key, activeLiveKey()).then((result) => reportModelSwitch(result, key));
+}
+
+function renderModelPool(): void {
+  const keys = [...modelPool];
+  modelPoolCount.textContent = t('已选 {count} 个', { count: keys.length });
+  modelPoolClearButton.disabled = keys.length === 0;
+  modelPoolEmpty.hidden = keys.length > 0;
+  modelPoolChips.replaceChildren();
+  for (const key of keys) {
+    const model = models.find((item) => `${item.provider}/${item.id}` === key);
+    const chip = document.createElement('span');
+    chip.className = 'pool-chip';
+    const use = document.createElement('button');
+    use.type = 'button';
+    use.className = 'pool-chip-use';
+    use.textContent = key;
+    use.title = t('点击立即使用 {model}', { model: key });
+    use.addEventListener('click', () => {
+      if (model) useModelNow(model);
+      else toast(t('模型已不在当前配置中：{model}', { model: key }));
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'pool-chip-remove';
+    remove.textContent = '×';
+    remove.title = t('从快捷池移除');
+    remove.setAttribute('aria-label', t('从快捷池移除 {model}', { model: key }));
+    remove.addEventListener('click', () => toggleModelPool(key));
+    chip.append(use, remove);
+    modelPoolChips.append(chip);
+  }
 }
 
 const ROUTER_KEY = 'pi-model-router';
@@ -2110,9 +2883,20 @@ function pickRouterModel(task: TaskKind): ModelEntry | null {
   }
   const preferred = TASK_PREFERRED[task];
   const learned = modelHabits[task] ?? {};
-  const scored = models.map((model) => {
-    const rank = preferred.indexOf(vendorKeyFor(model));
+  // 厂商勾选的任务类型优先于内置偏好，但快捷池仍然限定候选范围。
+  const assignedVendors = new Set(
+    Object.entries(vendorTasks)
+      .filter(([, tasks]) => tasks?.includes(task))
+      .map(([vendor]) => vendor),
+  );
+  const candidates = modelPool.size
+    ? models.filter((model) => modelPool.has(`${model.provider}/${model.id}`))
+    : models;
+  const scored = candidates.map((model) => {
+    const vendor = vendorKeyFor(model);
+    const rank = preferred.indexOf(vendor);
     let score = rank >= 0 ? (preferred.length - rank) * 100 : 0;
+    if (assignedVendors.has(vendor)) score += 600;
     score += Math.min(5, learned[`${model.provider}/${model.id}`] ?? 0) * 25;
     if (model.free) score -= 40;
     if ((task === 'coding' || task === 'research' || task === 'data') && model.reasoning) score += 20;
@@ -2126,8 +2910,11 @@ function pickRouterModel(task: TaskKind): ModelEntry | null {
 function renderRouterMap(): void {
   routerMapElement.replaceChildren();
   routerMapElement.hidden = !routerEnabled;
+  const poolNote = modelPool.size
+    ? t('当前只在 {count} 个快捷模型中选择。', { count: modelPool.size })
+    : t('快捷池为空，将在全部模型中选择。');
   routerNoteElement.textContent = routerEnabled
-    ? t('总控已开启：发送前按任务类型切换模型；手动选择优先于自动推荐。')
+    ? `${t('总控已开启：发送前按任务类型切换模型；手动选择优先于自动推荐。')}${poolNote}`
     : t('总控关闭：只在你点击模型时暂存切换命令，不会自动改写发送内容。');
   if (!routerEnabled) return;
   for (const task of TASK_KINDS) {
@@ -2170,18 +2957,50 @@ function renderRouterMap(): void {
   }
 }
 
-async function maybeRouteModel(text: string): Promise<void> {
-  if (!routerEnabled || !running) return;
+let lastRouteNotice = '';
+let lastRouteFailure = '';
+
+type RouteStatus = 'ready' | 'pending' | 'failed';
+
+// waitMs 为 0 时只发起切换（输入时预切换），发送时最多等一小段，避免消息被模型刷新卡住。
+async function maybeRouteModel(text: string, waitMs = 0): Promise<RouteStatus> {
+  if (!routerEnabled || !running) return 'ready';
   const task = classifyTask(text);
   const model = pickRouterModel(task);
-  if (!model) return;
+  if (!model) return 'ready';
   const key = `${model.provider}/${model.id}`;
-  if (key === lastRoutedKey) return;
-  api.write(`/model ${key}\r`, activeLiveKey());
-  lastRoutedKey = key;
-  toast(t('总控：{task} → {model}', { task: t(taskLabel(task)), model: key }));
-  audit('总控切换模型 · {task} → {model}', { task: t(taskLabel(task)), model: key });
-  await new Promise((resolve) => window.setTimeout(resolve, 400));
+  if (key === shownModel) {
+    lastRoutedKey = key;
+    return 'ready';
+  }
+  if (key !== lastRouteNotice) {
+    lastRouteNotice = key;
+    toast(t('总控：{task} → {model}', { task: t(taskLabel(task)), model: key }));
+  }
+  const pending = switchModel(key, activeLiveKey(), MODEL_SWITCH_TIMEOUT);
+  const report = (result: ModelSwitchResult): void => {
+    if (result === 'ok') {
+      lastRoutedKey = key;
+      lastRouteFailure = '';
+      audit('总控切换模型 · {task} → {model}', { task: t(taskLabel(task)), model: key });
+      return;
+    }
+    if (result !== 'stopped' && lastRouteFailure !== key) {
+      lastRouteFailure = key;
+      toast(t('自动选模失败：{model}，请检查该厂商密钥', { model: key }));
+    }
+  };
+  if (waitMs <= 0) {
+    void pending.then(report);
+    return 'ready';
+  }
+  const result = await Promise.race([
+    pending,
+    new Promise<null>((resolve) => window.setTimeout(() => resolve(null), waitMs)),
+  ]);
+  if (result === null) return 'pending';
+  report(result);
+  return result === 'ok' ? 'ready' : 'failed';
 }
 
 function applyFreeModel(): void {
@@ -2197,10 +3016,31 @@ function applyFreeModel(): void {
   const currentFree = free.find((model) => model.current);
   const pick = free.find((model) => !model.current) ?? currentFree ?? free[0];
   const key = `${pick.provider}/${pick.id}`;
-  api.write(`/model ${key}\r`, activeLiveKey());
-  lastRoutedKey = key;
-  toast(t('已切换到免费模型 {model}', { model: key }));
+  toast(t('正在切换到免费模型 {model}…', { model: key }));
   audit('一键免费模型 · {model}（{reason}）', { model: key, reason: pick.freeReason ?? 'free' });
+  void requestModelSwitch(key, activeLiveKey()).then((result) => {
+    if (result === 'ok') {
+      lastRoutedKey = key;
+      toast(t('已切换到免费模型 {model}', { model: key }));
+    } else {
+      reportModelSwitch(result, key);
+    }
+  });
+}
+
+async function routeForTask(text: string): Promise<string | null> {
+  if (!running || !models.length) return null;
+  if (!routerEnabled && !modelPool.size) return null;
+  const task = classifyTask(text);
+  const model = pickRouterModel(task);
+  if (!model) return null;
+  const key = `${model.provider}/${model.id}`;
+  if (key !== lastRoutedKey || shownModel !== key) {
+    const result = await requestModelSwitch(key, activeLiveKey(), 15_000);
+    if (result === 'ok') lastRoutedKey = key;
+  }
+  audit('协作前切换 Pi 模型 · {task} → {model}', { task: t(taskLabel(task)), model: key });
+  return key;
 }
 
 routerToggleElement.addEventListener('change', () => {
@@ -2210,6 +3050,27 @@ routerToggleElement.addEventListener('change', () => {
   audit(routerEnabled ? '开启模型总控' : '关闭模型总控');
 });
 applyFreeButton.addEventListener('click', applyFreeModel);
+modelPoolAllButton.addEventListener('click', () => {
+  if (!models.length) {
+    toast(t('先刷新模型列表'));
+    return;
+  }
+  for (const model of models) modelPool.add(`${model.provider}/${model.id}`);
+  saveModelPool();
+  renderModels();
+  renderProviders();
+  toast(t('已把 {count} 个模型加入快捷池', { count: models.length }));
+  audit('全部模型加入快捷池 · {count}', { count: models.length });
+});
+modelPoolClearButton.addEventListener('click', () => {
+  if (!modelPool.size) return;
+  modelPool.clear();
+  saveModelPool();
+  renderModels();
+  renderProviders();
+  toast(t('已清空快捷模型池'));
+  audit('清空快捷模型池');
+});
 for (const tab of boardTabs) {
   tab.addEventListener('click', () => {
     const board = tab.dataset.board;
@@ -2235,6 +3096,8 @@ modelModules = loadModelModules();
 projectModelBindings = loadProjectModelBindings();
 loadRouterConfig();
 loadModelHabits();
+loadModelPool();
+loadVendorTasks();
 
 function loadModelModules(): ModelModule[] {
   try {
@@ -2528,6 +3391,7 @@ async function refreshModels(): Promise<void> {
       models = [];
       renderProviderFilter();
       renderModels();
+      renderProviders();
       renderModules();
       return;
     }
@@ -2549,12 +3413,14 @@ async function refreshModels(): Promise<void> {
     }
     renderProviderFilter();
     renderModels();
+    renderProviders();
     renderModules();
   } catch (error) {
     modelSummaryElement.textContent = error instanceof Error ? error.message : String(error);
     models = [];
     renderProviderFilter();
     renderModels();
+    renderProviders();
     renderModules();
   }
 }
@@ -2618,7 +3484,8 @@ function keyTag(provider: ProviderInfo): HTMLSpanElement | null {
   return null;
 }
 
-function renderProviders(warnings: string[] = []): void {
+function renderProviders(warnings: string[] = providerWarnings): void {
+  providerWarnings = warnings;
   providerListElement.replaceChildren();
   const customCount = providers.filter((provider) => provider.custom).length;
   const keyedCount = providers.filter((provider) => provider.hasStoredKey).length;
@@ -2635,8 +3502,14 @@ function renderProviders(warnings: string[] = []): void {
   }
 
   for (const provider of providers) {
+    const providerModels = models.filter((model) => model.provider === provider.id);
+    if (!providerModelOpen.has(provider.id)) providerModelOpen.set(provider.id, provider.custom);
+    const open = providerModelOpen.get(provider.id) === true;
+
+    const block = document.createElement('div');
+    block.className = 'provider-block';
     const row = document.createElement('div');
-    row.className = 'provider-item';
+    row.className = providerModels.length ? 'provider-item expandable' : 'provider-item';
 
     const main = document.createElement('span');
     main.className = 'item-main';
@@ -2658,6 +3531,19 @@ function renderProviders(warnings: string[] = []): void {
 
     const actions = document.createElement('span');
     actions.className = 'item-actions';
+    if (providerModels.length) {
+      const toggle = providerAction(
+        open ? t('收起模型') : t('模型 {count}', { count: providerModels.length }),
+        () => {
+          providerModelOpen.set(provider.id, !open);
+          renderProviders();
+        },
+        'ghost small provider-models-toggle',
+      );
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.title = t('展开该 provider 的全部模型，可直接使用或加入快捷池');
+      actions.append(toggle);
+    }
     if (provider.custom) {
       actions.append(
         providerAction(t('编辑'), () => openEditProvider(provider)),
@@ -2669,7 +3555,84 @@ function renderProviders(warnings: string[] = []): void {
     }
 
     row.append(main, actions);
-    providerListElement.append(row);
+    const toggleOpen = (): void => {
+      providerModelOpen.set(provider.id, !open);
+      renderProviders();
+    };
+    if (providerModels.length) {
+      row.tabIndex = 0;
+      row.setAttribute('role', 'button');
+      row.setAttribute('aria-expanded', String(open));
+      row.addEventListener('click', (event) => {
+        if (event.target instanceof HTMLElement && event.target.closest('button')) return;
+        toggleOpen();
+      });
+      row.addEventListener('keydown', (event) => {
+        if (event.target !== row) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggleOpen();
+      });
+    }
+    block.append(row);
+
+    if (providerModels.length) {
+      const body = document.createElement('div');
+      body.className = 'provider-models';
+      body.hidden = !open;
+      for (const model of providerModels) {
+        const modelKey = `${model.provider}/${model.id}`;
+        const item = document.createElement('div');
+        item.className = 'provider-model';
+        const itemMain = document.createElement('span');
+        itemMain.className = 'item-main';
+        const modelName = document.createElement('strong');
+        modelName.textContent = model.name && model.name !== model.id ? `${model.id} · ${model.name}` : model.id;
+        const meta = document.createElement('small');
+        meta.textContent = [
+          contextLabel(model.contextWindow),
+          model.reasoning ? t('思考') : '',
+          model.freeReason === 'local' ? t('本地端点') : model.freeReason === 'openrouter' ? 'OpenRouter :free'
+            : model.freeReason === 'zero-cost' ? t('目录零价') : model.freeReason === 'whitelist' ? t('厂商免费额度') : '',
+        ].filter(Boolean).join(' · ');
+        itemMain.append(modelName);
+        if (meta.textContent) itemMain.append(meta);
+
+        const itemTags = document.createElement('span');
+        itemTags.className = 'item-tags';
+        if (model.free) itemTags.append(providerTag(t('免费'), 'tag free'));
+        if (model.relay) itemTags.append(providerTag(t('中转'), 'tag relay'));
+        if (model.current) itemTags.append(providerTag(t('使用中'), 'tag current'));
+
+        const modelActions = document.createElement('span');
+        modelActions.className = 'item-actions model-actions';
+        const useButton = document.createElement('button');
+        useButton.type = 'button';
+        useButton.className = 'ghost small use-model';
+        useButton.textContent = model.current ? t('使用中') : t('使用');
+        useButton.disabled = Boolean(model.current);
+        useButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          useModelNow(model);
+        });
+        const poolButton = document.createElement('button');
+        poolButton.type = 'button';
+        poolButton.className = 'ghost small pool-toggle';
+        const inPool = modelPool.has(modelKey);
+        poolButton.setAttribute('aria-pressed', String(inPool));
+        poolButton.textContent = inPool ? t('已快捷') : t('快捷');
+        poolButton.title = t('加入快捷模型池，按任务自动选择');
+        poolButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          toggleModelPool(modelKey);
+        });
+        modelActions.append(useButton, poolButton);
+        item.append(itemMain, itemTags, modelActions);
+        body.append(item);
+      }
+      block.append(body);
+    }
+    providerListElement.append(block);
   }
 }
 
@@ -3575,7 +4538,7 @@ async function startSession(sessionPath?: string): Promise<void> {
     return;
   }
   startingKeys.add(key);
-  liveByKey.set(key, { cwd: projectCwd, status: 'starting', buffer: '' });
+  liveByKey.set(key, { cwd: projectCwd, status: 'starting', chunks: [], bytes: 0 });
   const projectModule = isolatedCheckbox.checked ? undefined : boundModule() ?? autoModule();
   setState('starting', '启动中');
   setTerminalHint('正在启动 Pi…');
@@ -3619,7 +4582,7 @@ async function startSession(sessionPath?: string): Promise<void> {
   const resultKey = result.key || key;
   const live = liveByKey.get(resultKey);
   if (live) live.status = 'running';
-  else liveByKey.set(resultKey, { cwd: projectCwd, status: 'running', buffer: '' });
+  else liveByKey.set(resultKey, { cwd: projectCwd, status: 'running', chunks: [], bytes: 0 });
   const stillActive = resultKey === activeLiveKey();
   if (stillActive) {
     running = true;
@@ -3761,9 +4724,22 @@ composerElement.addEventListener('drop', (event) => {
   void handleDroppedFiles(event);
 });
 
+let routePreviewTimer = 0;
+
+function scheduleRoutePreview(): void {
+  if (routePreviewTimer) window.clearTimeout(routePreviewTimer);
+  if (!routerEnabled || !running) return;
+  routePreviewTimer = window.setTimeout(() => {
+    const text = composerInput.value.trim();
+    if (text.length < 8 || switchingPromise) return;
+    void maybeRouteModel(text, 0);
+  }, 650);
+}
+
 composerInput.addEventListener('input', () => {
   resizeComposer();
   updateComposerState();
+  scheduleRoutePreview();
 });
 composerInput.addEventListener('keydown', (event) => {
   if (event.key !== 'Enter' || event.shiftKey) return;
@@ -3877,9 +4853,15 @@ function updateComposerState(): void {
   stopRunButton.disabled = !running;
 }
 
+let composerResizeFrame = 0;
+
 function resizeComposer(): void {
-  composerInput.style.height = 'auto';
-  composerInput.style.height = `${Math.min(composerInput.scrollHeight, 170)}px`;
+  if (composerResizeFrame) return;
+  composerResizeFrame = window.requestAnimationFrame(() => {
+    composerResizeFrame = 0;
+    composerInput.style.height = 'auto';
+    composerInput.style.height = `${Math.min(composerInput.scrollHeight, 170)}px`;
+  });
 }
 
 function renderAttachments(): void {
@@ -3988,8 +4970,9 @@ async function sendComposerMessage(): Promise<void> {
   const paths = attachments.map((item) => (/\s/.test(item.path) ? `"${item.path}"` : item.path));
   const message = [text, paths.join(' ')].filter(Boolean).join('\n');
   if (!message) return;
-  await maybeRouteModel(text);
+  const route = await maybeRouteModel(text, 900);
   if (!running) return;
+  if (route === 'pending') toast(t('模型仍在切换，消息已发送；本条可能由原模型处理'));
   // Pi's TUI handles bracketed paste; multi-line input reaches the editor as one block.
   const payload = message.includes('\n') ? `\x1b[200~${message}\x1b[201~` : message;
   api.write(`${payload}\r`, activeLiveKey());
@@ -4436,23 +5419,88 @@ async function handleDroppedFiles(event: DragEvent): Promise<void> {
   }
 }
 
+// PTY 输出按帧合并：Pi 每个 token 都会刷屏，逐块 write 会让主线程持续卡顿。
+const outputQueue: Array<{ key: string; data: string }> = [];
+let outputQueueBytes = 0;
+let outputFrame = 0;
+let outputFallback = 0;
+
+// 保留最近 1.5MB 用于切换项目时回放；按块裁剪避免每帧复制整段缓冲。
+function appendLiveChunks(live: LiveView, data: string): void {
+  live.chunks.push(data);
+  live.bytes += data.length;
+  let overflow = live.bytes - OUTPUT_LIMIT;
+  while (overflow > 0 && live.chunks.length) {
+    const first = live.chunks[0];
+    if (first.length <= overflow) {
+      live.chunks.shift();
+      live.bytes -= first.length;
+      overflow -= first.length;
+      continue;
+    }
+    live.chunks[0] = first.slice(overflow);
+    live.bytes -= overflow;
+    overflow = 0;
+  }
+}
+
+function flushOutputQueue(): void {
+  if (outputFrame) {
+    window.cancelAnimationFrame(outputFrame);
+    outputFrame = 0;
+  }
+  if (outputFallback) {
+    window.clearTimeout(outputFallback);
+    outputFallback = 0;
+  }
+  if (!outputQueue.length) return;
+  const pending = outputQueue.splice(0);
+  outputQueueBytes = 0;
+  const grouped = new Map<string, string[]>();
+  for (const item of pending) {
+    const bucket = grouped.get(item.key);
+    if (bucket) bucket.push(item.data);
+    else grouped.set(item.key, [item.data]);
+  }
+  const active = activeLiveKey();
+  for (const [key, chunks] of grouped) {
+    const data = chunks.join('');
+    let live = liveByKey.get(key);
+    if (!live) {
+      live = { cwd: currentCwd || key, status: 'running', chunks: [], bytes: 0 };
+      liveByKey.set(key, live);
+    }
+    appendLiveChunks(live, data);
+    if (key !== active) {
+      api.ack(data.length, key);
+      continue;
+    }
+    lastOutputAt = Date.now();
+    trackActiveModel(data);
+    terminal.write(data, () => api.ack(data.length, key));
+  }
+}
+
+function queueOutput(key: string, data: string): void {
+  outputQueue.push({ key, data });
+  outputQueueBytes += data.length;
+  if (outputQueueBytes >= 512 * 1024) {
+    flushOutputQueue();
+    return;
+  }
+  if (!outputFrame) outputFrame = window.requestAnimationFrame(flushOutputQueue);
+  // 窗口最小化时 Chromium 会暂停 rAF，用定时器兜底避免输出看起来卡死。
+  if (!outputFallback) outputFallback = window.setTimeout(flushOutputQueue, 250);
+}
+
 api.onData((payload) => {
   const data = typeof payload === 'string' ? payload : payload.data;
   const key = typeof payload === 'string' ? activeLiveKey() : (payload.key || activeLiveKey());
   if (!data || !key) return;
-  let live = liveByKey.get(key);
-  if (!live) {
-    live = { cwd: currentCwd || key, status: 'running', buffer: '' };
-    liveByKey.set(key, live);
+  if (!liveByKey.has(key)) {
+    liveByKey.set(key, { cwd: currentCwd || key, status: 'running', chunks: [], bytes: 0 });
   }
-  live.buffer = (live.buffer + data).slice(-OUTPUT_LIMIT);
-  if (key !== activeLiveKey()) {
-    api.ack(data.length, key);
-    return;
-  }
-  lastOutputAt = Date.now();
-  trackActiveModel(data);
-  terminal.write(data, () => api.ack(data.length, key));
+  queueOutput(key, data);
 });
 
 api.onState((state) => {
@@ -4460,7 +5508,7 @@ api.onState((state) => {
   if (!key) return;
   let live = liveByKey.get(key);
   if (!live) {
-    live = { cwd: state.cwd || currentCwd || key, status: 'running', buffer: '' };
+    live = { cwd: state.cwd || currentCwd || key, status: 'running', chunks: [], bytes: 0 };
     liveByKey.set(key, live);
   }
   if (state.cwd) live.cwd = state.cwd;
@@ -4541,9 +5589,29 @@ capabilitySearchInput.addEventListener('input', () => {
 $('refresh-sessions').addEventListener('click', () => void refreshSessions());
 sessionSearchInput.addEventListener('input', () => renderSessions(sessionCache));
 $('refresh-providers').addEventListener('click', () => void refreshProviders());
+openProviderSettingsButton.addEventListener('click', () => openSettings('settings-tab-provider'));
+copyDiagnosticsButton.addEventListener('click', () => void copyDiagnostics());
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-feedback-email]')) {
+  button.addEventListener('click', () => openFeedbackMail(button.dataset.feedbackEmail ?? ''));
+}
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-text]')) {
+  button.addEventListener('click', async () => {
+    const value = button.dataset.copyText ?? '';
+    if (!value) return;
+    await api.writeClipboard(value);
+    toast('已复制：{value}', { value });
+  });
+}
 $('add-provider').addEventListener('click', openNewProvider);
 $('builtin-provider-key').addEventListener('click', () => openBuiltinKey(''));
-modelSearchElement.addEventListener('input', renderModels);
+let modelSearchTimer: number | undefined;
+modelSearchElement.addEventListener('input', () => {
+  if (modelSearchTimer !== undefined) window.clearTimeout(modelSearchTimer);
+  modelSearchTimer = window.setTimeout(() => {
+    modelSearchTimer = undefined;
+    renderModels();
+  }, 120);
+});
 modelProviderElement.addEventListener('change', renderModels);
 $('add-module').addEventListener('click', () => openModuleForm());
 $('cancel-module').addEventListener('click', closeModuleForm);
@@ -4773,6 +5841,8 @@ languageSelect.value = getLocale();
 languageSelect.addEventListener('change', () => void switchLocale(languageSelect.value));
 applyStaticI18n();
 initAppearanceControls();
+initPaneScrollProgress();
+initPointerSpotlight();
 if (new URLSearchParams(window.location.search).has('smokeCwd')) startupSplash.hidden = true;
 renderModules();
 void api.setLocale(getLocale()).catch(() => undefined);
@@ -4831,10 +5901,11 @@ panels = initPanels({
     renderRouterMap();
   },
   routerEnabled: () => routerEnabled,
+  routeForTask: (text) => routeForTask(text),
 });
 
 const LAYOUT_KEY = 'pi-layout-widths';
-const DEFAULT_LAYOUT = { left: 286, right: 310 };
+const DEFAULT_LAYOUT = { left: 300, right: 340 };
 const MIN_CENTER = 320;
 const MIN_SIDE = 200;
 
@@ -4859,6 +5930,14 @@ function setupResizers(): void {
     }
   };
   const apply = (): void => {
+    // 窄窗口为上下单列，宽度交给样式表，避免内联宽度把工作区挤成窄条
+    if (layout.clientWidth <= 880) {
+      sidebar.style.flexBasis = '';
+      sidebar.style.width = '';
+      workspace.style.flexBasis = '';
+      workspace.style.width = '';
+      return;
+    }
     const total = layout.clientWidth - 10;
     const maxLeft = Math.max(MIN_SIDE, Math.min(560, total - widths.right - MIN_CENTER));
     const maxRight = Math.max(MIN_SIDE + 40, Math.min(640, total - widths.left - MIN_CENTER));
@@ -4871,6 +5950,15 @@ function setupResizers(): void {
   };
   apply();
   window.addEventListener('resize', () => window.requestAnimationFrame(apply));
+  window.addEventListener('pi-ensure-sidebar-width', ((event: CustomEvent<{ width?: number }>) => {
+    // 安全页等宽内容首次打开时请求更大的左栏；用户之后仍可自行拖拽覆盖。
+    if (layout.clientWidth <= 880) return;
+    const target = Number(event.detail?.width) || 420;
+    if (widths.left >= target) return;
+    widths.left = target;
+    apply();
+    save();
+  }) as EventListener);
 
   const bind = (side: 'left' | 'right'): void => {
     const handle = $(`resizer-${side}`);
@@ -4936,7 +6024,7 @@ async function hydrateLiveSessions(): Promise<void> {
     for (const session of result.sessions) {
       const key = keyFor(session.cwd);
       const existing = liveByKey.get(key);
-      if (!existing) liveByKey.set(key, { cwd: session.cwd, status: 'running', buffer: '' });
+      if (!existing) liveByKey.set(key, { cwd: session.cwd, status: 'running', chunks: [], bytes: 0 });
       else if (existing.status !== 'running') existing.status = 'running';
     }
     if (currentCwd) {

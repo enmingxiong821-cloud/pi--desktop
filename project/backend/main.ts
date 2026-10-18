@@ -24,6 +24,9 @@ import { addMcpServer, addSkill, recordInstalledMeta, removeSkill } from './capa
 import { installPi, probeEnvironment, setupEnvironment, updatePi } from './env.js';
 import { createArchive, deleteArchive, listArchives, restoreArchive } from './archives.js';
 import { ingestMemory, ensureMemorySkill, installMemorySkill, memoryStats, recentMemory, searchMemory } from './memory.js';
+import { ensureBundledSkills } from './design-skills.js';
+import { detectTools, installTool, type ToolId } from './external-tools.js';
+import { cancelCrawl, startCrawl, type CrawlOptions } from './crawl-engine.js';
 import { habitSummary, recordHabit } from './habits.js';
 import { guardInstalled, installPermissionGuard, permissionGuardPath, readProjectPermissions, saveProjectPermissions } from './permissions.js';
 import { checkUpdates, downloadUpdate, getUpdateSettings, saveUpdateSettings } from './updater.js';
@@ -56,6 +59,17 @@ import {
   searchWeb,
 } from './tools.js';
 import { searchCode, searchRepos } from './search-extra.js';
+import { runTriage } from './reverse-r2.js';
+import { buildSarif, getLastFindings, runLocalAudit, stopAudit, type AuditOptions } from './security-audit.js';
+import {
+  authorizeTarget,
+  getAuditLog,
+  runPassive,
+  runPentest,
+  stopPentest,
+  type PassiveOptions,
+} from './pentest.js';
+import type { AuthorizationInput } from './security-guard.js';
 import { applyGlobalTokenSavings, usageReport } from './usage.js';
 
 interface ProjectRecord {
@@ -75,6 +89,41 @@ interface LiveSession {
 
 const liveSessions = new Map<string, LiveSession>();
 let activeKey: string | null = null;
+
+// ConPTY 会按很小的块吐数据；合并 8ms 再发 IPC，避免消息风暴和渲染进程抖动。
+const pendingPtyData = new Map<string, string[]>();
+let ptyFlushTimer: NodeJS.Timeout | null = null;
+
+function flushPtyData(): void {
+  if (ptyFlushTimer) {
+    clearTimeout(ptyFlushTimer);
+    ptyFlushTimer = null;
+  }
+  if (!pendingPtyData.size) return;
+  const batches = [...pendingPtyData];
+  pendingPtyData.clear();
+  for (const [key, parts] of batches) {
+    const live = liveSessions.get(key);
+    if (!live) continue;
+    const data = parts.join('');
+    live.unackedBytes += data.length;
+    send('pty:data', { key, data });
+    if (live.unackedBytes > HIGH_WATER) {
+      try {
+        live.session.pause();
+      } catch {
+        // best effort; the renderer ack will retry resume
+      }
+    }
+  }
+}
+
+function queuePtyData(key: string, data: string): void {
+  const parts = pendingPtyData.get(key);
+  if (parts) parts.push(data);
+  else pendingPtyData.set(key, [data]);
+  if (!ptyFlushTimer) ptyFlushTimer = setTimeout(flushPtyData, 8);
+}
 const MAX_LIVE_SESSIONS = 4;
 
 function sessionKey(cwd: string): string {
@@ -335,18 +384,11 @@ function startSession(options: StartOptions): { ok: boolean; key?: string; isola
     activeKey = key;
 
     next.onData((data) => {
-      live.unackedBytes += data.length;
-      send('pty:data', { key, data });
-      if (live.unackedBytes > HIGH_WATER) {
-        try {
-          next.pause();
-        } catch {
-          // best effort; the renderer ack will retry resume
-        }
-      }
+      queuePtyData(key, data);
     });
 
     next.onExit(({ exitCode }) => {
+      flushPtyData();
       if (liveSessions.get(key) === live) {
         liveSessions.delete(key);
         if (activeKey === key) activeKey = liveSessions.keys().next().value ?? null;
@@ -708,6 +750,12 @@ ipcMain.handle('app:locate', () => {
   }
 });
 
+ipcMain.handle('app:info', () => ({
+  version: app.getVersion(),
+  electron: process.versions.electron ?? '',
+  platform: `${process.platform} ${process.arch}`,
+}));
+
 ipcMain.handle('project:pick', async () => {
   const result = await dialog.showOpenDialog({
     title: t('选择项目目录'),
@@ -1056,6 +1104,34 @@ ipcMain.handle('tools:pick-app-exe', async () => {
 
 ipcMain.handle('tools:get-settings', () => ({ ok: true, settings: getToolSettings() }));
 
+ipcMain.handle('tools:tool-status', () => detectTools());
+
+ipcMain.handle('tools:install-tool', async (event, id: unknown) => {
+  if (typeof id !== 'string') return { ok: false, error: t('未知工具') };
+  const statuses = await detectTools();
+  const status = statuses.find((item) => item.id === id);
+  if (!status) return { ok: false, error: t('未知工具') };
+  if (status.installed) return { ok: true, id, status };
+  if (!status.installable) return { ok: false, id, error: t('该工具暂不支持一键安装') };
+
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const options = {
+    type: 'question' as const,
+    title: t('安装外部工具'),
+    message: t('安装 {{name}}？').replace('{{name}}', status.label),
+    detail: t('来源：{{source}} · 体积：{{size}}\n将从固定官方来源下载并校验，不修改系统 PATH。').replace('{{source}}', status.source).replace('{{size}}', status.sizeHint),
+    buttons: [t('取消'), t('安装')],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  };
+  const confirmed = window
+    ? await dialog.showMessageBox(window, options)
+    : await dialog.showMessageBox(options);
+  if (confirmed.response !== 1) return { ok: false, id, canceled: true, error: t('已取消安装') };
+  return installTool(id as ToolId);
+});
+
 ipcMain.handle('tools:save-settings', (_event, input: unknown) => saveToolSettings(input));
 
 ipcMain.handle('tools:search', (_event, query: unknown) =>
@@ -1071,8 +1147,103 @@ ipcMain.handle('tools:fetch-page', (_event, url: unknown) =>
 ipcMain.handle('tools:crawl', (_event, url: unknown) =>
   crawlPage(typeof url === 'string' ? url : ''));
 
+ipcMain.handle('tools:crawl-start', (event, input: unknown) => {
+  const options = (input && typeof input === 'object' ? input : {}) as CrawlOptions;
+  return startCrawl(options, (payload) => {
+    if (!event.sender.isDestroyed()) event.sender.send('tools:crawl-progress', payload);
+  });
+});
+
+ipcMain.handle('tools:crawl-cancel', (_event, runId: unknown) =>
+  cancelCrawl(typeof runId === 'string' ? runId : ''));
+
 ipcMain.handle('tools:analyze', (_event, target: unknown) =>
   analyzePath(typeof target === 'string' ? target : ''));
+
+ipcMain.handle('tools:triage', (_event, target: unknown) =>
+  runTriage(typeof target === 'string' ? target : ''));
+
+ipcMain.handle('security:pick-path', async (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const options = {
+    title: t('选择要审计的项目目录'),
+    properties: ['openDirectory' as const],
+  };
+  const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+  const picked = result.filePaths[0];
+  return result.canceled || !picked ? { ok: false } : { ok: true, path: picked };
+});
+
+ipcMain.handle('security:run-audit', (event, input: unknown) => {
+  const options = (input && typeof input === 'object' ? input : {}) as AuditOptions;
+  return runLocalAudit(options, (payload) => {
+    if (!event.sender.isDestroyed()) event.sender.send('security:progress', payload);
+  });
+});
+
+ipcMain.handle('security:stop-audit', () => stopAudit());
+
+ipcMain.handle('security:findings', () => {
+  const report = getLastFindings();
+  return report ? { ok: true, report } : { ok: false };
+});
+
+ipcMain.handle('security:export', async (event, format: unknown) => {
+  const report = getLastFindings();
+  if (!report) return { ok: false, error: t('没有可导出的审计结果') };
+  const sarif = format !== 'json';
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const options = {
+    title: sarif ? t('导出 SARIF') : t('导出 JSON'),
+    defaultPath: path.join(app.getPath('downloads'), sarif ? 'security-report.sarif' : 'security-report.json'),
+    filters: sarif
+      ? [{ name: 'SARIF', extensions: ['sarif'] }, { name: t('所有文件'), extensions: ['*'] }]
+      : [{ name: 'JSON', extensions: ['json'] }, { name: t('所有文件'), extensions: ['*'] }],
+  };
+  const picked = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
+  if (picked.canceled || !picked.filePath) return { ok: false, canceled: true };
+  try {
+    writeFileSync(picked.filePath, sarif ? buildSarif(report) : `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+    return { ok: true, path: picked.filePath };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('security:authorize', (_event, input: unknown) => {
+  const raw = (input && typeof input === 'object' ? input : {}) as Partial<AuthorizationInput>;
+  return authorizeTarget({
+    url: typeof raw.url === 'string' ? raw.url : '',
+    hostConfirm: typeof raw.hostConfirm === 'string' ? raw.hostConfirm : '',
+    statement: raw.statement === true,
+    note: typeof raw.note === 'string' ? raw.note : '',
+    allowLocal: raw.allowLocal === true,
+  });
+});
+
+ipcMain.handle('security:run-passive', (event, input: unknown) => {
+  const raw = (input && typeof input === 'object' ? input : {}) as Partial<PassiveOptions>;
+  return runPassive(
+    { url: typeof raw.url === 'string' ? raw.url : '', allowLocal: raw.allowLocal === true },
+    (payload) => {
+      if (!event.sender.isDestroyed()) event.sender.send('security:pentest-progress', payload);
+    },
+  );
+});
+
+ipcMain.handle('security:run-pentest', (event, input: unknown) => {
+  const raw = (input && typeof input === 'object' ? input : {}) as { token?: unknown };
+  return runPentest(
+    { token: typeof raw.token === 'string' ? raw.token : '' },
+    (payload) => {
+      if (!event.sender.isDestroyed()) event.sender.send('security:pentest-progress', payload);
+    },
+  );
+});
+
+ipcMain.handle('security:stop-pentest', () => stopPentest());
+
+ipcMain.handle('security:audit-log', () => getAuditLog());
 
 ipcMain.handle('tools:pick-analyze-path', async () => {
   const result = await dialog.showOpenDialog({
@@ -1370,7 +1541,7 @@ ipcMain.handle('shell:open-external', (_event, url: unknown) => {
   } catch {
     return { ok: false };
   }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return { ok: false };
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:' && parsed.protocol !== 'mailto:') return { ok: false };
   void shell.openExternal(parsed.toString());
   return { ok: true };
 });
@@ -1406,6 +1577,11 @@ if (!singleInstance) {
       ensureMemorySkill();
     } catch {
       // 记忆 Skill 装配失败不阻塞启动
+    }
+    try {
+      ensureBundledSkills();
+    } catch {
+      // 预置 Skill 装配失败不阻塞启动，用户仍可在能力页手动安装
     }
     ensureDesktopShortcut();
     installMediaProtocol();

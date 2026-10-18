@@ -167,8 +167,34 @@ interface ToolSettings {
   webSearch: boolean;
   crawl: boolean;
   reverse: boolean;
+  security: boolean;
   searchProvider: 'duckduckgo' | 'searxng';
   searxngUrl: string;
+}
+
+type ToolId = 'trafilatura' | 'radare2' | 'semgrep' | 'trivy' | 'gitleaks' | 'nuclei' | 'bandit' | 'gosec';
+
+interface ToolStatus {
+  id: ToolId;
+  label: string;
+  installed: boolean;
+  version?: string;
+  path?: string;
+  installable: boolean;
+  source: 'uv' | 'winget' | 'zip';
+  sizeHint: string;
+  note: string;
+  manualHint: string;
+  error?: string;
+}
+
+interface InstallResult {
+  ok: boolean;
+  id: ToolId;
+  status?: ToolStatus;
+  output?: string;
+  error?: string;
+  canceled?: boolean;
 }
 
 interface SearchResult {
@@ -201,6 +227,153 @@ interface PageContent {
   url: string;
   title: string;
   text: string;
+}
+
+type CrawlMode = 'search' | 'page' | 'site';
+
+interface CrawlOptions {
+  mode: CrawlMode;
+  query?: string;
+  url?: string;
+  maxPages?: number;
+  maxDepth?: number;
+  js?: boolean;
+}
+
+interface CrawlPage {
+  url: string;
+  title: string;
+  text: string;
+  engine: 'trafilatura' | 'builtin' | 'browser';
+  depth: number;
+  bytes: number;
+  links: number;
+}
+
+interface CrawlProgress {
+  runId: string;
+  phase: 'searching' | 'fetching' | 'done' | 'error' | 'canceled';
+  visited: number;
+  queued: number;
+  currentUrl?: string;
+  page?: CrawlPage;
+  pages?: CrawlPage[];
+  links?: string[];
+  message?: string;
+}
+
+interface TriageReport {
+  file: {
+    path: string; size: number; sha256: string; format: string; arch: string;
+    bits: number; os: string; type: string; stripped: boolean; compiler: string;
+  };
+  entry: number | null;
+  sections: Array<{ name: string; size: number; vsize: number; perm: string; vaddr: number }>;
+  imports: Array<{ name: string; library: string; type: string; plt?: number }>;
+  exports: Array<{ name: string; address: number; type: string }>;
+  strings: Array<{ value: string; length: number; type: string; vaddr: number }>;
+  functions: Array<{ name: string; size: number; cc: number; bbs: number }>;
+  xrefs: Array<{ import: string; refs: Array<{ from: number; type: string; opcode: string }> }>;
+  packer: { score: number; reasons: string[] };
+  durationMs: number;
+  truncated: boolean;
+  warnings: string[];
+}
+
+interface TriageResult {
+  ok: boolean;
+  triage?: TriageReport;
+  error?: string;
+  installed?: boolean;
+}
+
+type AuditSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+type AuditScanner = 'semgrep' | 'trivy' | 'gitleaks' | 'bandit' | 'gosec';
+
+interface AuditFinding {
+  id: string;
+  tool: AuditScanner;
+  severity: AuditSeverity;
+  title: string;
+  message: string;
+  file?: string;
+  line?: number;
+  ruleId?: string;
+  category?: string;
+}
+
+interface AuditReport {
+  runId: string;
+  root: string;
+  startedAt: string;
+  finishedAt: string;
+  findings: AuditFinding[];
+  scanners: Array<{ id: AuditScanner; installed: boolean; ok: boolean; count: number; skipped?: boolean; error?: string }>;
+  canceled: boolean;
+  truncated: boolean;
+}
+
+interface AuditProgress {
+  runId: string;
+  phase: 'starting' | 'scanning' | 'done' | 'error' | 'canceled';
+  message: string;
+  percent?: number;
+  count?: number;
+}
+
+interface PentestFinding {
+  id: string;
+  severity: AuditSeverity;
+  title: string;
+  detail: string;
+  category: 'transport' | 'headers' | 'cookies' | 'exposure' | 'template';
+  ruleId?: string;
+  url?: string;
+}
+
+interface PentestProgress {
+  runId: string;
+  phase: 'starting' | 'checking' | 'scanning' | 'done' | 'error' | 'canceled';
+  message: string;
+  percent?: number;
+  count?: number;
+  findings?: PentestFinding[];
+}
+
+interface AuthorizationTicket {
+  ok: boolean;
+  token?: string;
+  target?: { url: string; host: string; port: number; scheme: 'http' | 'https' };
+  ips?: string[];
+  expiresAt?: string;
+  error?: string;
+}
+
+interface AuditLogEntry {
+  runId: string;
+  at: string;
+  kind: 'passive' | 'active';
+  target: { url: string; host: string; port: number; scheme: 'http' | 'https' };
+  ips: string[];
+  allowLocal: boolean;
+  note?: string;
+  tool: string;
+  argv: string[];
+  rulesHash?: string;
+  requests: number;
+  durationMs: number;
+  exitCode?: number;
+  findings: number;
+  outcome: 'ok' | 'error' | 'canceled' | 'timeout';
+  prevHash: string;
+  hash: string;
+}
+
+interface AuditLogReport {
+  ok: boolean;
+  entries: AuditLogEntry[];
+  chainValid: boolean;
+  error?: string;
 }
 
 interface UsageTotals {
@@ -387,12 +560,32 @@ interface PanelApi {
   updatePi(): Promise<{ ok: boolean; installed?: boolean; version?: string; output?: string; error?: string }>;
   getToolSettings(): Promise<{ ok: boolean; settings: ToolSettings }>;
   saveToolSettings(input: ToolSettings): Promise<{ ok: boolean; settings?: ToolSettings; error?: string }>;
+  toolStatus(): Promise<ToolStatus[]>;
+  installTool(id: ToolId): Promise<InstallResult>;
   searchWeb(query: string): Promise<{ ok: boolean; results: SearchResult[]; error?: string }>;
   searchRepos(query: string): Promise<{ ok: boolean; results: RepoResult[]; error?: string }>;
   searchCode(query: string): Promise<{ ok: boolean; results: CodeResult[]; error?: string }>;
   fetchWebPage(url: string): Promise<{ ok: boolean; page?: PageContent; error?: string }>;
   crawlWeb(url: string): Promise<{ ok: boolean; pages: PageContent[]; links: string[]; error?: string }>;
+  startCrawl(options: CrawlOptions): Promise<{ ok: boolean; runId?: string; error?: string }>;
+  cancelCrawl(runId: string): Promise<{ ok: boolean; error?: string }>;
+  onCrawlProgress(callback: (event: CrawlProgress) => void): () => void;
   analyzePath(target: string): Promise<{ ok: boolean; lines?: string[]; error?: string }>;
+  triage(target: string): Promise<TriageResult>;
+  securityPickPath(): Promise<{ ok: boolean; path?: string }>;
+  runAudit(input: { path: string }): Promise<{ ok: boolean; runId?: string; error?: string }>;
+  stopAudit(): Promise<{ ok: boolean; error?: string }>;
+  auditFindings(): Promise<{ ok: boolean; report?: AuditReport }>;
+  exportAudit(format: 'sarif' | 'json'): Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }>;
+  onSecurityProgress(callback: (event: AuditProgress) => void): () => void;
+  authorizeTarget(input: {
+    url: string; hostConfirm: string; statement: boolean; note: string; allowLocal?: boolean;
+  }): Promise<AuthorizationTicket>;
+  runPassive(input: { url: string; allowLocal?: boolean }): Promise<{ ok: boolean; runId?: string; error?: string }>;
+  runPentest(input: { token: string }): Promise<{ ok: boolean; runId?: string; error?: string }>;
+  stopPentest(): Promise<{ ok: boolean; error?: string }>;
+  auditLog(): Promise<AuditLogReport>;
+  onPentestProgress(callback: (event: PentestProgress) => void): () => void;
   pickAnalyzePath(): Promise<{ ok: boolean; path?: string }>;
   pickMedia(): Promise<{ ok: boolean; item?: VisualMedia; items?: VisualMedia[]; error?: string }>;
   openMediaExternally(filePath: string): Promise<{ ok: boolean; error?: string }>;
@@ -411,12 +604,14 @@ export interface PanelDeps {
   refreshCapabilities(): void;
   setRouterEnabled?(enabled: boolean): void;
   routerEnabled?(): boolean;
+  routeForTask?(text: string): Promise<string | null>;
 }
 
 export interface PanelsController {
   refreshMarket(): void;
   refreshAutomation(): Promise<void>;
   refreshAgents(refresh?: boolean): Promise<void>;
+  activateSecurity(): Promise<void>;
   setProject(): void;
   activateWorkspace(id: string): void;
 }
@@ -504,6 +699,8 @@ export function initPanels(deps: PanelDeps): PanelsController {
   function renderRoom(): void {
     meetingRoom.querySelectorAll('.room-chip').forEach((chip) => chip.remove());
     meetingRoomEmpty.hidden = roomApps.size + roomAgents.size > 0;
+    const roomCount = document.getElementById('meeting-room-count');
+    if (roomCount) roomCount.textContent = t('已选 {count} 个', { count: roomApps.size + roomAgents.size });
     const addChip = (type: 'app' | 'agent', id: string, name: string): void => {
       const chip = document.createElement('span');
       chip.className = `room-chip ${type}`;
@@ -592,8 +789,11 @@ export function initPanels(deps: PanelDeps): PanelsController {
     tab.addEventListener('click', () => activateWorkspace(tab.id));
     tab.addEventListener('keydown', (event) => {
       let next: HTMLButtonElement | undefined;
+      // 工作区标签为三列网格，上下键按行移动
       if (event.key === 'ArrowRight') next = workspaceTabs[(index + 1) % workspaceTabs.length];
       if (event.key === 'ArrowLeft') next = workspaceTabs[(index + workspaceTabs.length - 1) % workspaceTabs.length];
+      if (event.key === 'ArrowDown') next = workspaceTabs[Math.min(index + 3, workspaceTabs.length - 1)];
+      if (event.key === 'ArrowUp') next = workspaceTabs[Math.max(index - 3, 0)];
       if (next) {
         event.preventDefault();
         activateWorkspace(next.id);
@@ -1936,7 +2136,7 @@ export function initPanels(deps: PanelDeps): PanelsController {
     const cwd = deps.currentCwd();
     const heading = document.createElement('div');
     heading.className = 'group-label';
-    heading.textContent = t('能力包 · 按项目类型一键启用');
+    heading.textContent = t('能力包 · 按项目启用');
     packsElement.append(heading);
     if (!cwd) {
       const empty = document.createElement('div');
@@ -1947,66 +2147,157 @@ export function initPanels(deps: PanelDeps): PanelsController {
     }
     const installed = await installedSkillNames(cwd);
     const skillById = new Map((catalog.skills ?? []).map((item) => [item.name, item]));
-    for (const pack of PACKS) {
-      const available = pack.skills.filter((name) => skillById.has(name));
-      if (!available.length) continue;
-      const allOn = available.every((name) => installed.has(name));
-      const row = document.createElement('label');
-      row.className = 'pack-row';
-      const toggle = document.createElement('input');
-      toggle.type = 'checkbox';
-      toggle.checked = allOn;
-      const main = document.createElement('span');
-      main.className = 'item-main';
-      const title = document.createElement('strong');
-      title.textContent = pack.label;
-      const desc = document.createElement('small');
-      desc.textContent = `${pack.description} · ${available.join(' / ')}`;
-      main.append(title, desc);
-      const badge = document.createElement('span');
-      badge.className = 'tag';
-      badge.textContent = t('自动调用');
-      toggle.addEventListener('change', async () => {
-        toggle.disabled = true;
-        if (toggle.checked) {
-          const missing = available.filter((name) => !installed.has(name));
-          const failures: string[] = [];
-          for (const name of missing) {
-            const skill = skillById.get(name)!;
-            const result = await api.addSkill({
-              scope: 'project',
-              cwd,
-              name: skill.name,
-              description: skill.description,
-              body: skill.body,
-              category: pack.category,
-              tags: [pack.category, pack.label],
-              source: `pack:${pack.id}`,
-            });
-            if (!result.ok) failures.push(`${name}: ${result.error ?? ''}`);
-          }
-          if (failures.length) deps.toast(t('部分能力安装失败：{error}', { error: failures.join('；') }));
-          else deps.toast(t('已启用能力包：{name}', { name: pack.label }));
-        } else {
-          if (!window.confirm(t('停用后将删除本工作台写入该项目的 Skill 文件：{names}。确认继续？', { names: available.join('、') }))) {
-            toggle.checked = true;
-            toggle.disabled = false;
+    const visible = PACKS
+      .map((pack) => ({ pack, available: pack.skills.filter((name) => skillById.has(name)) }))
+      .filter((entry) => entry.available.length > 0);
+    if (!visible.length) return;
+
+    const enabledCount = visible.filter(({ available }) => available.every((name) => installed.has(name))).length;
+    const toolbar = document.createElement('div');
+    toolbar.className = 'pack-toolbar';
+    const summary = document.createElement('span');
+    summary.className = 'pack-summary';
+    summary.textContent = t('已启用 {on} / {total}', { on: String(enabledCount), total: String(visible.length) });
+    const enableAll = document.createElement('button');
+    enableAll.type = 'button';
+    enableAll.className = 'ghost pack-action';
+    enableAll.textContent = t('全部启用');
+    enableAll.disabled = enabledCount === visible.length;
+    const disableAll = document.createElement('button');
+    disableAll.type = 'button';
+    disableAll.className = 'ghost pack-action';
+    disableAll.textContent = t('全部停用');
+    disableAll.disabled = !visible.some(({ available }) => available.some((name) => installed.has(name)));
+    toolbar.append(summary, enableAll, disableAll);
+    packsElement.append(toolbar);
+
+    let busy = false;
+    const installSkills = async (entries: Array<{ pack: (typeof PACKS)[number]; available: string[] }>): Promise<string[]> => {
+      const failures: string[] = [];
+      const done = new Set<string>();
+      for (const { pack, available } of entries) {
+        for (const name of available) {
+          if (installed.has(name) || done.has(name)) continue;
+          done.add(name);
+          const skill = skillById.get(name)!;
+          const result = await api.addSkill({
+            scope: 'project',
+            cwd,
+            name: skill.name,
+            description: skill.description,
+            body: skill.body,
+            category: pack.category,
+            tags: [pack.category, pack.label],
+            source: `pack:${pack.id}`,
+          });
+          if (!result.ok) failures.push(`${name}: ${result.error ?? ''}`);
+        }
+      }
+      return failures;
+    };
+    const removeSkills = async (entries: Array<{ available: string[] }>): Promise<string[]> => {
+      const failures: string[] = [];
+      const done = new Set<string>();
+      for (const { available } of entries) {
+        for (const name of available) {
+          if (!installed.has(name) || done.has(name)) continue;
+          done.add(name);
+          const result = await api.removeSkill({ scope: 'project', cwd, name });
+          if (!result.ok) failures.push(`${name}: ${result.error ?? ''}`);
+        }
+      }
+      return failures;
+    };
+
+    enableAll.addEventListener('click', async () => {
+      if (busy) return;
+      busy = true;
+      enableAll.disabled = true;
+      disableAll.disabled = true;
+      const failures = await installSkills(visible);
+      if (failures.length) deps.toast(t('部分能力安装失败：{error}', { error: failures.join('；') }));
+      else deps.toast(t('已启用全部能力包'));
+      busy = false;
+      deps.refreshCapabilities();
+      await renderPacks();
+    });
+    disableAll.addEventListener('click', async () => {
+      if (busy) return;
+      const names = [...new Set(visible.flatMap(({ available }) => available.filter((name) => installed.has(name))))];
+      if (!names.length) return;
+      if (!window.confirm(t('停用后将删除本工作台写入该项目的 Skill 文件：{names}。确认继续？', { names: names.join('、') }))) return;
+      busy = true;
+      enableAll.disabled = true;
+      disableAll.disabled = true;
+      const failures = await removeSkills(visible);
+      if (failures.length) deps.toast(t('部分能力停用失败：{error}', { error: failures.join('；') }));
+      else deps.toast(t('已停用全部能力包'));
+      busy = false;
+      deps.refreshCapabilities();
+      await renderPacks();
+    });
+
+    const groups = new Map<string, typeof visible>();
+    for (const entry of visible) {
+      const list = groups.get(entry.pack.category) ?? [];
+      list.push(entry);
+      groups.set(entry.pack.category, list);
+    }
+
+    for (const [category, entries] of groups) {
+      const groupLabel = document.createElement('div');
+      groupLabel.className = 'pack-group';
+      groupLabel.textContent = category;
+      packsElement.append(groupLabel);
+      for (const { pack, available } of entries) {
+        const onCount = available.filter((name) => installed.has(name)).length;
+        const allOn = onCount === available.length;
+        const row = document.createElement('label');
+        row.className = 'pack-row';
+        const toggle = document.createElement('input');
+        toggle.type = 'checkbox';
+        toggle.role = 'switch';
+        toggle.checked = allOn;
+        toggle.setAttribute('aria-label', t('启用能力包：{name}', { name: pack.label }));
+        const main = document.createElement('span');
+        main.className = 'item-main';
+        const title = document.createElement('strong');
+        title.textContent = pack.label;
+        const desc = document.createElement('small');
+        desc.textContent = `${pack.description} · ${available.join(' / ')}`;
+        main.append(title, desc);
+        const badge = document.createElement('span');
+        badge.className = `tag pack-state${allOn ? ' on' : onCount ? ' partial' : ''}`;
+        badge.textContent = allOn ? t('已启用') : onCount ? t('部分启用') : t('未启用');
+        toggle.addEventListener('change', async () => {
+          if (busy) {
+            toggle.checked = allOn;
             return;
           }
-          const failures: string[] = [];
-          for (const name of available.filter((item) => installed.has(item))) {
-            const result = await api.removeSkill({ scope: 'project', cwd, name });
-            if (!result.ok) failures.push(`${name}: ${result.error ?? ''}`);
+          busy = true;
+          toggle.disabled = true;
+          if (toggle.checked) {
+            const failures = await installSkills([{ pack, available }]);
+            if (failures.length) deps.toast(t('部分能力安装失败：{error}', { error: failures.join('；') }));
+            else deps.toast(t('已启用能力包：{name}', { name: pack.label }));
+          } else {
+            if (!window.confirm(t('停用后将删除本工作台写入该项目的 Skill 文件：{names}。确认继续？', { names: available.join('、') }))) {
+              toggle.checked = true;
+              toggle.disabled = false;
+              busy = false;
+              return;
+            }
+            const failures = await removeSkills([{ available }]);
+            if (failures.length) deps.toast(t('部分能力停用失败：{error}', { error: failures.join('；') }));
+            else deps.toast(t('已停用能力包：{name}', { name: pack.label }));
           }
-          if (failures.length) deps.toast(t('部分能力停用失败：{error}', { error: failures.join('；') }));
-          else deps.toast(t('已停用能力包：{name}', { name: pack.label }));
-        }
-        toggle.disabled = false;
-        deps.refreshCapabilities();
-        await renderPacks();
-      });
-      row.append(toggle, main, badge);
-      packsElement.append(row);
+          busy = false;
+          deps.refreshCapabilities();
+          await renderPacks();
+        });
+        row.append(toggle, main, badge);
+        packsElement.append(row);
+      }
     }
   }
 
@@ -2517,6 +2808,11 @@ export function initPanels(deps: PanelDeps): PanelsController {
     return details;
   }
 
+  function renderRosterCount(): void {
+    const roster = document.getElementById('team-roster-count');
+    if (roster) roster.textContent = t('已选 {count} 个', { count: selectedAgents.size });
+  }
+
   function renderAgents(): void {
     const previousSupervisor = supervisorSelect.value;
     agentList.replaceChildren();
@@ -2628,6 +2924,7 @@ export function initPanels(deps: PanelDeps): PanelsController {
             $('team-suggest').textContent = t('主管将按任务与项目自动评分选择。');
           }
         }
+        renderRosterCount();
       });
       const text = document.createElement('span');
       text.textContent = agent.name;
@@ -2649,6 +2946,7 @@ export function initPanels(deps: PanelDeps): PanelsController {
       : false;
     supervisorSelect.value = keep ? previousSupervisor : '';
     supervisorField.hidden = supervisorMode.value !== 'manual';
+    renderRosterCount();
     if (!teamAgents.children.length) {
       const empty = document.createElement('div');
       empty.className = 'empty';
@@ -2881,6 +3179,8 @@ export function initPanels(deps: PanelDeps): PanelsController {
     renderTeamChart(plannedSupervisor, [...selectedAgents]);
     activateWorkspace('tab-ws-collab');
     try {
+      const routed = deps.routeForTask ? await deps.routeForTask(task) : null;
+      if (routed) deps.toast(t('协作前已切换 Pi 模型：{model}', { model: routed }));
       const result = await api.runTeam({
         task,
         agentIds: [...selectedAgents],
@@ -2970,13 +3270,41 @@ export function initPanels(deps: PanelDeps): PanelsController {
     searchResults.replaceChildren();
     searchStatus.textContent = t(SEARCH_MODE_META[mode].hint);
   }
-  const crawlOutput = $('crawl-output');
+  const crawlQuery = $<HTMLInputElement>('crawl-query');
+  const crawlUrl = $<HTMLInputElement>('crawl-url');
+  const crawlMaxPages = $<HTMLInputElement>('crawl-max-pages');
+  const crawlDepth = $<HTMLInputElement>('crawl-depth');
+  const crawlJs = $<HTMLInputElement>('crawl-js');
+  const crawlStart = $<HTMLButtonElement>('crawl-start');
+  const crawlStop = $<HTMLButtonElement>('crawl-stop');
+  const crawlCopy = $<HTMLButtonElement>('crawl-copy');
+  const crawlPagesList = $('crawl-pages');
+  const crawlProgress = $('crawl-progress');
+  const crawlProgressBar = $('crawl-progress-bar');
+  const crawlProgressText = $('crawl-progress-text');
+  const crawlEngineTag = $('crawl-engine-tag');
+  const installTrafilatura = $<HTMLButtonElement>('install-trafilatura');
+  const crawlModeTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-crawl-mode]'));
+  let crawlMode: CrawlMode = 'search';
+  let crawlRunId = '';
+  let crawlStarting = false;
+  let crawlCollected: CrawlPage[] = [];
   const analyzeOutput = $('analyze-output');
+  const analyzePathInput = $<HTMLInputElement>('analyze-path');
+  const revEngineTag = $('rev-engine-tag');
+  const installRadare2 = $<HTMLButtonElement>('install-radare2');
+  const runTriageButton = $<HTMLButtonElement>('run-triage');
+  const copyTriage = $<HTMLButtonElement>('copy-triage');
+  const triageReportElement = $('triage-report');
+  let lastTriage: TriageReport | undefined;
+  // 安全页在 P3 才出现开关，先保留读取到的值，避免保存其它开关时被重置
+  let securityFlag = false;
 
   function fillToolSettings(settings: ToolSettings): void {
     toolWebSearch.checked = settings.webSearch;
     toolCrawl.checked = settings.crawl;
     toolReverse.checked = settings.reverse;
+    securityFlag = Boolean(settings.security);
     searchProvider.value = settings.searchProvider;
     searxngUrl.value = settings.searxngUrl;
     searxngUrl.disabled = settings.searchProvider !== 'searxng';
@@ -2987,6 +3315,7 @@ export function initPanels(deps: PanelDeps): PanelsController {
       webSearch: toolWebSearch.checked,
       crawl: toolCrawl.checked,
       reverse: toolReverse.checked,
+      security: securityFlag,
       searchProvider: searchProvider.value === 'searxng' ? 'searxng' : 'duckduckgo',
       searxngUrl: searxngUrl.value.trim(),
     };
@@ -3037,8 +3366,9 @@ export function initPanels(deps: PanelDeps): PanelsController {
       actions.className = 'item-tags';
       const crawl = button(t('抓取正文'), 'ghost small');
       crawl.addEventListener('click', () => {
-        $<HTMLInputElement>('crawl-url').value = item.url;
-        void runCrawl(false);
+        crawlUrl.value = item.url;
+        setCrawlMode('page');
+        void startCrawlRun();
       });
       actions.append(crawl);
       row.append(main, actions);
@@ -3176,28 +3506,294 @@ export function initPanels(deps: PanelDeps): PanelsController {
     }
   }
 
-  async function runCrawl(site: boolean): Promise<void> {
-    const url = $<HTMLInputElement>('crawl-url').value.trim();
-    if (!url) {
-      deps.toast(t('填写网页地址'));
-      return;
+  function setCrawlMode(mode: CrawlMode): void {
+    crawlMode = mode;
+    for (const tab of crawlModeTabs) {
+      tab.classList.toggle('active', tab.dataset.crawlMode === mode);
+      tab.setAttribute('aria-selected', String(tab.dataset.crawlMode === mode));
     }
-    crawlOutput.textContent = t('正在抓取…');
-    const result = site ? await api.crawlWeb(url) : await api.fetchWebPage(url);
-    if (!result.ok) {
-      crawlOutput.textContent = result.error || t('抓取失败');
-      return;
-    }
-    const pages = site
-      ? (result as { pages: PageContent[] }).pages
-      : (result as { page?: PageContent }).page ? [(result as { page: PageContent }).page] : [];
-    crawlOutput.textContent = pages
-      .map((page) => `## ${page.title}\n${page.url}\n\n${page.text.slice(0, 6000)}`)
-      .join('\n\n---\n\n') || t('没有抓到正文');
+    $('crawl-search-row').hidden = mode !== 'search';
+    $('crawl-url-row').hidden = mode === 'search';
+    crawlDepth.disabled = mode === 'page';
+    if (mode === 'page') crawlDepth.value = '0';
+    else if (crawlDepth.value === '0') crawlDepth.value = '1';
   }
 
+  function setCrawlRunning(running: boolean): void {
+    crawlStart.disabled = running;
+    crawlStop.hidden = !running;
+    crawlCopy.disabled = running || crawlCollected.length === 0;
+  }
+
+  function renderCrawlPage(page: CrawlPage): void {
+    const row = document.createElement('article');
+    row.className = 'item crawl-item';
+    const main = document.createElement('div');
+    main.className = 'item-main';
+    const title = document.createElement('strong');
+    title.textContent = page.title || page.url;
+    const link = document.createElement('a');
+    link.href = '#';
+    link.className = 'crawl-link';
+    link.textContent = page.url;
+    link.title = page.url;
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      void api.openExternal(page.url);
+    });
+    const meta = document.createElement('span');
+    meta.className = 'item-meta';
+    meta.textContent = `${page.engine} · ${t('深度')} ${page.depth} · ${Math.round(page.bytes / 1024)}KB · ${t('链接')} ${page.links}`;
+    const preview = document.createElement('p');
+    preview.className = 'crawl-preview';
+    preview.textContent = page.text.slice(0, 1200);
+    main.append(title, link, meta, preview);
+    row.append(main);
+    crawlPagesList.append(row);
+  }
+
+  function finishCrawl(message: string): void {
+    crawlRunId = '';
+    crawlStarting = false;
+    setCrawlRunning(false);
+    crawlProgressBar.style.width = '100%';
+    crawlProgressText.textContent = message;
+    crawlCopy.disabled = crawlCollected.length === 0;
+  }
+
+  function handleCrawlProgress(event: CrawlProgress): void {
+    if (crawlRunId !== event.runId) {
+      if (!crawlStarting) return;
+      crawlRunId = event.runId;
+    }
+    crawlProgress.hidden = false;
+    if (event.phase === 'searching') {
+      crawlProgressBar.style.width = '8%';
+      crawlProgressText.textContent = event.message || t('正在检索种子页面');
+      return;
+    }
+    if (event.phase === 'fetching') {
+      const max = Math.max(1, Number(crawlMaxPages.value) || 6);
+      crawlProgressBar.style.width = `${Math.min(100, (event.visited / max) * 100)}%`;
+      crawlProgressText.textContent = event.message
+        || `${event.visited}/${max}${event.queued ? ` · ${t('队列')} ${event.queued}` : ''}`;
+      if (event.page) {
+        crawlCollected.push(event.page);
+        renderCrawlPage(event.page);
+      }
+      crawlCopy.disabled = crawlCollected.length === 0;
+      return;
+    }
+    finishCrawl(event.message || (event.phase === 'done' ? t('抓取完成') : t('抓取已停止')));
+  }
+
+  async function startCrawlRun(): Promise<void> {
+    const options: CrawlOptions = {
+      mode: crawlMode,
+      maxPages: Math.min(20, Math.max(1, Number(crawlMaxPages.value) || 6)),
+      maxDepth: Math.min(2, Math.max(0, Number(crawlDepth.value) || 0)),
+      js: crawlJs.checked,
+    };
+    if (crawlMode === 'search') {
+      options.query = crawlQuery.value.trim();
+      if (!options.query) {
+        deps.toast(t('填写搜索主题'));
+        return;
+      }
+    } else {
+      options.url = crawlUrl.value.trim();
+      if (!options.url) {
+        deps.toast(t('填写网页地址'));
+        return;
+      }
+    }
+    crawlCollected = [];
+    crawlPagesList.replaceChildren();
+    crawlProgress.hidden = false;
+    crawlProgressBar.style.width = '0%';
+    crawlProgressText.textContent = t('正在准备…');
+    crawlStarting = true;
+    const result = await api.startCrawl(options);
+    if (!result.ok || !result.runId) {
+      crawlStarting = false;
+      crawlProgressText.textContent = result.error || t('抓取失败');
+      return;
+    }
+    crawlRunId = result.runId;
+    setCrawlRunning(true);
+  }
+
+  async function copyCrawlMarkdown(): Promise<void> {
+    if (!crawlCollected.length) return;
+    const markdown = crawlCollected
+      .map((page) => `## ${page.title || page.url}\n<${page.url}>\n\n${page.text}`)
+      .join('\n\n---\n\n');
+    await api.writeClipboard(markdown);
+    deps.toast(t('已复制抓取结果'));
+  }
+
+  async function refreshCrawlTool(): Promise<void> {
+    try {
+      const statuses = await api.toolStatus();
+      const trafilatura = statuses.find((item) => item.id === 'trafilatura');
+      if (trafilatura?.installed) {
+        const version = trafilatura.version?.match(/\d+(?:\.\d+)+/)?.[0];
+        crawlEngineTag.textContent = `trafilatura${version ? ` ${version}` : ''}`;
+        crawlEngineTag.classList.add('ready');
+        installTrafilatura.hidden = true;
+      } else {
+        crawlEngineTag.textContent = t('正文引擎：内置');
+        crawlEngineTag.classList.remove('ready');
+        installTrafilatura.hidden = !(trafilatura?.installable ?? true);
+      }
+    } catch {
+      crawlEngineTag.textContent = t('正文引擎：内置');
+    }
+  }
+
+  installTrafilatura.addEventListener('click', async () => {
+    installTrafilatura.disabled = true;
+    const label = installTrafilatura.textContent ?? '';
+    installTrafilatura.textContent = t('安装中…');
+    const result = await api.installTool('trafilatura');
+    installTrafilatura.disabled = false;
+    installTrafilatura.textContent = label;
+    deps.toast(result.ok ? t('安装完成') : (result.error || t('安装失败')));
+    await refreshCrawlTool();
+  });
+
+  void refreshCrawlTool();
+
+  async function refreshReverseTool(): Promise<void> {
+    try {
+      const statuses = await api.toolStatus();
+      const r2 = statuses.find((item) => item.id === 'radare2');
+      if (r2?.installed) {
+        const version = r2.version?.match(/\d+(?:\.\d+){1,}/)?.[0];
+        revEngineTag.textContent = `radare2${version ? ` ${version}` : ''}`;
+        revEngineTag.classList.add('ready');
+        installRadare2.hidden = true;
+      } else {
+        revEngineTag.textContent = t('未安装 radare2');
+        revEngineTag.classList.remove('ready');
+        installRadare2.hidden = !(r2?.installable ?? false);
+      }
+    } catch {
+      revEngineTag.textContent = 'radare2';
+    }
+  }
+
+  function triageRow(label: string, value: string): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'triage-row';
+    const key = document.createElement('span');
+    key.className = 'triage-key';
+    key.textContent = label;
+    const val = document.createElement('span');
+    val.className = 'triage-val';
+    val.textContent = value;
+    row.append(key, val);
+    return row;
+  }
+
+  function triageBlock(title: string, lines: string[]): HTMLElement {
+    const block = document.createElement('details');
+    block.className = 'triage-block';
+    const summary = document.createElement('summary');
+    summary.textContent = `${title} · ${lines.length}`;
+    const pre = document.createElement('pre');
+    pre.className = 'triage-pre';
+    pre.textContent = lines.slice(0, 60).join('\n');
+    block.append(summary, pre);
+    return block;
+  }
+
+  function renderTriage(report: TriageReport): void {
+    lastTriage = report;
+    copyTriage.disabled = false;
+    const frag = document.createDocumentFragment();
+    const head = document.createElement('div');
+    head.className = 'triage-head';
+    const title = document.createElement('strong');
+    title.textContent = `${report.file.format.toUpperCase()} · ${report.file.arch} · ${report.file.bits} 位`;
+    const pack = document.createElement('span');
+    pack.className = `tag ${report.packer.score >= 60 ? 'failed' : report.packer.score >= 30 ? 'key' : 'ready'}`;
+    pack.textContent = report.packer.score ? `${t('加壳迹象')} ${report.packer.score}` : t('未见明显加壳');
+    head.append(title, pack);
+    frag.append(head);
+    frag.append(triageRow(t('文件格式'), `${report.file.type || report.file.format}${report.file.stripped ? ' · stripped' : ''}`));
+    frag.append(triageRow(t('文件大小'), `${Math.round(report.file.size / 1024)} KB`));
+    frag.append(triageRow('SHA-256', report.file.sha256));
+    frag.append(triageRow(t('入口'), report.entry ? `0x${report.entry.toString(16)}` : '—'));
+    frag.append(triageRow(t('耗时'), `${report.durationMs} ms${report.truncated ? ` · ${t('已截断')}` : ''}`));
+    if (report.packer.reasons.length) frag.append(triageRow(t('加壳迹象'), report.packer.reasons.join('；')));
+    if (report.warnings.length) frag.append(triageRow(t('提示'), report.warnings.join('；')));
+    frag.append(triageBlock(t('段'), report.sections.map(
+      (item) => `${item.name}  ${item.perm}  vsize=${item.vsize}  size=${item.size}`)));
+    frag.append(triageBlock(t('导入'), report.imports.map(
+      (item) => `${item.library ? `${item.library}!` : ''}${item.name}`)));
+    frag.append(triageBlock(t('导出'), report.exports.map(
+      (item) => `0x${item.address.toString(16)}  ${item.type}  ${item.name}`)));
+    frag.append(triageBlock(t('字符串'), report.strings.map(
+      (item) => `0x${item.vaddr.toString(16)}  ${item.type}  ${JSON.stringify(item.value.slice(0, 160))}`)));
+    frag.append(triageBlock(t('函数'), report.functions.map(
+      (item) => `${item.name}  size=${item.size}  cc=${item.cc}  bbs=${item.bbs}`)));
+    if (report.xrefs.length) {
+      frag.append(triageBlock(t('交叉引用'), report.xrefs.map(
+        (item) => `${item.import}: ${item.refs.map((ref) => `0x${ref.from.toString(16)} ${ref.type}`).join(', ')}`)));
+    }
+    triageReportElement.replaceChildren(frag);
+  }
+
+  async function runTriageOnPath(): Promise<void> {
+    const target = analyzePathInput.value.trim();
+    if (!target) {
+      deps.toast(t('填写文件或目录路径'));
+      return;
+    }
+    runTriageButton.disabled = true;
+    copyTriage.disabled = true;
+    lastTriage = undefined;
+    triageReportElement.replaceChildren();
+    analyzeOutput.textContent = t('正在分析…');
+    try {
+      const result = await api.triage(target);
+      if (!result.ok) {
+        analyzeOutput.textContent = result.error || t('分析失败');
+        if (result.installed === false) {
+          installRadare2.hidden = false;
+          deps.toast(t('未安装 radare2'));
+        }
+        return;
+      }
+      analyzeOutput.textContent = '';
+      if (result.triage) renderTriage(result.triage);
+    } finally {
+      runTriageButton.disabled = false;
+    }
+  }
+
+  installRadare2.addEventListener('click', async () => {
+    installRadare2.disabled = true;
+    const label = installRadare2.textContent ?? '';
+    installRadare2.textContent = t('安装中…');
+    const result = await api.installTool('radare2');
+    installRadare2.disabled = false;
+    installRadare2.textContent = label;
+    deps.toast(result.ok ? t('安装完成') : (result.error || t('安装失败')));
+    await refreshReverseTool();
+  });
+
+  copyTriage.addEventListener('click', async () => {
+    if (!lastTriage) return;
+    await navigator.clipboard.writeText(JSON.stringify(lastTriage, null, 2));
+    deps.toast(t('已复制 JSON'));
+  });
+
+  void refreshReverseTool();
+
   async function runAnalyze(): Promise<void> {
-    const target = $<HTMLInputElement>('analyze-path').value.trim();
+    const target = analyzePathInput.value.trim();
     if (!target) {
       deps.toast(t('填写文件或目录路径'));
       return;
@@ -3226,12 +3822,22 @@ export function initPanels(deps: PanelDeps): PanelsController {
   toolWebSearch.addEventListener('change', () => void saveToolSettings(false));
   toolCrawl.addEventListener('change', () => void saveToolSettings(false));
   toolReverse.addEventListener('change', () => void saveToolSettings(false));
-  $('crawl-page').addEventListener('click', () => void runCrawl(false));
-  $('crawl-site').addEventListener('click', () => void runCrawl(true));
+  for (const tab of crawlModeTabs) {
+    tab.addEventListener('click', () => setCrawlMode((tab.dataset.crawlMode as CrawlMode) || 'search'));
+  }
+  crawlStart.addEventListener('click', () => void startCrawlRun());
+  crawlStop.addEventListener('click', async () => {
+    if (!crawlRunId) return;
+    await api.cancelCrawl(crawlRunId);
+  });
+  crawlCopy.addEventListener('click', () => void copyCrawlMarkdown());
+  api.onCrawlProgress(handleCrawlProgress);
+  setCrawlMode('search');
   $('run-analyze').addEventListener('click', () => void runAnalyze());
+  runTriageButton.addEventListener('click', () => void runTriageOnPath());
   $('pick-analyze-path').addEventListener('click', async () => {
     const result = await api.pickAnalyzePath();
-    if (result.ok && result.path) $<HTMLInputElement>('analyze-path').value = result.path;
+    if (result.ok && result.path) analyzePathInput.value = result.path;
   });
   void loadToolSettings();
 
@@ -3263,7 +3869,13 @@ export function initPanels(deps: PanelDeps): PanelsController {
     for (const panel of dockPanels) panel.hidden = panel.dataset.dockPanel !== tab;
   }
   for (const tab of dockTabs) {
-    tab.addEventListener('click', () => setDockTab(tab.dataset.dock || 'permissions'));
+    tab.addEventListener('click', () => {
+      setDockTab(tab.dataset.dock || 'permissions');
+      if (!dock.classList.contains('collapsed')) return;
+      dock.classList.remove('collapsed');
+      dockToggle.textContent = t('收起');
+      dockToggle.setAttribute('aria-expanded', 'true');
+    });
   }
   dockToggle.addEventListener('click', () => {
     const collapsed = dock.classList.toggle('collapsed');
@@ -3367,6 +3979,7 @@ export function initPanels(deps: PanelDeps): PanelsController {
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'perm-preset';
+      card.dataset.preset = preset.id;
       card.setAttribute('role', 'radio');
       card.setAttribute('aria-checked', String(permissionPreset === preset.id));
       const label = document.createElement('strong');
@@ -4232,6 +4845,565 @@ export function initPanels(deps: PanelDeps): PanelsController {
   void refreshProjectDock();
   void loadUpdateSettings();
 
+  // ---------- 安全页：工具状态 / 本地审计 ----------
+  const securityToolbar = $('security-toolbar');
+  const secModeTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-sec-mode]'));
+  const secPanels = Array.from(document.querySelectorAll<HTMLElement>('[data-sec-panel]'));
+  const auditPathInput = $<HTMLInputElement>('audit-path');
+  const auditPickButton = $<HTMLButtonElement>('audit-pick');
+  const auditRunButton = $<HTMLButtonElement>('audit-run');
+  const auditStopButton = $<HTMLButtonElement>('audit-stop');
+  const auditExportSarif = $<HTMLButtonElement>('audit-export-sarif');
+  const auditExportJson = $<HTMLButtonElement>('audit-export-json');
+  const auditProgress = $('audit-progress');
+  const auditProgressBar = $('audit-progress-bar');
+  const auditProgressText = $('audit-progress-text');
+  const auditFilters = $('audit-filters');
+  const auditFilterSeverity = $<HTMLSelectElement>('audit-filter-severity');
+  const auditFilterTool = $<HTMLSelectElement>('audit-filter-tool');
+  const auditSummary = $('audit-summary');
+  const auditFindingsList = $('audit-findings');
+
+  let auditRunId = '';
+  let auditStarting = false;
+  let lastAudit: AuditReport | undefined;
+  let securityVisited = false;
+
+  const SEVERITY_ORDER: AuditSeverity[] = ['critical', 'high', 'medium', 'low', 'info'];
+  const SEVERITY_LABEL: Record<AuditSeverity, string> = {
+    critical: '严重',
+    high: '高',
+    medium: '中',
+    low: '低',
+    info: '信息',
+  };
+  const MAX_RENDERED_FINDINGS = 300;
+
+  function setSecMode(mode: string): void {
+    for (const tab of secModeTabs) {
+      const active = tab.dataset.secMode === mode;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+    }
+    for (const panel of secPanels) panel.hidden = panel.dataset.secPanel !== mode;
+    if (mode === 'audit') void refreshSecurityTools();
+    else if (mode === 'log') void refreshAuditLog();
+  }
+
+  for (const tab of secModeTabs) {
+    tab.addEventListener('click', () => setSecMode(tab.dataset.secMode ?? 'audit'));
+  }
+
+  function securityToolChip(status: ToolStatus): HTMLElement {
+    const chip = document.createElement('div');
+    chip.className = 'sec-tool';
+    chip.title = status.note || status.manualHint || '';
+    const name = document.createElement('strong');
+    name.className = 'sec-tool-name';
+    name.textContent = status.label;
+    const state = document.createElement('span');
+    state.className = `tag ${status.installed ? 'ready' : 'warn'}`;
+    const version = status.version?.match(/\d+(?:\.\d+)+/)?.[0];
+    state.textContent = status.installed ? (version || t('已安装')) : t('未安装');
+    chip.append(name, state);
+    if (!status.installed && status.installable) {
+      const install = button(t('安装'), 'ghost small');
+      install.addEventListener('click', async () => {
+        install.disabled = true;
+        const label = install.textContent ?? '';
+        install.textContent = t('安装中…');
+        const result = await api.installTool(status.id);
+        install.disabled = false;
+        install.textContent = label;
+        deps.toast(result.ok ? t('安装完成') : (result.error || t('安装失败')));
+        await refreshSecurityTools();
+      });
+      chip.append(install);
+    }
+    return chip;
+  }
+
+  async function refreshSecurityTools(): Promise<void> {
+    try {
+      const statuses = await api.toolStatus();
+      const ids: ToolId[] = ['semgrep', 'trivy', 'gitleaks', 'bandit', 'gosec'];
+      securityToolbar.replaceChildren(
+        ...statuses.filter((item) => ids.includes(item.id)).map(securityToolChip),
+      );
+    } catch {
+      securityToolbar.replaceChildren();
+    }
+  }
+
+  function setAuditRunning(running: boolean): void {
+    auditRunButton.disabled = running;
+    auditPickButton.disabled = running;
+    auditPathInput.disabled = running;
+    auditStopButton.disabled = !running;
+  }
+
+  function finishAudit(message: string): void {
+    auditRunId = '';
+    auditStarting = false;
+    setAuditRunning(false);
+    auditProgress.hidden = false;
+    auditProgressBar.style.width = '100%';
+    auditProgressText.textContent = message;
+  }
+
+  function findingCard(finding: AuditFinding): HTMLElement {
+    const card = document.createElement('article');
+    card.className = `item finding sev-${finding.severity}`;
+    const main = document.createElement('div');
+    main.className = 'item-main';
+    const head = document.createElement('div');
+    head.className = 'finding-head';
+    const severity = document.createElement('span');
+    severity.className = `tag sev-tag sev-tag-${finding.severity}`;
+    severity.textContent = t(SEVERITY_LABEL[finding.severity]);
+    const tool = document.createElement('span');
+    tool.className = 'tag';
+    tool.textContent = finding.tool;
+    const title = document.createElement('strong');
+    title.textContent = finding.title;
+    head.append(severity, tool, title);
+    const meta = document.createElement('span');
+    meta.className = 'finding-meta';
+    meta.textContent = [finding.file ? `${finding.file}${finding.line ? `:${finding.line}` : ''}` : '', finding.ruleId || '']
+      .filter(Boolean)
+      .join(' · ');
+    const message = document.createElement('p');
+    message.className = 'crawl-preview';
+    message.textContent = finding.message;
+    main.append(head, meta, message);
+    card.append(main);
+    return card;
+  }
+
+  function renderAuditFindings(): void {
+    const report = lastAudit;
+    const severity = auditFilterSeverity.value;
+    const tool = auditFilterTool.value;
+    const findings = (report?.findings ?? [])
+      .filter((finding) => (severity === 'all' || finding.severity === severity)
+        && (tool === 'all' || finding.tool === tool))
+      .slice(0, MAX_RENDERED_FINDINGS);
+    auditFindingsList.replaceChildren(...findings.map(findingCard));
+  }
+
+  function renderAuditSummary(report: AuditReport): void {
+    const total = report.findings.length;
+    const counts = new Map<AuditSeverity, number>();
+    for (const finding of report.findings) {
+      counts.set(finding.severity, (counts.get(finding.severity) ?? 0) + 1);
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'audit-summary-inner';
+    const headline = document.createElement('strong');
+    headline.textContent = total
+      ? t('{count} 项发现', { count: total })
+      : t('没有发现安全问题');
+    wrap.append(headline);
+    const chips = document.createElement('div');
+    chips.className = 'audit-chips';
+    for (const severity of SEVERITY_ORDER) {
+      const count = counts.get(severity) ?? 0;
+      if (!count) continue;
+      const chip = document.createElement('span');
+      chip.className = `tag sev-tag-${severity}`;
+      chip.textContent = `${t(SEVERITY_LABEL[severity])} ${count}`;
+      chips.append(chip);
+    }
+    for (const scanner of report.scanners) {
+      if (!scanner.ok && !scanner.count) continue;
+      const chip = document.createElement('span');
+      chip.className = 'tag';
+      chip.textContent = `${scanner.id} ${scanner.skipped ? t('跳过') : scanner.count}`;
+      chip.title = scanner.error || '';
+      chips.append(chip);
+    }
+    wrap.append(chips);
+    if (report.truncated) {
+      const note = document.createElement('span');
+      note.className = 'note';
+      note.textContent = t('结果已截断');
+      wrap.append(note);
+    }
+    auditSummary.replaceChildren(wrap);
+  }
+
+  function applyAuditReport(report: AuditReport): void {
+    lastAudit = report;
+    renderAuditSummary(report);
+    auditFilters.hidden = report.findings.length === 0;
+    auditExportJson.disabled = false;
+    auditExportSarif.disabled = report.findings.length === 0;
+    renderAuditFindings();
+  }
+
+  function handleSecurityProgress(event: AuditProgress): void {
+    if (auditRunId !== event.runId) {
+      if (!auditStarting) return;
+      auditRunId = event.runId;
+    }
+    auditProgress.hidden = false;
+    auditProgressBar.style.width = `${Math.min(100, Math.max(2, event.percent ?? 4))}%`;
+    const suffix = typeof event.count === 'number' ? ` · ${event.count} ${t('项发现')}` : '';
+    auditProgressText.textContent = `${event.message}${suffix}`;
+    if (event.phase === 'starting' || event.phase === 'scanning') {
+      setAuditRunning(true);
+      return;
+    }
+    finishAudit(event.phase === 'canceled'
+      ? t('审计已停止')
+      : (event.message || (event.phase === 'error' ? t('审计失败') : t('审计完成'))));
+    void loadAuditReport();
+  }
+
+  async function loadAuditReport(): Promise<void> {
+    try {
+      const result = await api.auditFindings();
+      if (result.ok && result.report) applyAuditReport(result.report);
+    } catch {
+      // 没有历史结果时保持空列表
+    }
+  }
+
+  async function startAudit(): Promise<void> {
+    if (auditStarting || auditRunId) return;
+    const root = auditPathInput.value.trim();
+    if (!root) {
+      deps.toast(t('填写项目目录'));
+      return;
+    }
+    lastAudit = undefined;
+    auditSummary.replaceChildren();
+    auditFindingsList.replaceChildren();
+    auditFilters.hidden = true;
+    auditExportSarif.disabled = true;
+    auditExportJson.disabled = true;
+    auditProgress.hidden = false;
+    auditProgressBar.style.width = '2%';
+    auditProgressText.textContent = t('正在准备审计');
+    auditStarting = true;
+    setAuditRunning(true);
+    const result = await api.runAudit({ path: root });
+    if (!result.ok || !result.runId) {
+      auditStarting = false;
+      setAuditRunning(false);
+      auditProgressText.textContent = result.error || t('审计失败');
+      return;
+    }
+    auditRunId = result.runId;
+  }
+
+  async function exportAudit(format: 'sarif' | 'json'): Promise<void> {
+    const result = await api.exportAudit(format);
+    if (result.canceled) return;
+    if (!result.ok) {
+      deps.toast(result.error || t('导出失败'));
+      return;
+    }
+    deps.toast(t('已导出到 {path}', { path: result.path || '' }));
+  }
+
+  auditRunButton.addEventListener('click', () => void startAudit());
+  auditStopButton.addEventListener('click', async () => {
+    if (!auditRunId) return;
+    auditStopButton.disabled = true;
+    const result = await api.stopAudit();
+    if (!result.ok) deps.toast(result.error || t('没有正在运行的审计'));
+  });
+  auditPickButton.addEventListener('click', async () => {
+    const result = await api.securityPickPath();
+    if (result.ok && result.path) auditPathInput.value = result.path;
+  });
+  auditExportSarif.addEventListener('click', () => void exportAudit('sarif'));
+  auditExportJson.addEventListener('click', () => void exportAudit('json'));
+  auditFilterSeverity.addEventListener('change', renderAuditFindings);
+  auditFilterTool.addEventListener('change', renderAuditFindings);
+  api.onSecurityProgress(handleSecurityProgress);
+
+  // ---------- 安全页：授权渗透与审计日志 ----------
+  const pentestTarget = $<HTMLInputElement>('pentest-target');
+  const pentestCheck = $<HTMLButtonElement>('pentest-check');
+  const pentestAuthInfo = $('pentest-auth-info');
+  const pentestAuthorize = $<HTMLInputElement>('pentest-authorize');
+  const pentestNote = $<HTMLTextAreaElement>('pentest-note');
+  const pentestConfirmHost = $<HTMLInputElement>('pentest-confirm-host');
+  const pentestLocal = $<HTMLInputElement>('pentest-local');
+  const pentestPassiveButton = $<HTMLButtonElement>('pentest-passive');
+  const pentestActiveButton = $<HTMLButtonElement>('pentest-active');
+  const pentestStopButton = $<HTMLButtonElement>('pentest-stop');
+  const pentestProgress = $('pentest-progress');
+  const pentestProgressBar = $('pentest-progress-bar');
+  const pentestProgressText = $('pentest-progress-text');
+  const pentestResults = $('pentest-results');
+  const auditLogRefresh = $<HTMLButtonElement>('audit-log-refresh');
+  const auditLogChain = $('audit-log-chain');
+  const auditLogList = $('audit-log-list');
+
+  let pentestRunId = '';
+  let pentestStarting = false;
+  let pentestToken = '';
+  let pentestTokenExpires = 0;
+
+  const PENTEST_CATEGORY: Record<PentestFinding['category'], string> = {
+    transport: 'TLS / 传输',
+    headers: '响应头',
+    cookies: 'Cookie',
+    exposure: '暴露面',
+    template: 'Nuclei 模板',
+  };
+  const AUDIT_OUTCOME: Record<AuditLogEntry['outcome'], string> = {
+    ok: '成功',
+    error: '失败',
+    canceled: '已停止',
+    timeout: '超时',
+  };
+
+  function setPentestRunning(running: boolean): void {
+    pentestStarting = running;
+    pentestCheck.disabled = running;
+    pentestTarget.disabled = running;
+    pentestLocal.disabled = running;
+    pentestPassiveButton.disabled = running;
+    pentestActiveButton.disabled = running;
+    pentestStopButton.disabled = !running;
+  }
+
+  function clearPentestToken(): void {
+    pentestToken = '';
+    pentestTokenExpires = 0;
+  }
+
+  function renderAuthInfo(ok: boolean, headline: string, meta = ''): void {
+    const wrap = document.createElement('div');
+    wrap.className = 'audit-summary-inner';
+    const strong = document.createElement('strong');
+    strong.textContent = headline;
+    if (!ok) strong.className = 'sev-tag sev-tag-high';
+    wrap.append(strong);
+    if (meta) {
+      const note = document.createElement('span');
+      note.className = 'note';
+      note.textContent = meta;
+      wrap.append(note);
+    }
+    pentestAuthInfo.replaceChildren(wrap);
+  }
+
+  function pentestCard(finding: PentestFinding): HTMLElement {
+    const card = document.createElement('article');
+    card.className = `item finding sev-${finding.severity}`;
+    const main = document.createElement('div');
+    main.className = 'item-main';
+    const head = document.createElement('div');
+    head.className = 'finding-head';
+    const severity = document.createElement('span');
+    severity.className = `tag sev-tag sev-tag-${finding.severity}`;
+    severity.textContent = t(SEVERITY_LABEL[finding.severity]);
+    const category = document.createElement('span');
+    category.className = 'tag';
+    category.textContent = t(PENTEST_CATEGORY[finding.category] ?? '');
+    const title = document.createElement('strong');
+    title.textContent = finding.title;
+    head.append(severity, category, title);
+    const meta = document.createElement('span');
+    meta.className = 'finding-meta';
+    meta.textContent = [finding.url || '', finding.ruleId || ''].filter(Boolean).join(' · ');
+    const detail = document.createElement('p');
+    detail.className = 'crawl-preview';
+    detail.textContent = finding.detail;
+    main.append(head, meta, detail);
+    card.append(main);
+    return card;
+  }
+
+  function renderPentestFindings(findings: PentestFinding[]): void {
+    if (!findings.length) {
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.textContent = t('没有发现明显问题');
+      pentestResults.replaceChildren(note);
+      return;
+    }
+    pentestResults.replaceChildren(...findings.slice(0, MAX_RENDERED_FINDINGS).map(pentestCard));
+  }
+
+  async function checkTarget(): Promise<void> {
+    const url = pentestTarget.value.trim();
+    if (!url) {
+      deps.toast(t('填写目标地址'));
+      return;
+    }
+    pentestCheck.disabled = true;
+    const result = await api.authorizeTarget({
+      url,
+      hostConfirm: pentestConfirmHost.value.trim(),
+      statement: pentestAuthorize.checked,
+      note: pentestNote.value.trim(),
+      allowLocal: pentestLocal.checked,
+    });
+    pentestCheck.disabled = false;
+    if (!result.ok || !result.token || !result.target) {
+      clearPentestToken();
+      renderAuthInfo(false, result.error || t('授权校验未通过'));
+      return;
+    }
+    pentestToken = result.token;
+    pentestTokenExpires = result.expiresAt ? Date.parse(result.expiresAt) : 0;
+    renderAuthInfo(
+      true,
+      t('授权校验通过'),
+      [
+        result.target.url,
+        `${t('解析 IP')} ${(result.ips ?? []).join(', ')}`,
+        `${t('有效期至')} ${result.expiresAt ? new Date(result.expiresAt).toLocaleTimeString() : ''}`,
+      ].filter(Boolean).join(' · '),
+    );
+    deps.toast(t('授权校验通过'));
+  }
+
+  async function startPassive(): Promise<void> {
+    if (pentestStarting || pentestRunId) return;
+    const url = pentestTarget.value.trim();
+    if (!url) {
+      deps.toast(t('填写目标地址'));
+      return;
+    }
+    pentestResults.replaceChildren();
+    pentestProgress.hidden = false;
+    pentestProgressBar.style.width = '2%';
+    pentestProgressText.textContent = t('正在准备被动基线');
+    setPentestRunning(true);
+    const result = await api.runPassive({ url, allowLocal: pentestLocal.checked });
+    if (!result.ok || !result.runId) {
+      setPentestRunning(false);
+      pentestProgressText.textContent = result.error || t('被动基线失败');
+      deps.toast(result.error || t('被动基线失败'));
+      return;
+    }
+    pentestRunId = result.runId;
+  }
+
+  async function startActive(): Promise<void> {
+    if (pentestStarting || pentestRunId) return;
+    if (!pentestToken || (pentestTokenExpires && pentestTokenExpires <= Date.now())) {
+      clearPentestToken();
+      deps.toast(t('请先校验目标并确认授权'));
+      return;
+    }
+    pentestResults.replaceChildren();
+    pentestProgress.hidden = false;
+    pentestProgressBar.style.width = '2%';
+    pentestProgressText.textContent = t('正在准备主动扫描');
+    setPentestRunning(true);
+    const result = await api.runPentest({ token: pentestToken });
+    if (!result.ok || !result.runId) {
+      setPentestRunning(false);
+      pentestProgressText.textContent = result.error || t('主动扫描失败');
+      deps.toast(result.error || t('主动扫描失败'));
+      return;
+    }
+    clearPentestToken();
+    pentestAuthInfo.replaceChildren();
+    pentestRunId = result.runId;
+  }
+
+  function handlePentestProgress(event: PentestProgress): void {
+    if (pentestRunId !== event.runId) {
+      if (!pentestStarting) return;
+      pentestRunId = event.runId;
+    }
+    pentestProgress.hidden = false;
+    pentestProgressBar.style.width = `${Math.min(100, Math.max(2, event.percent ?? 4))}%`;
+    const suffix = typeof event.count === 'number' ? ` · ${event.count} ${t('项发现')}` : '';
+    pentestProgressText.textContent = `${event.message}${suffix}`;
+    if (event.phase === 'starting' || event.phase === 'checking' || event.phase === 'scanning') {
+      setPentestRunning(true);
+      if (event.findings?.length) renderPentestFindings(event.findings);
+      return;
+    }
+    pentestRunId = '';
+    setPentestRunning(false);
+    pentestProgressBar.style.width = '100%';
+    if (event.findings) renderPentestFindings(event.findings);
+  }
+
+  function auditLogCard(entry: AuditLogEntry): HTMLElement {
+    const card = document.createElement('article');
+    card.className = 'item';
+    const main = document.createElement('div');
+    main.className = 'item-main';
+    const head = document.createElement('div');
+    head.className = 'finding-head';
+    const kind = document.createElement('span');
+    kind.className = `tag ${entry.kind === 'active' ? 'warn' : ''}`;
+    kind.textContent = entry.kind === 'active' ? t('主动扫描') : t('被动基线');
+    const outcome = document.createElement('span');
+    outcome.className = `tag ${entry.outcome === 'ok' ? 'ready' : 'warn'}`;
+    outcome.textContent = t(AUDIT_OUTCOME[entry.outcome] ?? entry.outcome);
+    const target = document.createElement('strong');
+    target.textContent = entry.target.host;
+    head.append(kind, outcome, target);
+    const meta = document.createElement('span');
+    meta.className = 'finding-meta';
+    const when = new Date(entry.at);
+    meta.textContent = [
+      Number.isNaN(when.getTime()) ? entry.at : when.toLocaleString(),
+      `${entry.findings} ${t('项发现')}`,
+      `${Math.round(entry.durationMs / 1000)}s`,
+      entry.tool,
+      entry.hash.slice(0, 12),
+    ].join(' · ');
+    main.append(head, meta);
+    card.append(main);
+    card.title = entry.argv.length ? entry.argv.join(' ') : '';
+    return card;
+  }
+
+  async function refreshAuditLog(): Promise<void> {
+    try {
+      const report = await api.auditLog();
+      auditLogChain.className = `tag ${report.chainValid ? 'ready' : 'warn'}`;
+      auditLogChain.textContent = report.chainValid ? t('链校验通过') : t('链校验失败');
+      if (!report.entries.length) {
+        const note = document.createElement('p');
+        note.className = 'note';
+        note.textContent = t('暂无审计记录');
+        auditLogList.replaceChildren(note);
+        return;
+      }
+      auditLogList.replaceChildren(...report.entries.slice(0, 200).map(auditLogCard));
+    } catch {
+      auditLogChain.className = 'tag warn';
+      auditLogChain.textContent = t('链校验失败');
+    }
+  }
+
+  pentestCheck.addEventListener('click', () => void checkTarget());
+  pentestPassiveButton.addEventListener('click', () => void startPassive());
+  pentestActiveButton.addEventListener('click', () => void startActive());
+  pentestStopButton.addEventListener('click', async () => {
+    pentestStopButton.disabled = true;
+    const result = await api.stopPentest();
+    if (!result.ok) deps.toast(result.error || t('没有正在运行的渗透测试'));
+  });
+  auditLogRefresh.addEventListener('click', () => void refreshAuditLog());
+  api.onPentestProgress(handlePentestProgress);
+
+  async function activateSecurity(): Promise<void> {
+    if (!securityVisited) {
+      securityVisited = true;
+      // 安全页信息密度较高，首次进入时把左栏放宽到 420px；之后尊重用户拖拽结果。
+      window.dispatchEvent(new CustomEvent('pi-ensure-sidebar-width', { detail: { width: 420 } }));
+    }
+    if (!auditPathInput.value) auditPathInput.value = deps.currentCwd() || '';
+    await refreshSecurityTools();
+    if (!lastAudit) await loadAuditReport();
+  }
+
   // ---------- 生命周期 ----------
   function setProject(): void {
     // 项目切换后，安装范围与任务目录都跟随当前项目。
@@ -4253,5 +5425,6 @@ export function initPanels(deps: PanelDeps): PanelsController {
     refreshAgents,
     setProject,
     activateWorkspace,
+    activateSecurity,
   };
 }

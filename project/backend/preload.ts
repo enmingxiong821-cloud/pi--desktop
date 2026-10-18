@@ -20,6 +20,17 @@ import type { CapabilityEntry, ModelReport, SessionEntry } from './inspect.js';
 import type { MediaResult } from './media.js';
 import type { FetchModelsResult, ProviderReport, SaveProviderResult } from './providers.js';
 import type { PageContent, SearchResult, ToolSettings } from './tools.js';
+import type { InstallResult, ToolId, ToolStatus } from './external-tools.js';
+import type { CrawlOptions, CrawlProgress } from './crawl-engine.js';
+import type { TriageResult } from './reverse-r2.js';
+import type { AuditOptions, AuditProgress, AuditReport } from './security-audit.js';
+import type {
+  AuditLogReport,
+  AuthorizationTicket,
+  PassiveOptions,
+  PentestProgress,
+} from './pentest.js';
+import type { AuthorizationInput } from './security-guard.js';
 import type { UsageReport } from './usage.js';
 import type { ArchiveMeta, ArchiveResult } from './archives.js';
 import type { MemoryHit, MemorySearchResult, MemoryStats, MemoryWriteResult } from './memory.js';
@@ -71,6 +82,8 @@ export interface CodeResult {
 
 const api = {
   locate: (): Promise<LocateResult> => ipcRenderer.invoke('app:locate'),
+  appInfo: (): Promise<{ version: string; electron: string; platform: string }> =>
+    ipcRenderer.invoke('app:info'),
   setLocale: (locale: string): Promise<{ ok: boolean; locale: string }> =>
     ipcRenderer.invoke('app:set-locale', locale),
   pickProject: (): Promise<{ ok: boolean; path?: string }> => ipcRenderer.invoke('project:pick'),
@@ -169,6 +182,9 @@ const api = {
   getToolSettings: (): Promise<{ ok: boolean; settings: ToolSettings }> => ipcRenderer.invoke('tools:get-settings'),
   saveToolSettings: (input: ToolSettings): Promise<{ ok: boolean; settings?: ToolSettings; error?: string }> =>
     ipcRenderer.invoke('tools:save-settings', input),
+  toolStatus: (): Promise<ToolStatus[]> => ipcRenderer.invoke('tools:tool-status'),
+  installTool: (id: ToolId): Promise<InstallResult & { canceled?: boolean }> =>
+    ipcRenderer.invoke('tools:install-tool', id),
   searchWeb: (query: string): Promise<{ ok: boolean; results: SearchResult[]; error?: string }> =>
     ipcRenderer.invoke('tools:search', query),
   searchRepos: (query: string): Promise<{ ok: boolean; results: RepoResult[]; error?: string }> =>
@@ -179,8 +195,43 @@ const api = {
     ipcRenderer.invoke('tools:fetch-page', url),
   crawlWeb: (url: string): Promise<{ ok: boolean; pages: PageContent[]; links: string[]; error?: string }> =>
     ipcRenderer.invoke('tools:crawl', url),
+  startCrawl: (options: CrawlOptions): Promise<{ ok: boolean; runId?: string; error?: string }> =>
+    ipcRenderer.invoke('tools:crawl-start', options),
+  cancelCrawl: (runId: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('tools:crawl-cancel', runId),
+  onCrawlProgress: (callback: (event: CrawlProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: CrawlProgress) => callback(payload);
+    ipcRenderer.on('tools:crawl-progress', listener);
+    return () => ipcRenderer.removeListener('tools:crawl-progress', listener);
+  },
   analyzePath: (target: string): Promise<{ ok: boolean; lines?: string[]; error?: string }> =>
     ipcRenderer.invoke('tools:analyze', target),
+  triage: (target: string): Promise<TriageResult> => ipcRenderer.invoke('tools:triage', target),
+  securityPickPath: (): Promise<{ ok: boolean; path?: string }> => ipcRenderer.invoke('security:pick-path'),
+  runAudit: (input: AuditOptions): Promise<{ ok: boolean; runId?: string; error?: string }> =>
+    ipcRenderer.invoke('security:run-audit', input),
+  stopAudit: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('security:stop-audit'),
+  auditFindings: (): Promise<{ ok: boolean; report?: AuditReport }> => ipcRenderer.invoke('security:findings'),
+  exportAudit: (format: 'sarif' | 'json'): Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }> =>
+    ipcRenderer.invoke('security:export', format),
+  onSecurityProgress: (callback: (event: AuditProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: AuditProgress) => callback(payload);
+    ipcRenderer.on('security:progress', listener);
+    return () => ipcRenderer.removeListener('security:progress', listener);
+  },
+  authorizeTarget: (input: AuthorizationInput): Promise<AuthorizationTicket> =>
+    ipcRenderer.invoke('security:authorize', input),
+  runPassive: (input: PassiveOptions): Promise<{ ok: boolean; runId?: string; error?: string }> =>
+    ipcRenderer.invoke('security:run-passive', input),
+  runPentest: (input: { token: string }): Promise<{ ok: boolean; runId?: string; error?: string }> =>
+    ipcRenderer.invoke('security:run-pentest', input),
+  stopPentest: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('security:stop-pentest'),
+  auditLog: (): Promise<AuditLogReport> => ipcRenderer.invoke('security:audit-log'),
+  onPentestProgress: (callback: (event: PentestProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: PentestProgress) => callback(payload);
+    ipcRenderer.on('security:pentest-progress', listener);
+    return () => ipcRenderer.removeListener('security:pentest-progress', listener);
+  },
   pickAnalyzePath: (): Promise<{ ok: boolean; path?: string }> => ipcRenderer.invoke('tools:pick-analyze-path'),
   onAgentEvent: (callback: (event: AgentEvent) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AgentEvent) => callback(payload);

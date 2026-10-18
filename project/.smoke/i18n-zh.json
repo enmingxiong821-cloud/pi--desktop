@@ -25,7 +25,7 @@
   "storedLocale": null,
   "preview": "选择模型后生成命令",
   "modelSummary": "2 个模型 · 默认 demo/demo-model · 1 个中转站",
-  "modelNote": "按常用度排序；点击厂商展开具体模型，点击模型暂存 /model 命令。「已添加」指已保存为模型模块的模型。",
+  "modelNote": "按常用度排序；点击厂商展开模型，厂商内可勾选自动调用的任务类型；行尾「使用」直接切换当前会话，「快捷」加入候选池。",
   "providerNote": "自定义接入写入本机真实 Pi 配置（models.json + auth.json），保存前自动备份。新增 provider 需新开 Pi 会话后生效。",
   "paletteHint": "直接执行的指令会写入终端并回车；需要补充参数的会先填入输入框。",
   "mediaHint": "滚轮缩放图片 · 拖动平移 · Esc 关闭",

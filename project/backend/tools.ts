@@ -10,6 +10,7 @@ export interface ToolSettings {
   webSearch: boolean;
   crawl: boolean;
   reverse: boolean;
+  security: boolean;
   searchProvider: SearchProvider;
   searxngUrl: string;
 }
@@ -30,12 +31,13 @@ const DEFAULTS: ToolSettings = {
   webSearch: true,
   crawl: false,
   reverse: false,
+  security: false,
   searchProvider: 'duckduckgo',
   searxngUrl: '',
 };
 
 // 抓取工具使用可识别的 UA，便于站点管理员审计与联系，不做身份伪装
-const UA = 'PiWorkbench/0.2 (local research tool; respects robots.txt)';
+export const CRAWL_UA = 'PiWorkbench/1.3 (local research tool; respects robots.txt)';
 const MAX_PAGE_CHARS = 120_000;
 const MAX_DOWNLOAD_BYTES = 3_000_000;
 // 同一主机的最小请求间隔，避免对目标站点造成瞬时压力
@@ -45,7 +47,7 @@ const ROBOTS_TTL_MS = 10 * 60_000;
 
 const hostLastAccess = new Map<string, number>();
 
-async function throttleHost(host: string): Promise<void> {
+export async function throttleHost(host: string): Promise<void> {
   const now = Date.now();
   const last = hostLastAccess.get(host) ?? 0;
   const wait = HOST_INTERVAL_MS - (now - last);
@@ -120,7 +122,7 @@ function robotsAllows(rules: RobotsRule[], pathname: string): boolean {
   return allowed;
 }
 
-async function allowedByRobots(url: URL): Promise<boolean> {
+export async function allowedByRobots(url: URL): Promise<boolean> {
   const rules = await robotsRules(url.origin);
   return robotsAllows(rules, `${url.pathname}${url.search}`);
 }
@@ -136,6 +138,7 @@ export function getToolSettings(): ToolSettings {
       webSearch: typeof raw.webSearch === 'boolean' ? raw.webSearch : DEFAULTS.webSearch,
       crawl: typeof raw.crawl === 'boolean' ? raw.crawl : DEFAULTS.crawl,
       reverse: typeof raw.reverse === 'boolean' ? raw.reverse : DEFAULTS.reverse,
+      security: typeof raw.security === 'boolean' ? raw.security : DEFAULTS.security,
       searchProvider: raw.searchProvider === 'searxng' ? 'searxng' : 'duckduckgo',
       searxngUrl: typeof raw.searxngUrl === 'string' ? raw.searxngUrl.trim().slice(0, 300) : '',
     };
@@ -151,6 +154,7 @@ export function saveToolSettings(input: unknown): { ok: boolean; settings?: Tool
     webSearch: Boolean(source.webSearch),
     crawl: Boolean(source.crawl),
     reverse: Boolean(source.reverse),
+    security: Boolean(source.security),
     searchProvider: source.searchProvider === 'searxng' ? 'searxng' : 'duckduckgo',
     searxngUrl: typeof source.searxngUrl === 'string' ? source.searxngUrl.trim().slice(0, 300) : '',
   };
@@ -187,8 +191,7 @@ function stripTags(value: string): string {
   return decodeEntities(value.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 }
 
-async function httpGet(url: string, timeoutMs = 15_000): Promise<Response> {
-  // 所有对外请求统一按主机限速，包含 robots.txt 自身
+export async function httpGet(url: string, timeoutMs = 15_000): Promise<Response> {  // 所有对外请求统一按主机限速，包含 robots.txt 自身
   try {
     await throttleHost(new URL(url).host);
   } catch {
@@ -198,7 +201,7 @@ async function httpGet(url: string, timeoutMs = 15_000): Promise<Response> {
     redirect: 'follow',
     signal: AbortSignal.timeout(timeoutMs),
     headers: {
-      'user-agent': UA,
+      'user-agent': CRAWL_UA,
       'accept': 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
       'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
     },

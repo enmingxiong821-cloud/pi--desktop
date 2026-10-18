@@ -12,12 +12,20 @@ app.disableHardwareAcceleration();
 
 const vendors = [
   { key: 'demo', label: 'Demo Labs', tier: 1, region: 'cn', aliases: ['demo'] },
+  { key: 'deepseek', label: 'DeepSeek', tier: 2, region: 'cn', aliases: ['deepseek'] },
   { key: 'other', label: 'Other AI', tier: 2, region: 'global', aliases: ['other'] },
+];
+const packSkillNames = [
+  'code-review', 'test-writer', 'security-review', 'refactor-plan',
+  'docs-writer', 'data-analysis', 'release-notes', 'sql-analyst', 'ui-review', 'creative-brief',
 ];
 const skills = [{
   id: 'demo-skill', name: 'demo-skill', title: '演示技能', description: '用于界面冒烟的技能',
   tags: ['demo', 'smoke'], body: '# demo',
-}];
+}, ...packSkillNames.map((name) => ({
+  id: name, name, title: name, description: `能力包冒烟：${name}`,
+  tags: ['pack', 'smoke'], body: `# ${name}`,
+}))];
 const mcps = [{
   id: 'demo-mcp', name: 'demo-mcp', title: '演示 MCP', description: '用于界面冒烟的 MCP',
   tags: ['demo'], command: 'npx', args: ['-y', 'demo-mcp'], needsConfig: false,
@@ -74,6 +82,7 @@ const channel = (input, id = 'ch-1') => ({
   hasToken: Boolean(input.token), enabled: true,
 });
 
+ipcMain.handle('app:info', () => ({ version: '1.2.0', electron: 'test', platform: 'win32 x64' }));
 ipcMain.handle('app:locate', () => ({ ok: true, install: { version: '1.3.0', cliPath: 'stub-pi', nodePath: 'node', agentDir: path.join(root, '.smoke', 'agent') } }));
 ipcMain.handle('app:projects', () => ({
   ok: true,
@@ -114,7 +123,17 @@ ipcMain.handle('pi:inspect-models', () => ({
     ], warnings: [],
   },
 }));
-ipcMain.handle('pi:providers', () => ({ ok: true, report: { providers: [], warnings: [] } }));
+ipcMain.handle('pi:providers', () => ({
+  ok: true,
+  report: {
+    providers: [{
+      id: 'demo', name: 'Demo Relay', baseUrl: 'https://demo.example/v1', api: 'openai-completions',
+      custom: true, modelCount: 2, modelsText: 'demo-model | Demo Model\ndemo-mini | Demo Mini',
+      headerNames: [], hasStoredKey: true, credentialType: 'apiKey', keySource: 'stored',
+    }],
+    warnings: [],
+  },
+}));
 ipcMain.handle('pi:inspect-capabilities', () => ({ ok: true, report: { capabilities: [], warnings: [] } }));
 ipcMain.handle('pi:sessions', () => ({
   ok: true,
@@ -178,9 +197,19 @@ ipcMain.handle('tools:save-app', (_e, input) => {
 ipcMain.handle('tools:remove-app', (_e, id) => { record('removeApp', id); return { ok: true }; });
 ipcMain.handle('tools:get-settings', () => ({
   ok: true,
-  settings: { webSearch: true, crawl: false, reverse: false, searchProvider: 'duckduckgo', searxngUrl: '' },
+  settings: { webSearch: true, crawl: false, reverse: false, security: false, searchProvider: 'duckduckgo', searxngUrl: '' },
 }));
 ipcMain.handle('tools:save-settings', (_e, input) => { record('saveToolSettings', input); return { ok: true, settings: input }; });
+ipcMain.handle('tools:tool-status', () => ([
+  { id: 'trafilatura', label: 'trafilatura', installed: false, installable: true, source: 'uv' },
+  { id: 'radare2', label: 'radare2', installed: false, installable: true, source: 'zip' },
+  { id: 'semgrep', label: 'Semgrep', installed: true, version: '1.90.0', installable: true, source: 'uv' },
+  { id: 'trivy', label: 'Trivy', installed: false, installable: true, source: 'winget' },
+  { id: 'gitleaks', label: 'gitleaks', installed: true, version: '8.18.0', installable: true, source: 'winget' },
+  { id: 'bandit', label: 'Bandit', installed: false, installable: false, source: 'uv' },
+  { id: 'gosec', label: 'gosec', installed: false, installable: false, source: 'zip' },
+]));
+ipcMain.handle('tools:install-tool', (_e, id) => { record('installTool', id); return { ok: true, id }; });
 ipcMain.handle('tools:search', (_e, query) => {
   record('searchWeb', query);
   return {
@@ -224,11 +253,151 @@ ipcMain.handle('tools:crawl', (_e, url) => {
   record('crawlWeb', url);
   return { ok: true, pages: [{ url, title: 'Example page', text: 'Example body text' }], links: [] };
 });
+ipcMain.handle('tools:crawl-start', (_e, options) => {
+  record('startCrawl', options);
+  const runId = 'run-demo';
+  setTimeout(() => {
+    const target = BrowserWindow.getAllWindows()[0];
+    if (!target || target.isDestroyed()) return;
+    const page = {
+      url: options.mode === 'search' ? 'https://example.com/pi' : (options.url || 'https://example.com'),
+      title: 'Example page', text: 'Example body text', engine: 'builtin', depth: 0, bytes: 128, links: 0,
+    };
+    target.webContents.send('tools:crawl-progress', { runId, phase: 'fetching', visited: 1, queued: 0, page });
+    target.webContents.send('tools:crawl-progress', { runId, phase: 'done', visited: 1, queued: 0, message: '抓取完成' });
+  }, 20);
+  return { ok: true, runId };
+});
+ipcMain.handle('tools:crawl-cancel', (_e, runId) => { record('cancelCrawl', runId); return { ok: true }; });
 ipcMain.handle('tools:analyze', (_e, target) => {
   record('analyzePath', target);
   return { ok: true, lines: ['类型：目录', `路径：${target}`, '文件数：12'] };
 });
 ipcMain.handle('tools:pick-analyze-path', () => ({ ok: true, path: 'C:\\src\\demo' }));
+ipcMain.handle('tools:triage', (_e, target) => {
+  record('triage', target);
+  return {
+    ok: true,
+    installed: true,
+    triage: {
+      file: {
+        path: target, size: 360448, sha256: 'a'.repeat(64), format: 'pe', arch: 'x86',
+        bits: 64, os: 'windows', type: 'PE32+', stripped: false, compiler: '',
+      },
+      entry: 5368715696,
+      sections: [{ name: '.text', size: 1024, vsize: 2048, perm: 'r-x', vaddr: 4096 }],
+      imports: [{ name: 'CreateFileW', library: 'kernel32', type: 'FUNC' }],
+      exports: [],
+      strings: [{ value: 'hello world', length: 11, type: 'ascii', vaddr: 8192 }],
+      functions: [{ name: 'main', size: 64, cc: 3, bbs: 2 }],
+      xrefs: [],
+      packer: { score: 0, reasons: [] },
+      durationMs: 12,
+      truncated: false,
+      warnings: [],
+    },
+  };
+});
+const auditReport = {
+  runId: 'audit-demo',
+  root: 'C:\\src\\demo',
+  startedAt: '2026-10-18T00:00:00.000Z',
+  finishedAt: '2026-10-18T00:00:01.000Z',
+  findings: [
+    { id: 'semgrep-0', tool: 'semgrep', severity: 'high', title: 'SQL injection', message: 'User input reaches a query.', file: 'src/db.ts', line: 12, ruleId: 'js.sql-injection' },
+    { id: 'trivy-1', tool: 'trivy', severity: 'critical', title: 'CVE-2024-0001', message: 'Vulnerable dependency.', file: 'package-lock.json', ruleId: 'CVE-2024-0001' },
+    { id: 'gitleaks-2', tool: 'gitleaks', severity: 'high', title: '疑似密钥泄露', message: '检测到疑似密钥，内容已脱敏', file: '.env', line: 3, ruleId: 'generic-api-key' },
+  ],
+  scanners: [
+    { id: 'semgrep', installed: true, ok: true, count: 1 },
+    { id: 'trivy', installed: true, ok: true, count: 1 },
+    { id: 'gitleaks', installed: true, ok: true, count: 1 },
+  ],
+  canceled: false,
+  truncated: false,
+};
+ipcMain.handle('security:pick-path', () => ({ ok: true, path: 'C:\\src\\demo' }));
+ipcMain.handle('security:run-audit', (_e, input) => {
+  record('runAudit', input);
+  const runId = 'audit-demo';
+  setTimeout(() => {
+    const target = BrowserWindow.getAllWindows()[0];
+    if (!target || target.isDestroyed()) return;
+    target.webContents.send('security:progress', { runId, phase: 'scanning', message: 'Semgrep 扫描中…', percent: 40, count: 0 });
+    target.webContents.send('security:progress', { runId, phase: 'scanning', message: 'Trivy 扫描中…', percent: 70, count: 1 });
+    target.webContents.send('security:progress', { runId, phase: 'done', message: '审计完成', percent: 100, count: 3 });
+  }, 20);
+  return { ok: true, runId };
+});
+ipcMain.handle('security:stop-audit', () => { record('stopAudit', true); return { ok: true }; });
+ipcMain.handle('security:findings', () => ({ ok: true, report: auditReport }));
+ipcMain.handle('security:export', (_e, format) => {
+  record('exportAudit', format);
+  return { ok: true, path: `C:\\Users\\demo\\Downloads\\security-report.${format === 'json' ? 'json' : 'sarif'}` };
+});
+const pentestTargetInfo = { url: 'https://example.com/', host: 'example.com', port: 443, scheme: 'https' };
+const passiveFindings = [
+  { id: 'passive-hsts', severity: 'medium', title: '缺少 HSTS', detail: '未设置 Strict-Transport-Security，浏览器可能先以 HTTP 访问。', category: 'headers', url: 'https://example.com/' },
+  { id: 'passive-server', severity: 'info', title: '暴露服务器标识', detail: '响应头 Server：nginx', category: 'headers', url: 'https://example.com/' },
+];
+ipcMain.handle('security:authorize', (_e, input) => {
+  record('authorizeTarget', input);
+  if (input.hostConfirm !== pentestTargetInfo.host) {
+    return { ok: false, error: '授权校验未通过' };
+  }
+  return {
+    ok: true,
+    token: 'ticket-demo',
+    target: pentestTargetInfo,
+    ips: ['93.184.216.34'],
+    expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+  };
+});
+ipcMain.handle('security:run-passive', (_e, input) => {
+  record('runPassive', input);
+  const runId = 'passive-demo';
+  setTimeout(() => {
+    const target = BrowserWindow.getAllWindows()[0];
+    if (!target || target.isDestroyed()) return;
+    target.webContents.send('security:pentest-progress', { runId, phase: 'checking', message: '请求目标并检查响应头…', percent: 50 });
+    target.webContents.send('security:pentest-progress', { runId, phase: 'done', message: '被动基线完成', percent: 100, count: 2, findings: passiveFindings });
+  }, 20);
+  return { ok: true, runId };
+});
+ipcMain.handle('security:run-pentest', (_e, input) => {
+  record('runPentest', input);
+  const runId = 'active-demo';
+  setTimeout(() => {
+    const target = BrowserWindow.getAllWindows()[0];
+    if (!target || target.isDestroyed()) return;
+    target.webContents.send('security:pentest-progress', { runId, phase: 'scanning', message: 'Nuclei 扫描中…', percent: 60 });
+    target.webContents.send('security:pentest-progress', {
+      runId, phase: 'done', message: '主动扫描完成', percent: 100, count: 1,
+      findings: [{ id: 'nuclei-1', severity: 'high', title: 'Exposed admin panel', detail: '模板 http/exposures/admin-panel.yaml 命中。', category: 'template', ruleId: 'admin-panel', url: 'https://example.com/admin' }],
+    });
+  }, 20);
+  return { ok: true, runId };
+});
+ipcMain.handle('security:stop-pentest', () => { record('stopPentest', true); return { ok: true }; });
+ipcMain.handle('security:audit-log', () => ({
+  ok: true,
+  chainValid: true,
+  entries: [
+    {
+      runId: 'active-demo', at: '2026-10-18T00:02:00.000Z', kind: 'active',
+      target: pentestTargetInfo, ips: ['93.184.216.34'], allowLocal: false,
+      note: '授权测试 example.com', tool: 'nuclei', argv: ['-u', 'https://example.com/'],
+      rulesHash: 'abc123', requests: 42, durationMs: 61000, exitCode: 0, findings: 1,
+      outcome: 'ok', prevHash: '0'.repeat(64), hash: 'f'.repeat(64),
+    },
+    {
+      runId: 'passive-demo', at: '2026-10-18T00:01:00.000Z', kind: 'passive',
+      target: pentestTargetInfo, ips: ['93.184.216.34'], allowLocal: false,
+      tool: 'builtin', argv: [], requests: 2, durationMs: 900, findings: 2,
+      outcome: 'ok', prevHash: '0'.repeat(64), hash: 'e'.repeat(64),
+    },
+  ],
+}));
 ipcMain.handle('app:open-user-data', () => ({ ok: true }));
 ipcMain.handle('agents:list', () => ({ ok: true, agents }));
 ipcMain.handle('agents:suggest-team', (_e, task) => {
@@ -343,6 +512,20 @@ async function run() {
   page.on('console', (_e, level, message) => console.log('[renderer]', level, message));
   page.on('render-process-gone', (_e, details) => console.log('renderer gone', JSON.stringify(details)));
   page.on('unresponsive', () => console.log('renderer unresponsive'));
+  const settleForCapture = async () => {
+    await js(`(() => {
+      if (document.getElementById('capture-settle')) return;
+      const style = document.createElement('style');
+      style.id = 'capture-settle';
+      style.textContent = '*, *::before, *::after { animation: none !important; transition: none !important; }';
+      document.head.append(style);
+    })()`);
+  };
+  const capture = async (name) => {
+    page.invalidate();
+    await wait(220);
+    writeFileSync(path.join(root, '.smoke', name), (await page.capturePage()).toPNG());
+  };
   await window.loadFile(path.join(root, 'dist', 'renderer', 'index.html'), { query: { smokeCwd: root } });
   await wait(1200);
 
@@ -375,6 +558,14 @@ async function run() {
     memoryScope: document.getElementById('memory-scope')?.value,
     autopilot: Boolean(document.getElementById('autopilot-toggle')),
     habits: document.getElementById('memory-habits')?.textContent,
+    tabsOverflow: (() => {
+      const el = document.querySelector('.dock-tabs');
+      return el ? el.scrollWidth - el.clientWidth : -1;
+    })(),
+    tabWidths: [...document.querySelectorAll('.dock-tab')].map((el) => Math.round(el.getBoundingClientRect().width)),
+    toolbarSticky: getComputedStyle(document.querySelector('[data-dock-panel="permissions"] > .dock-toolbar')).position,
+    presetColumns: getComputedStyle(document.getElementById('perm-presets')).gridTemplateColumns.split(' ').length,
+    helpOpen: document.querySelector('.dock-help')?.open,
   })`));
   expect(dockState.tabs === 4, `dock has four tabs (${dockState.tabs})`);
   expect(dockState.inSidebar, 'project tools live in the left sidebar');
@@ -393,6 +584,50 @@ async function run() {
   expect(dockState.memoryScope === 'project', `memory defaults to project scope (${dockState.memoryScope})`);
   expect(dockState.autopilot, 'autopilot panel present');
   expect(String(dockState.habits).includes('习惯画像'), `habit profile rendered (${dockState.habits})`);
+  expect(dockState.tabsOverflow === 0, `dock tabs fit without horizontal scroll (${dockState.tabsOverflow})`);
+  expect(dockState.tabWidths.length === 4 && Math.max(...dockState.tabWidths) - Math.min(...dockState.tabWidths) <= 2,
+    `dock tabs share the row evenly (${dockState.tabWidths})`);
+  expect(dockState.toolbarSticky === 'sticky', `permission toolbar stays visible (${dockState.toolbarSticky})`);
+  expect(dockState.presetColumns === 2, `permission presets use two columns (${dockState.presetColumns})`);
+  expect(dockState.helpOpen === false, 'auto-approve help stays collapsed');
+
+  const packState = JSON.parse(await js(`JSON.stringify({
+    toolbar: Boolean(document.querySelector('#capability-packs .pack-toolbar')),
+    groups: document.querySelectorAll('#capability-packs .pack-group').length,
+    rows: document.querySelectorAll('#capability-packs .pack-row').length,
+    switches: document.querySelectorAll('#capability-packs input[type="checkbox"]').length,
+    states: [...document.querySelectorAll('#capability-packs .pack-state')].map((el) => el.textContent),
+    actions: [...document.querySelectorAll('#capability-packs .pack-action')].map((el) => el.textContent),
+    note: Boolean(document.querySelector('#pane-capability .note[data-i18n^="开关按当前项目"]')),
+  })`));
+  expect(packState.toolbar, 'capability packs expose a summary toolbar');
+  expect(packState.rows === 6, `six capability packs rendered (${packState.rows})`);
+  expect(packState.switches === 6, `each pack has a switch (${packState.switches})`);
+  expect(packState.groups === 4, `packs grouped by category (${packState.groups})`);
+  expect(packState.states.every((state) => state === '未启用'), `packs start disabled (${packState.states})`);
+  expect(packState.actions.join('|').includes('全部启用'), `bulk enable action present (${packState.actions})`);
+  expect(packState.note, 'per-project behavior note rendered');
+
+  await js(`document.querySelector('#project-dock .dock-body-inner').scrollTop = 9999`);
+  await capture('workbench-dock.png');
+  await js(`document.querySelector('#project-dock .dock-body-inner').scrollTop = 0`);
+
+  await js(`document.getElementById('dock-toggle').click()`);
+  await wait(420);
+  const dockCollapsed = JSON.parse(await js(`JSON.stringify((() => {
+    const dock = document.getElementById('project-dock');
+    const rect = dock.getBoundingClientRect();
+    return {
+      collapsed: dock.classList.contains('collapsed'),
+      height: Math.round(rect.height),
+      bottomGap: Math.round(window.innerHeight - rect.bottom),
+    };
+  })())`));
+  expect(dockCollapsed.collapsed, 'dock collapses');
+  expect(dockCollapsed.height <= 100, `collapsed dock keeps only its head (${dockCollapsed.height}px)`);
+  expect(Math.abs(dockCollapsed.bottomGap) <= 1, `collapsed dock pins to the sidebar bottom (${dockCollapsed.bottomGap}px)`);
+  await js(`document.getElementById('dock-toggle').click()`);
+  await wait(420);
 
   await js(`document.querySelectorAll('#perm-presets .perm-preset')[3]?.click()`);
   await wait(300);
@@ -502,14 +737,16 @@ async function run() {
     groups: [...document.querySelectorAll('#model-list .vendor-group')].map((group) => ({
       name: group.querySelector('.vendor-name')?.textContent,
       count: group.querySelector('.vendor-count')?.textContent,
-      expanded: group.querySelector('.vendor-head')?.getAttribute('aria-expanded'),
+      expanded: group.querySelector('.vendor-toggle')?.getAttribute('aria-expanded'),
       models: [...group.querySelectorAll('.vendor-models .item strong')].map((el) => el.textContent),
     })),
   }); } catch (error) { return { error: String(error), stack: error && error.stack }; } })())`));
   const modelView = await readGroups();
-  expect(modelView.groups.length === 1, `cn board shows only domestic vendors (${modelView.groups.length})`);
+  expect(modelView.groups.length === 2, `cn board lists all domestic vendors (${modelView.groups.length})`);
   expect(modelView.groups[0]?.name === 'Demo Labs', `domestic vendor first (${modelView.groups[0]?.name})`);
   expect(modelView.groups[0]?.models.length === 2, 'vendor group lists its models');
+  expect(modelView.groups[1]?.name === 'DeepSeek' && modelView.groups[1]?.models.length === 0,
+    `empty vendor stays visible (${modelView.groups[1]?.name}/${modelView.groups[1]?.models.length})`);
 
   const filterChips = JSON.parse(await js(`JSON.stringify(
     [...document.querySelectorAll('#model-filter [data-model-filter]')].map((el) => ({
@@ -518,12 +755,12 @@ async function run() {
   expect(filterChips.length === 3, `model filter chips rendered (${filterChips.length})`);
   expect(filterChips.find((chip) => chip.id === 'all')?.text === '全部 2', `all chip counts board models (${filterChips.map((chip) => chip.text).join(',')})`);
   expect(filterChips.find((chip) => chip.id === 'added')?.text === '已添加 1', 'added chip counts saved models');
-  expect(filterChips.find((chip) => chip.id === 'available')?.text === '可用 1', 'available chip counts usable models');
+  expect(filterChips.find((chip) => chip.id === 'available')?.text === '可用 2', 'available chip counts usable models');
 
   await js(`document.querySelector('[data-model-filter="available"]').click()`);
   await wait(150);
   const availableView = await readGroups();
-  expect(availableView.groups.length === 1 && availableView.groups[0]?.models.length === 1,
+  expect(availableView.groups.length === 1 && availableView.groups[0]?.models.length === 2,
     `available filter keeps usable models only (${JSON.stringify(availableView.groups)})`);
   expect(availableView.groups[0]?.models[0]?.includes('demo-model'), 'available filter keeps the current model');
   await js(`document.querySelector('[data-model-filter="added"]').click()`);
@@ -546,22 +783,113 @@ async function run() {
 
   await js(`document.querySelector('.board-tab[data-board="cn"]').click()`);
   await wait(150);
-  await js(`document.querySelector('#model-list .vendor-head').click()`);
+  const beforeToggle = await js(`document.querySelector('#model-list .vendor-toggle').getAttribute('aria-expanded')`);
+  await js(`document.querySelector('#model-list .vendor-toggle').click()`);
   await wait(100);
-  const collapsed = await js(`JSON.stringify(document.querySelector('#model-list .vendor-models').hidden)`);
-  expect(collapsed === 'true', 'vendor collapses on click');
+  const afterToggle = JSON.parse(await js(`JSON.stringify({
+    expanded: document.querySelector('#model-list .vendor-toggle').getAttribute('aria-expanded'),
+    hidden: document.querySelector('#model-list .vendor-models').hidden,
+  })`));
+  expect(afterToggle.expanded === String(beforeToggle !== 'true') && afterToggle.hidden === (beforeToggle === 'true'),
+    `vendor toggles on click (${beforeToggle} -> ${afterToggle.expanded})`);
+
+  // 快捷模型池：清空 → 单个加入 → 全部加入 → chip 立即使用
+  await js(`document.getElementById('model-pool-clear').click()`);
+  await wait(100);
+  const poolEmpty = JSON.parse(await js(`JSON.stringify({
+    count: document.getElementById('model-pool-count').textContent,
+    hint: !document.getElementById('model-pool-empty').hidden,
+  })`));
+  expect(poolEmpty.count.includes('0'), `quick pool starts empty (${poolEmpty.count})`);
+  expect(poolEmpty.hint, 'empty quick pool shows its hint');
+  if (afterToggle.hidden) {
+    await js(`document.querySelector('#model-list .vendor-toggle').click()`);
+    await wait(100);
+  }
+  const routing = JSON.parse(await js(`JSON.stringify({
+    chips: document.querySelectorAll('#model-list .vendor-routing .routing-chip').length,
+    chip: document.querySelector('#model-list .vendor-routing .routing-chip')?.textContent ?? '',
+  })`));
+  expect(routing.chips === 7, `vendor offers automatic task types (${routing.chips})`);
+  await js(`document.querySelectorAll('#model-list .vendor-routing .routing-chip')[0].click()`);
+  await wait(150);
+  const routingOn = JSON.parse(await js(`JSON.stringify({
+    pressed: document.querySelectorAll('#model-list .vendor-routing .routing-chip')[0].getAttribute('aria-pressed'),
+    badge: document.querySelector('#model-list .vendor-task-badge')?.textContent ?? '',
+    router: document.getElementById('router-toggle').checked,
+  })`));
+  expect(routingOn.pressed === 'true', 'task chip toggles on');
+  expect(routingOn.badge.includes(routing.chip), `vendor badge names the assigned task (${routingOn.badge})`);
+  expect(routingOn.router, 'first vendor assignment enables auto-routing');
+  await js(`document.querySelectorAll('#model-list .vendor-routing .routing-chip')[0].click()`);
+  await wait(150);
+  const routingOff = await js(`JSON.stringify(document.querySelectorAll('#model-list .vendor-task-badge').length)`);
+  expect(routingOff === '0', 'unassigning clears the vendor badge');
+  await js(`document.querySelectorAll('#model-list .model-item .pool-toggle')[0].click()`);
+  await wait(150);
+  const poolOne = JSON.parse(await js(`JSON.stringify({
+    count: document.getElementById('model-pool-count').textContent,
+    chips: document.querySelectorAll('#model-pool-chips .pool-chip').length,
+    pressed: document.querySelectorAll('#model-list .model-item .pool-toggle')[0].getAttribute('aria-pressed'),
+  })`));
+  expect(poolOne.count.includes('1'), `adding one model updates pool count (${poolOne.count})`);
+  expect(poolOne.chips === 1, `pool renders one chip (${poolOne.chips})`);
+  expect(poolOne.pressed === 'true', 'pool toggle reflects membership');
+  await js(`document.querySelectorAll('#model-list .model-item .use-model')[1].click()`);
+  await wait(150);
+  const usePreview = await js(`JSON.stringify(document.getElementById('command-preview').textContent)`);
+  expect(usePreview.includes('/model demo/demo-mini'), `use button stages the model command (${usePreview})`);
+  await js(`document.getElementById('model-pool-all').click()`);
+  await wait(150);
+  const poolAll = JSON.parse(await js(`JSON.stringify({
+    count: document.getElementById('model-pool-count').textContent,
+    chips: document.querySelectorAll('#model-pool-chips .pool-chip').length,
+  })`));
+  expect(poolAll.count.includes('4'), `add all fills the pool (${poolAll.count})`);
+  expect(poolAll.chips === 4, `add all renders every chip (${poolAll.chips})`);
+  await js(`document.getElementById('model-pool-clear').click()`);
+  await wait(100);
+  const poolCleared = await js(`JSON.stringify(document.querySelectorAll('#model-pool-chips .pool-chip').length)`);
+  expect(poolCleared === '0', `clearing the pool removes chips (${poolCleared})`);
+
+  // 自定义接入卡片：已移到 设置 → 接入，默认展开并给每个模型提供「使用 / 快捷」
+  await js(`document.getElementById('open-settings').click()`);
+  await js(`document.getElementById('settings-tab-provider').click()`);
+  await wait(300);
+  const providerModels = JSON.parse(await js(`JSON.stringify({
+    rows: document.querySelectorAll('#provider-list .provider-model').length,
+    use: document.querySelectorAll('#provider-list .provider-model .use-model').length,
+    pool: document.querySelectorAll('#provider-list .provider-model .pool-toggle').length,
+    expanded: document.querySelector('#provider-list .provider-item')?.getAttribute('aria-expanded') ?? '',
+  })`));
+  expect(providerModels.rows === 2, `custom provider lists its models (${providerModels.rows})`);
+  expect(providerModels.use === 2, `every provider model has a use button (${providerModels.use})`);
+  expect(providerModels.pool === 2, `every provider model has a pool toggle (${providerModels.pool})`);
+  expect(providerModels.expanded === 'true', 'custom provider expands its models by default');
+  await js(`document.querySelectorAll('#provider-list .provider-model .use-model')[1].click()`);
+  await wait(150);
+  const providerUse = await js(`JSON.stringify(document.getElementById('command-preview').textContent)`);
+  expect(providerUse.includes('/model demo/demo-mini'), `provider model use stages its command (${providerUse})`);
+  await js(`document.querySelector('#provider-list .provider-models-toggle').click()`);
+  await wait(150);
+  const providerCollapsed = await js(`JSON.stringify(document.querySelector('#provider-list .provider-models').hidden)`);
+  expect(providerCollapsed === 'true', 'provider model list collapses');
+  await js(`document.querySelector('#provider-list .provider-models-toggle').click()`);
+  await wait(150);
+  const providerReopened = await js(`JSON.stringify(document.querySelector('#provider-list .provider-models').hidden)`);
+  expect(providerReopened === 'false', 'provider model list reopens');
 
   // 市场：扩展 / 技能 / MCP 三个分类 + 在线目录（已并入右上角设置）
   await js(`document.getElementById('open-settings').click()`);
   await js(`document.getElementById('settings-tab-market').click()`);
   await wait(500);
   const marketExtensions = await js(`JSON.stringify(document.querySelectorAll('#market-list .market-card').length)`);
-  expect(marketExtensions === '3', `market lists all capabilities by default (${marketExtensions})`);
+  expect(marketExtensions === String(skills.length + mcps.length + extensions.length), `market lists all capabilities by default (${marketExtensions})`);
 
   await js(`document.querySelector('.market-tab[data-market="skills"]').click()`);
   await wait(300);
   const marketSkills = await js(`JSON.stringify(document.querySelectorAll('#market-list .market-card').length)`);
-  expect(marketSkills === '1', `market lists skills (${marketSkills})`);
+  expect(marketSkills === String(skills.length), `market lists skills (${marketSkills})`);
   await js(`document.querySelector('#market-list .market-card .primary').click()`);
   await wait(300);
   expect(calls.some(([name, input]) => name === 'addSkill' && input.name === 'demo-skill'), 'skill install calls backend');
@@ -641,6 +969,18 @@ async function run() {
   await wait(100);
   const roomChips = await js(`JSON.stringify(document.querySelectorAll('#meeting-room .room-chip').length)`);
   expect(roomChips === '1', `meeting room accepts dropped app (${roomChips})`);
+  const teamLayout = JSON.parse(await js(`JSON.stringify({
+    sections: document.querySelectorAll('#pane-team details.team-section').length,
+    compose: Boolean(document.querySelector('#pane-team .team-compose')),
+    sticky: getComputedStyle(document.querySelector('#pane-team .team-compose')).position,
+    rosterCount: document.getElementById('team-roster-count').textContent,
+    roomCount: document.getElementById('meeting-room-count').textContent,
+  })`));
+  expect(teamLayout.sections === 2, `team sections are collapsible (${teamLayout.sections})`);
+  expect(teamLayout.compose, 'team task compose block exists');
+  expect(teamLayout.sticky === 'sticky', `team compose sticks to the bottom (${teamLayout.sticky})`);
+  expect(Boolean(teamLayout.rosterCount), 'roster shows its member count');
+  expect(teamLayout.roomCount.includes('1'), `meeting room shows its member count (${teamLayout.roomCount})`);
   await js(`(() => {
     document.getElementById('team-task').value = '调研构建链路';
     document.getElementById('run-team').click();
@@ -707,6 +1047,38 @@ async function run() {
   })()`);
   await wait(200);
   expect(calls.some(([name, input]) => name === 'saveToolSettings' && input?.crawl === true), 'advanced tool toggle persists');
+  await js(`document.getElementById('crawl-drawer').open = true`);
+  await js(`document.querySelector('[data-crawl-mode="page"]').click()`);
+  const crawlPageMode = JSON.parse(await js(`JSON.stringify({
+    urlHidden: document.getElementById('crawl-url-row').hidden,
+    searchHidden: document.getElementById('crawl-search-row').hidden,
+    depth: document.getElementById('crawl-depth').disabled,
+  })`));
+  expect(crawlPageMode.urlHidden === false && crawlPageMode.searchHidden === true, 'crawl page mode shows URL input');
+  expect(crawlPageMode.depth === true, 'crawl page mode disables follow depth');
+  await js(`document.querySelector('[data-crawl-mode="search"]').click()`);
+  const crawlSearchMode = JSON.parse(await js(`JSON.stringify({
+    urlHidden: document.getElementById('crawl-url-row').hidden,
+    searchHidden: document.getElementById('crawl-search-row').hidden,
+    depth: document.getElementById('crawl-depth').disabled,
+  })`));
+  expect(crawlSearchMode.urlHidden === true && crawlSearchMode.searchHidden === false, 'crawl search mode shows query input');
+  expect(crawlSearchMode.depth === false, 'crawl search mode enables follow depth');
+  await js(`(() => {
+    document.getElementById('crawl-query').value = 'pi workbench';
+    document.getElementById('crawl-start').click();
+  })()`);
+  await wait(400);
+  const crawlCall = calls.filter(([name]) => name === 'startCrawl').pop()?.[1];
+  expect(crawlCall?.mode === 'search' && crawlCall?.query === 'pi workbench', `crawl start passes mode and query (${JSON.stringify(crawlCall)})`);
+  const crawlCards = await js(`JSON.stringify(document.querySelectorAll('#crawl-pages .crawl-item').length)`);
+  expect(crawlCards === '1', `crawl renders page cards (${crawlCards})`);
+  const crawlProgressText = await js(`JSON.stringify(document.getElementById('crawl-progress-text').textContent)`);
+  expect(crawlProgressText.includes('完成'), `crawl progress reports completion (${crawlProgressText})`);
+  const crawlCopyState = await js(`JSON.stringify(document.getElementById('crawl-copy').disabled)`);
+  expect(crawlCopyState === 'false', `crawl copy enabled after results (${crawlCopyState})`);
+  const crawlEngine = await js(`JSON.stringify(document.getElementById('install-trafilatura').hidden)`);
+  expect(crawlEngine === 'false', `trafilatura install action visible when missing (${crawlEngine})`);
   await js(`(() => {
     document.getElementById('analyze-path').value = 'C:\\\\src\\\\demo';
     document.getElementById('run-analyze').click();
@@ -715,11 +1087,119 @@ async function run() {
   const analyzeText = await js(`JSON.stringify(document.getElementById('analyze-output').textContent)`);
   expect(analyzeText.includes('文件数'), `reverse analysis renders output (${analyzeText})`);
   expect(calls.some(([name]) => name === 'analyzePath'), 'reverse analysis calls backend');
+  const reverseInstall = await js(`JSON.stringify(document.getElementById('install-radare2').hidden)`);
+  expect(reverseInstall === 'false', `radare2 install action visible when missing (${reverseInstall})`);
+  await js(`(() => {
+    document.getElementById('analyze-path').value = 'C:\\\\Windows\\\\System32\\\\notepad.exe';
+    document.getElementById('run-triage').click();
+  })()`);
+  await wait(200);
+  const triageRows = await js(`JSON.stringify(document.querySelectorAll('#triage-report .triage-row').length)`);
+  expect(Number(triageRows) >= 5, `triage renders summary rows (${triageRows})`);
+  const triageBlocks = await js(`JSON.stringify(document.querySelectorAll('#triage-report .triage-block').length)`);
+  expect(Number(triageBlocks) >= 4, `triage renders detail blocks (${triageBlocks})`);
+  const triageCopy = await js(`JSON.stringify(document.getElementById('copy-triage').disabled)`);
+  expect(triageCopy === 'false', `triage copy enabled after run (${triageCopy})`);
+  expect(calls.some(([name]) => name === 'triage'), 'triage calls backend');
   try {
     const shot = await page.capturePage();
     writeFileSync(path.join(root, '.smoke', 'workbench-search.png'), shot.toPNG());
   } catch (error) {
     console.log('search screenshot skipped:', String(error));
+  }
+
+  // 安全页：工具状态、本地审计、筛选与导出
+  await js(`document.getElementById('tab-security').click()`);
+  await wait(300);
+  const securityVisible = await js(`JSON.stringify(document.getElementById('pane-security').hidden === false)`);
+  expect(securityVisible === 'true', 'security pane opens from nav');
+  const secChips = await js(`JSON.stringify(document.querySelectorAll('#security-toolbar .sec-tool').length)`);
+  expect(Number(secChips) >= 3, `security toolbar lists audit tools (${secChips})`);
+  await js(`document.querySelector('[data-sec-mode="pentest"]').click()`);
+  const pentestShown = await js(`JSON.stringify(document.querySelector('[data-sec-panel="pentest"]').hidden === false)`);
+  expect(pentestShown === 'true', 'security mode tabs switch panes');
+  await js(`document.querySelector('[data-sec-mode="audit"]').click()`);
+  await js(`(() => {
+    document.getElementById('audit-path').value = 'C:\\\\src\\\\demo';
+    document.getElementById('audit-run').click();
+  })()`);
+  await wait(400);
+  const auditCall = calls.filter(([name]) => name === 'runAudit').pop()?.[1];
+  expect(auditCall?.path === 'C:\\src\\demo', `audit start passes folder (${JSON.stringify(auditCall)})`);
+  const findingCards = await js(`JSON.stringify(document.querySelectorAll('#audit-findings .finding').length)`);
+  expect(findingCards === '3', `audit renders findings (${findingCards})`);
+  const auditSummaryText = await js(`JSON.stringify(document.getElementById('audit-summary').textContent)`);
+  expect(auditSummaryText.includes('3'), `audit summary counts findings (${auditSummaryText})`);
+  await js(`(() => {
+    const select = document.getElementById('audit-filter-severity');
+    select.value = 'critical';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  const filteredCards = await js(`JSON.stringify(document.querySelectorAll('#audit-findings .finding').length)`);
+  expect(filteredCards === '1', `audit severity filter narrows list (${filteredCards})`);
+  await js(`(() => {
+    const select = document.getElementById('audit-filter-severity');
+    select.value = 'all';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('audit-export-json').click();
+  })()`);
+  await wait(100);
+  expect(calls.some(([name, format]) => name === 'exportAudit' && format === 'json'), 'audit export calls backend');
+
+  // 授权渗透：校验目标 → 被动基线 → 主动扫描 → 审计日志
+  await js(`document.querySelector('[data-sec-mode="pentest"]').click()`);
+  await js(`(() => {
+    document.getElementById('pentest-target').value = 'https://example.com/';
+    document.getElementById('pentest-confirm-host').value = 'example.com';
+    document.getElementById('pentest-authorize').checked = true;
+    document.getElementById('pentest-note').value = '授权测试 example.com';
+    document.getElementById('pentest-check').click();
+  })()`);
+  await wait(200);
+  const authCall = calls.filter(([name]) => name === 'authorizeTarget').pop()?.[1];
+  expect(authCall?.url === 'https://example.com/', `authorize passes target (${JSON.stringify(authCall)})`);
+  const authText = await js(`JSON.stringify(document.getElementById('pentest-auth-info').textContent)`);
+  expect(authText.includes('93.184.216.34'), `authorize shows resolved IPs (${authText})`);
+  await js(`document.getElementById('pentest-passive').click()`);
+  await wait(400);
+  const passiveCall = calls.filter(([name]) => name === 'runPassive').pop()?.[1];
+  expect(passiveCall?.url === 'https://example.com/', 'passive baseline calls backend');
+  const passiveCards = await js(`JSON.stringify(document.querySelectorAll('#pentest-results .finding').length)`);
+  expect(passiveCards === '2', `passive findings render (${passiveCards})`);
+  const passiveText = await js(`JSON.stringify(document.getElementById('pentest-progress-text').textContent)`);
+  expect(passiveText.includes('被动基线完成'), `passive progress completes (${passiveText})`);
+  // 一次性授权：主动扫描前重新校验目标
+  await js(`document.getElementById('pentest-check').click()`);
+  await wait(200);
+  await js(`document.getElementById('pentest-active').click()`);
+  await wait(400);
+  const activeCall = calls.filter(([name]) => name === 'runPentest').pop()?.[1];
+  expect(activeCall?.token === 'ticket-demo', `active scan passes ticket (${JSON.stringify(activeCall)})`);
+  const activeCards = await js(`JSON.stringify(document.querySelectorAll('#pentest-results .finding').length)`);
+  expect(activeCards === '1', `active findings render (${activeCards})`);
+  try {
+    const shot = await page.capturePage();
+    writeFileSync(path.join(root, '.smoke', 'workbench-security-pentest.png'), shot.toPNG());
+  } catch (error) {
+    console.log('pentest screenshot skipped:', String(error));
+  }
+
+  await js(`document.querySelector('[data-sec-mode="log"]').click()`);
+  await wait(300);
+  const logState = JSON.parse(await js(`JSON.stringify({
+    chain: document.getElementById('audit-log-chain').textContent,
+    cards: document.querySelectorAll('#audit-log-list .item').length,
+    meta: document.getElementById('audit-log-list').textContent,
+  })`));
+  expect(logState.chain.includes('链校验通过'), `audit log chain valid (${logState.chain})`);
+  expect(logState.cards === 2, `audit log renders entries (${logState.cards})`);
+  expect(logState.meta.includes('nuclei'), `audit log shows tool (${logState.meta})`);
+  await js(`document.querySelector('[data-sec-mode="audit"]').click()`);
+  try {
+    const shot = await page.capturePage();
+    writeFileSync(path.join(root, '.smoke', 'workbench-security.png'), shot.toPNG());
+  } catch (error) {
+    console.log('security screenshot skipped:', String(error));
   }
 
   // 右侧工作区与本地工具
@@ -838,13 +1318,35 @@ async function run() {
   try {
     await js(`document.getElementById('tab-model').click()`);
     await wait(300);
-    const shot = await page.capturePage();
-    writeFileSync(path.join(root, '.smoke', 'workbench-model.png'), shot.toPNG());
+    await settleForCapture();
+    await capture('workbench-model.png');
     await js(`document.getElementById('open-settings').click()`);
     await js(`document.getElementById('settings-tab-market').click()`);
     await wait(300);
-    const shot2 = await page.capturePage();
-    writeFileSync(path.join(root, '.smoke', 'workbench-market.png'), shot2.toPNG());
+    await capture('workbench-market.png');
+    await js(`document.getElementById('settings-tab-provider').click()`);
+    await wait(300);
+    expect(await js(`document.getElementById('pane-provider').hidden === false`), 'provider pane lives in settings');
+    await capture('workbench-provider.png');
+    await js(`document.getElementById('settings-tab-about').click()`);
+    await wait(800);
+    const aboutState = JSON.parse(await js(`JSON.stringify({
+      visible: document.getElementById('pane-about').hidden === false,
+      version: document.getElementById('about-app-version').textContent,
+      pi: document.getElementById('about-pi-version').textContent,
+      feedback: document.querySelectorAll('[data-feedback-email]').length,
+      wechat: Boolean(document.querySelector('[data-copy-text="CxemCaspian111"]')),
+      selected: document.querySelector('.settings-nav [aria-selected="true"]')?.id,
+      visiblePanes: [...document.querySelectorAll('.settings-content .pane')].filter((pane) => !pane.hidden).map((pane) => pane.id),
+      sheet: (() => { const r = document.querySelector('.settings-sheet').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })(),
+    })`));
+    expect(aboutState.selected === 'settings-tab-about', `about tab selected (${aboutState.selected})`);
+    expect(aboutState.visiblePanes.includes('pane-about'), 'about pane visible');
+    expect(aboutState.version.startsWith('v'), `about shows app version (${aboutState.version})`);
+    expect(aboutState.feedback >= 2, `about lists feedback emails (${aboutState.feedback})`);
+    expect(aboutState.wechat === true, 'about shows wechat contact');
+    expect(aboutState.sheet[0] > 600, `settings sheet has usable width (${aboutState.sheet.join('x')})`);
+    await capture('workbench-about.png');
     await js(`document.getElementById('settings-close').click()`);
   } catch (error) {
     console.log('screenshot skipped:', String(error));

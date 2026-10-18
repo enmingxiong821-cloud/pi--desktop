@@ -1,17 +1,24 @@
 {
   "name": "pi-desktop-poc",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
-  "description": "Pi 桌面工作台：真实 Pi TUI + 图形辅助，多项目会话与项目级权限管理",
+  "description": "Pi 桌面工作台：真实 Pi TUI + 图形辅助，多项目会话、模型路由、联网抓取、逆向分析与安全审计",
   "author": {
     "name": "Pi Desktop",
     "email": "pi-desktop@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enmingxiong821-cloud/pi--desktop.git"
   },
   "main": "dist/main/main.cjs",
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "i18n:check": "node .smoke/i18n-missing.mjs",
     "smoke": "node scripts/pty-smoke.mjs",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
@@ -24,6 +31,7 @@
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-unicode11": "0.9.0",
     "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "6.0.0",
     "node-pty": "1.1.0"
   },
@@ -47,6 +55,8 @@
     },
     "files": [
       "dist/**/*",
+      "resources/design-skills/**/*",
+      "resources/bundled-skills/**/*",
       "package.json",
       "!**/*.map"
     ],

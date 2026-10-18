@@ -144,6 +144,9 @@ ipcMain.handle('tools:open-app', () => ({ ok: true }));
 ipcMain.handle('tools:list-links', () => ({ ok: true, links: [] }));
 ipcMain.handle('tools:list-apps', () => ({ ok: true, apps: [] }));
 ipcMain.handle('tools:get-settings', () => ({ ok: true, settings: {} }));
+ipcMain.handle('tools:tool-status', () => [
+  { id: 'trafilatura', label: 'trafilatura', installed: false, installable: true, source: 'uv' },
+]);
 ipcMain.handle('catalog:search-extensions', () => ({ ok: true, results: [] }));
 ipcMain.handle('agents:suggest-team', () => ({ ok: false, error: 'stub' }));
 
@@ -190,7 +193,7 @@ async function run() {
       lang: document.documentElement.lang,
       title: document.title,
       brand: document.querySelector('.brand strong')?.textContent,
-      tabs: [...document.querySelectorAll('.nav-list button[role=tab]')].map((el) => el.textContent),
+      tabs: [...document.querySelectorAll('.nav-list button[role=tab]')].map((el) => el.textContent.trim()),
       state: text('process-state'),
       model: text('active-model'),
       version: text('pi-version'),
@@ -207,7 +210,7 @@ async function run() {
       modelSummary: text('model-summary'),
       modelNote: [...document.querySelectorAll('#pane-model .note')]
         .find((node) => /按常用度排序|Sorted by popularity/.test(node.textContent ?? ''))?.textContent,
-      providerNote: document.querySelector('#provider-drawer > .note')?.textContent,
+      providerNote: document.querySelector('#pane-provider .note[data-i18n-html]')?.textContent,
       paletteHint: document.querySelector('#command-palette .note')?.textContent,
       mediaHint: document.querySelector('#media-preview .media-preview-hint')?.textContent,
       alertHidden: document.getElementById('terminal-alert')?.hidden,

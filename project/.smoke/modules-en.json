@@ -25,7 +25,7 @@
   "storedLocale": "en",
   "preview": "/model demo/mini",
   "modelSummary": "2 models · Default demo/demo-model · 1 relays",
-  "modelNote": "Sorted by popularity; click a vendor to expand its models, click a model to stage the /model command. “Added” means saved as a model module.",
+  "modelNote": "Sorted by popularity; expand a vendor to see its models and tick the task types it should auto-handle. \"Use\" switches the current session; \"Pool\" adds it as a candidate.",
   "providerNote": "Custom providers are written to the real local Pi config (models.json + auth.json) with an automatic backup; new providers take effect after a new Pi session.",
   "paletteHint": "Commands that run directly are written to the terminal with Enter; ones that need arguments are placed in the composer.",
   "mediaHint": "Scroll to zoom · drag to pan · Esc to close",
@@ -40,7 +40,7 @@
     "×"
   ],
   "moduleBindingLabel": "Model for this project",
-  "moduleBindingValue": "m-mvcl0rwr-bloi",
+  "moduleBindingValue": "m-mvdl8puv-o391",
   "moduleBindingOptions": [
     "Pi default",
     "快速修复 · demo/mini"

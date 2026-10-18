@@ -12,3 +12,8 @@ poc-*.log
 .smoke/features-smoke.mjs
 .smoke/guard-check.mjs
 .smoke/**/*.bak-*
+# 验证脚本的临时产物：源码与截图保留，打包结果与日志不进仓库
+.smoke/*.bundle.mjs
+.smoke/*.out
+.smoke/launch.log
+.smoke/tmp-rules/

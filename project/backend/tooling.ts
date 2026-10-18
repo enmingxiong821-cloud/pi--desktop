@@ -14,7 +14,9 @@ function which(command: string): string[] {
   }
 }
 
-export function findNode(): string {
+let nodePathCache: string | null = null;
+
+function resolveNode(): string {
   const override = process.env.PI_DESKTOP_NODE?.trim();
   if (override && existsSync(override)) return override;
 
@@ -50,6 +52,12 @@ export function findNode(): string {
   if (candidate) return candidate;
 
   throw new Error(t('未找到 Node.js 可执行文件；请设置 PI_DESKTOP_NODE 指向 node.exe'));
+}
+
+export function findNode(): string {
+  if (nodePathCache && existsSync(nodePathCache)) return nodePathCache;
+  nodePathCache = resolveNode();
+  return nodePathCache;
 }
 
 export function findNpm(): string | undefined {
