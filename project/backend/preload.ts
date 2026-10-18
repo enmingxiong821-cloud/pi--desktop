@@ -38,6 +38,7 @@ import type { HabitEvent, HabitSummary } from './habits.js';
 import type { PermissionResult, ProjectPermissions } from './permissions.js';
 import type { AppDefaults, AppDefaultsResult } from './app-defaults.js';
 import type { ProjectConfigInput, ProjectConfigResult } from './project-config.js';
+import type { ConfigTemplate, TemplateListResult } from './config-share.js';
 import type { UpdateCheckResult, UpdateSettings } from './updater.js';
 
 export interface LocateResult {
@@ -295,6 +296,22 @@ const api = {
   getProjectConfig: (cwd: string): Promise<ProjectConfigResult> => ipcRenderer.invoke('project:config', cwd),
   saveProjectConfig: (input: ProjectConfigInput): Promise<ProjectConfigResult> =>
     ipcRenderer.invoke('project:config-save', input),
+  resetProjectConfig: (cwd: string): Promise<ProjectConfigResult> =>
+    ipcRenderer.invoke('project:config-reset', cwd),
+  exportProjectConfig: (cwd: string): Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }> =>
+    ipcRenderer.invoke('project:config-export', cwd),
+  importProjectConfig: (cwd: string): Promise<ProjectConfigResult & { canceled?: boolean }> =>
+    ipcRenderer.invoke('project:config-import', cwd),
+  importDotEnv: (cwd: string): Promise<{ ok: boolean; env?: Record<string, string>; added?: number; canceled?: boolean; error?: string }> =>
+    ipcRenderer.invoke('project:env-import', cwd),
+  listConfigTemplates: (): Promise<TemplateListResult> => ipcRenderer.invoke('config:templates'),
+  saveConfigTemplate: (input: { name: string; model?: string; thinking?: string; autoStart?: boolean | null }):
+    Promise<TemplateListResult & { template?: ConfigTemplate; replaced?: boolean }> =>
+    ipcRenderer.invoke('config:template-save', input),
+  applyConfigTemplate: (input: { cwd: string; id: string }): Promise<ProjectConfigResult> =>
+    ipcRenderer.invoke('config:template-apply', input),
+  deleteConfigTemplate: (id: string): Promise<TemplateListResult> =>
+    ipcRenderer.invoke('config:template-delete', id),
   getAppDefaults: (): Promise<AppDefaults> => ipcRenderer.invoke('app:defaults'),
   saveAppDefaults: (input: Partial<AppDefaults>): Promise<AppDefaultsResult> =>
     ipcRenderer.invoke('app:defaults-save', input),

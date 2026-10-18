@@ -1,5 +1,5 @@
 // 项目级启动配置：可共享的设置写入项目 .pi/workbench.json；环境变量只存本机 userData。
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { MODEL_PATTERN, THINKING_LEVELS, type ThinkingLevel } from './app-defaults.js';
 import { readJsonFile } from './config.js';
@@ -202,41 +202,58 @@ function parseAutoStart(value: unknown): boolean | null {
   return null;
 }
 
-export function saveProjectConfig(input: unknown): ProjectConfigResult {
-  const source = input !== null && typeof input === 'object' ? input as Record<string, unknown> : {};
-  const root = resolveProject(source.cwd);
-  if (!root) return { ok: false, error: t('项目目录不存在') };
-  const rawModel = typeof source.model === 'string' ? source.model.trim() : '';
-  if (rawModel && !MODEL_PATTERN.test(rawModel)) return { ok: false, error: t('模型标识无效') };
-  const rawThinking = typeof source.thinking === 'string' ? source.thinking.trim() : '';
-  if (rawThinking && !THINKING_LEVELS.includes(rawThinking as ThinkingLevel)) return { ok: false, error: t('推理度无效') };
-  const envResult = cleanEnv(source.env);
-  if (!envResult.ok) return { ok: false, error: envResult.error };
+export interface SharedConfigFields {
+  model: string;
+  thinking: ThinkingLevel | '';
+  autoStart: boolean | null;
+}
 
+export function normalizeSharedConfig(source: unknown): { ok: true; config: SharedConfigFields } | { ok: false; error: string } {
+  const record = source !== null && typeof source === 'object' ? source as Record<string, unknown> : {};
+  const rawModel = typeof record.model === 'string' ? record.model.trim() : '';
+  if (rawModel && !MODEL_PATTERN.test(rawModel)) return { ok: false, error: t('模型标识无效') };
+  const rawThinking = typeof record.thinking === 'string' ? record.thinking.trim() : '';
+  if (rawThinking && !THINKING_LEVELS.includes(rawThinking as ThinkingLevel)) {
+    return { ok: false, error: t('推理度无效') };
+  }
+  return {
+    ok: true,
+    config: {
+      model: rawModel,
+      thinking: rawThinking as ThinkingLevel | '',
+      autoStart: parseAutoStart(record.autoStart),
+    },
+  };
+}
+
+// 只写可共享字段，环境变量永远不会进入项目仓库。
+export function writeSharedConfig(cwd: unknown, fields: SharedConfigFields): ProjectConfigResult {
+  const root = resolveProject(cwd);
+  if (!root) return { ok: false, error: t('项目目录不存在') };
   const config: ProjectWorkConfig = {
     version: 1,
     project: root,
     updatedAt: new Date().toISOString(),
-    model: rawModel,
-    thinking: rawThinking as ThinkingLevel | '',
-    autoStart: parseAutoStart(source.autoStart),
+    ...fields,
   };
   const file = projectConfigPath(root);
   try {
     mkdirSync(path.dirname(file), { recursive: true });
-    // 只写可共享字段，环境变量永远不落到项目仓库。
     writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   } catch (error) {
     return { ok: false, path: file, error: t('项目配置写入失败：{error}', { error: error instanceof Error ? error.message : String(error) }) };
   }
+  return { ok: true, path: file, config };
+}
 
+function replaceProjectEnv(root: string, env: Record<string, string>, updatedAt: string): { ok: boolean; envPath?: string; error?: string } {
   let envPath = '';
   try {
     envPath = envStorePath();
     const store = readEnvStore();
     const key = storeKey(root);
-    if (Object.keys(envResult.env).length) {
-      store.projects[key] = { updatedAt: config.updatedAt, env: envResult.env };
+    if (Object.keys(env).length) {
+      store.projects[key] = { updatedAt, env };
     } else {
       delete store.projects[key];
     }
@@ -246,8 +263,69 @@ export function saveProjectConfig(input: unknown): ProjectConfigResult {
       store.projects = Object.fromEntries(entries.slice(0, MAX_ENV_PROJECTS));
     }
     writeEnvStore(store);
+    return { ok: true, envPath };
   } catch (error) {
-    return { ok: false, path: file, envPath, error: t('环境变量写入失败：{error}', { error: error instanceof Error ? error.message : String(error) }) };
+    return { ok: false, envPath, error: t('环境变量写入失败：{error}', { error: error instanceof Error ? error.message : String(error) }) };
   }
-  return { ok: true, path: file, envPath, config, env: envResult.env };
+}
+
+export function mergeProjectEnv(cwd: unknown, incoming: unknown): {
+  ok: boolean; env?: Record<string, string>; added?: number; envPath?: string; error?: string;
+} {
+  const root = resolveProject(cwd);
+  if (!root) return { ok: false, error: t('项目目录不存在') };
+  const cleaned = cleanEnv(incoming);
+  if (!cleaned.ok) return { ok: false, error: cleaned.error };
+  const current = projectEnv(root);
+  const merged = { ...current, ...cleaned.env };
+  if (Object.keys(merged).length > MAX_ENV_ENTRIES) {
+    return { ok: false, error: t('环境变量最多 {count} 个', { count: MAX_ENV_ENTRIES }) };
+  }
+  const added = Object.keys(cleaned.env).filter((name) => !Object.prototype.hasOwnProperty.call(current, name)).length;
+  const written = replaceProjectEnv(root, merged, new Date().toISOString());
+  if (!written.ok) return { ok: false, envPath: written.envPath, error: written.error };
+  return { ok: true, env: merged, added, envPath: written.envPath };
+}
+
+export function clearProjectEnv(cwd: unknown): { ok: boolean; envPath?: string; error?: string } {
+  const root = resolveProject(cwd);
+  if (!root) return { ok: false, error: t('项目目录不存在') };
+  return replaceProjectEnv(root, {}, new Date().toISOString());
+}
+
+export function resetProjectConfig(cwd: unknown): ProjectConfigResult {
+  const root = resolveProject(cwd);
+  if (!root) return { ok: false, error: t('项目目录不存在') };
+  const file = projectConfigPath(root);
+  try {
+    if (existsSync(file)) unlinkSync(file);
+  } catch (error) {
+    return { ok: false, path: file, error: t('项目配置删除失败：{error}', { error: error instanceof Error ? error.message : String(error) }) };
+  }
+  const cleared = clearProjectEnv(root);
+  if (!cleared.ok) return { ok: false, path: file, envPath: cleared.envPath, error: cleared.error };
+  return {
+    ok: true,
+    path: file,
+    envPath: cleared.envPath,
+    config: { version: 1, project: root, updatedAt: '', model: '', thinking: '', autoStart: null },
+    env: {},
+  };
+}
+
+export function saveProjectConfig(input: unknown): ProjectConfigResult {
+  const source = input !== null && typeof input === 'object' ? input as Record<string, unknown> : {};
+  const root = resolveProject(source.cwd);
+  if (!root) return { ok: false, error: t('项目目录不存在') };
+  const normalized = normalizeSharedConfig(source);
+  if (!normalized.ok) return { ok: false, error: normalized.error };
+  const envResult = cleanEnv(source.env);
+  if (!envResult.ok) return { ok: false, error: envResult.error };
+
+  const written = writeSharedConfig(root, normalized.config);
+  if (!written.ok) return written;
+  const config = written.config as ProjectWorkConfig;
+  const envWritten = replaceProjectEnv(root, envResult.env, config.updatedAt);
+  if (!envWritten.ok) return { ok: false, path: written.path, envPath: envWritten.envPath, error: envWritten.error };
+  return { ok: true, path: written.path, envPath: envWritten.envPath, config, env: envResult.env };
 }

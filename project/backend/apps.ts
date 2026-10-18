@@ -955,22 +955,55 @@ function scanPath(search: { root: string; pattern: RegExp; sub: string[] }): str
   return undefined;
 }
 
-function registryAppPath(exe: string): string | undefined {
-  if (process.platform !== 'win32' || !exe) return undefined;
-  for (const hive of ['HKLM', 'HKCU']) {
-    try {
-      const key = `${hive}\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${exe}`;
-      const result = spawnSync('reg', ['query', key, '/ve'], { encoding: 'utf8', timeout: 4000, windowsHide: true });
-      if (result.status !== 0 || !result.stdout) continue;
-      const match = /REG_SZ\s+(.+?)\s*$/m.exec(result.stdout);
-      if (!match) continue;
-      const candidate = match[1].replace(/"$/, '').replace(/^"/, '').trim();
-      if (existsSync(candidate)) return candidate;
-    } catch {
-      // 注册表不可读时继续
+let appPathCache: { at: number; map: Map<string, string> } | null = null;
+let appPathLoading: Promise<Map<string, string>> | null = null;
+
+/** 一次异步 reg query 读取全部 App Paths，替代每个应用一次的同步查询。 */
+function readAppPathRegistry(): Promise<Map<string, string>> {
+  if (appPathCache && Date.now() - appPathCache.at < 300_000) return Promise.resolve(appPathCache.map);
+  if (appPathLoading) return appPathLoading;
+  appPathLoading = (async () => {
+    const map = new Map<string, string>();
+    if (process.platform === 'win32') {
+      for (const hive of ['HKLM', 'HKCU']) {
+        const key = `${hive}\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths`;
+        const result = await runReg(['query', key, '/s']);
+        if (!result.stdout) continue;
+        let current = '';
+        for (const line of result.stdout.split(/\r?\n/)) {
+          const keyMatch = /App Paths\\([^\\]+?)\s*$/i.exec(line);
+          if (keyMatch) {
+            current = keyMatch[1].trim().toLowerCase();
+            continue;
+          }
+          const valueMatch = /REG_SZ\s+(.+?)\s*$/i.exec(line);
+          if (current && valueMatch) {
+            const candidate = valueMatch[1].replace(/^"|"$/g, '').trim();
+            if (!map.has(current) && existsSync(candidate)) map.set(current, candidate);
+            current = '';
+          }
+        }
+      }
     }
-  }
-  return undefined;
+    appPathCache = { at: Date.now(), map };
+    return map;
+  })().finally(() => {
+    appPathLoading = null;
+  });
+  return appPathLoading;
+}
+
+function runReg(args: string[]): Promise<{ stdout: string }> {
+  return new Promise((resolve) => {
+    execFile('reg', args, { encoding: 'utf8', timeout: 6000, windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (_error, stdout) => {
+      resolve({ stdout: String(stdout ?? '') });
+    });
+  });
+}
+
+async function registryAppPath(exe: string): Promise<string | undefined> {
+  if (process.platform !== 'win32' || !exe) return undefined;
+  return (await readAppPathRegistry()).get(exe.toLowerCase());
 }
 
 let cache: { at: number; apps: LocalAppInfo[] } | null = null;
@@ -1130,9 +1163,9 @@ export function removeCustomApp(id: unknown): { ok: boolean; error?: string } {
   return { ok: true };
 }
 
-export function detectLocalApps(refresh = false): LocalAppInfo[] {
+export async function detectLocalApps(refresh = false): Promise<LocalAppInfo[]> {
   if (!refresh && cache && Date.now() - cache.at < 60_000) return cache.apps;
-  const apps = [...APPS, ...customDefinitions()].map((definition) => {
+  const apps = await Promise.all([...APPS, ...customDefinitions()].map(async (definition) => {
     let found: string | undefined;
     for (const candidate of definition.paths) {
       if (existsSync(candidate)) {
@@ -1146,7 +1179,7 @@ export function detectLocalApps(refresh = false): LocalAppInfo[] {
         if (found) break;
       }
     }
-    if (!found && definition.appPath) found = registryAppPath(definition.appPath);
+    if (!found && definition.appPath) found = await registryAppPath(definition.appPath);
     return {
       id: definition.id,
       name: definition.name,
@@ -1157,15 +1190,15 @@ export function detectLocalApps(refresh = false): LocalAppInfo[] {
       custom: definition.id.startsWith('custom-app-') || undefined,
       installId: definition.install?.winget,
     };
-  });
+  }));
   cache = { at: Date.now(), apps };
   return apps;
 }
 
-export function launchLocalApp(id: string, target?: string): { ok: boolean; error?: string } {
+export async function launchLocalApp(id: string, target?: string): Promise<{ ok: boolean; error?: string }> {
   const definition = [...APPS, ...customDefinitions()].find((item) => item.id === id);
   if (!definition) return { ok: false, error: t('未知应用') };
-  const installed = detectLocalApps().find((item) => item.id === id);
+  const installed = (await detectLocalApps()).find((item) => item.id === id);
   if (!installed?.installed || !installed.path) {
     return { ok: false, error: t('未检测到 {name}，请先安装', { name: definition.name }) };
   }
@@ -1189,7 +1222,7 @@ export function launchLocalApp(id: string, target?: string): { ok: boolean; erro
   return { ok: true };
 }
 
-export function appCatalog(refresh = false): LocalAppInfo[] {
+export async function appCatalog(refresh = false): Promise<LocalAppInfo[]> {
   return detectLocalApps(refresh);
 }
 

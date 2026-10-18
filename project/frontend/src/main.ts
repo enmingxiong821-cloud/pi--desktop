@@ -239,6 +239,25 @@ interface ProjectConfigResult {
   error?: string;
 }
 
+interface ConfigTemplate {
+  id: string;
+  name: string;
+  model: string;
+  thinking: ThinkingLevel | '';
+  autoStart: boolean | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface TemplateListResult {
+  ok: boolean;
+  templates?: ConfigTemplate[];
+  template?: ConfigTemplate;
+  replaced?: boolean;
+  path?: string;
+  error?: string;
+}
+
 interface AppDefaults {
   version: 1;
   permissionPreset: 'readonly' | 'standard' | 'auto-edit' | 'full-auto' | 'full-access';
@@ -726,6 +745,14 @@ interface PiDesktopApi {
     autoStart?: boolean | null | 'follow' | 'auto' | 'manual';
     env?: Record<string, string>;
   }): Promise<ProjectConfigResult>;
+  resetProjectConfig(cwd: string): Promise<ProjectConfigResult>;
+  exportProjectConfig(cwd: string): Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }>;
+  importProjectConfig(cwd: string): Promise<ProjectConfigResult & { canceled?: boolean }>;
+  importDotEnv(cwd: string): Promise<{ ok: boolean; env?: Record<string, string>; added?: number; canceled?: boolean; error?: string }>;
+  listConfigTemplates(): Promise<TemplateListResult>;
+  saveConfigTemplate(input: { name: string; model?: string; thinking?: string; autoStart?: boolean | null }): Promise<TemplateListResult>;
+  applyConfigTemplate(input: { cwd: string; id: string }): Promise<ProjectConfigResult>;
+  deleteConfigTemplate(id: string): Promise<TemplateListResult>;
   getAppDefaults(): Promise<AppDefaults>;
   saveAppDefaults(input: Partial<AppDefaults>): Promise<{ ok: boolean; defaults?: AppDefaults; error?: string }>;
   listArchives(cwd: string): Promise<{ ok: boolean; archives?: ArchiveMeta[]; path?: string; error?: string }>;
@@ -851,6 +878,12 @@ const api = window.piDesktop;
 let panels: PanelsController | null = null;
 let catalogVendors: VendorInfo[] = [];
 const expandedVendors = new Set<string>();
+const profileBoot = new URLSearchParams(window.location.search).has('profile');
+const rendererStartedAt = performance.now();
+function bootLog(label: string): void {
+  if (profileBoot) console.log(`[boot:renderer] ${label} ${Math.round(performance.now() - rendererStartedAt)}ms`);
+}
+bootLog('module');
 initLocale();
 
 type ThemeMode = 'dark' | 'light' | 'system';
@@ -997,6 +1030,7 @@ terminal.loadAddon(new WebLinksAddon((_event, uri) => {
 }));
 terminal.unicode.activeVersion = '11';
 terminal.open(terminalElement);
+bootLog('terminal');
 
 // WebGL 渲染器显著降低长输出滚动时的 CPU 占用。驱动重置会丢失上下文，
 // 有限次重建；仍失败则退回 DOM 并降低 scrollback，避免持续 occupying 显存。
@@ -1018,7 +1052,8 @@ function loadWebglRenderer(): void {
     terminal.options.scrollback = 2000;
   }
 }
-loadWebglRenderer();
+// WebGL 初始化会编译着色器，放到首屏之后再执行，避免拖慢启动。
+window.setTimeout(loadWebglRenderer, 300);
 
 const imeTextarea = terminalElement.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
 const terminalScreen = terminalElement.querySelector<HTMLElement>('.xterm-screen');
@@ -1166,6 +1201,14 @@ const projectEnvList = $('project-env-list');
 const projectEnvAddButton = $<HTMLButtonElement>('project-env-add');
 const projectConfigSaveButton = $<HTMLButtonElement>('project-config-save');
 const projectConfigStatus = $('project-config-status');
+const projectTemplateSelect = $<HTMLSelectElement>('project-template-select');
+const projectTemplateApplyButton = $<HTMLButtonElement>('project-template-apply');
+const projectTemplateNameInput = $<HTMLInputElement>('project-template-name');
+const projectConfigSaveTemplateButton = $<HTMLButtonElement>('project-config-save-template');
+const projectEnvImportButton = $<HTMLButtonElement>('project-env-import');
+const projectConfigExportButton = $<HTMLButtonElement>('project-config-export');
+const projectConfigImportButton = $<HTMLButtonElement>('project-config-import');
+const projectConfigResetButton = $<HTMLButtonElement>('project-config-reset');
 const sessionSearchInput = $<HTMLInputElement>('session-search');
 let sessionCache: SessionEntry[] = [];
 const collapsedSessionGroups = new Set<string>();
@@ -1239,6 +1282,10 @@ const composerInput = $<HTMLTextAreaElement>('composer-input');
 const attachmentBar = $('attachment-bar');
 const sendMessageButton = $<HTMLButtonElement>('send-message');
 const stopRunButton = $<HTMLButtonElement>('stop-run');
+const ctxProjectButton = $<HTMLButtonElement>('ctx-project');
+const ctxModelButton = $<HTMLButtonElement>('ctx-model');
+const ctxToolsButton = $<HTMLButtonElement>('ctx-tools');
+const ctxQuickButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.ctx-action'));
 const commandPalette = $('command-palette');
 const commandSearch = $<HTMLInputElement>('command-search');
 const commandListElement = $('command-list');
@@ -1279,6 +1326,7 @@ const projectDefaultsAutoApprove = $<HTMLInputElement>('project-defaults-auto-ap
 const projectDefaultsWorkspaceOnly = $<HTMLInputElement>('project-defaults-workspace-only');
 const projectDefaultsMemorySkill = $<HTMLInputElement>('project-defaults-memory-skill');
 const projectDefaultsStatus = $('project-defaults-status');
+const projectTemplateList = $('project-template-list');
 
 let appVersion = '';
 let appElectron = '';
@@ -1678,6 +1726,7 @@ function trackActiveModel(data: string): void {
         lastDiagnosisKey = '';
         alertBar.hidden = true;
         activeModelElement.textContent = t('模型 {model}', { model: label });
+        refreshComposerContext();
       }
     }
     applyDiagnosis(clean);
@@ -1878,6 +1927,17 @@ function addProjectEnvRow(name = '', value = ''): void {
   valueInput.placeholder = t('值（仅本机保存）');
   valueInput.setAttribute('aria-label', t('环境变量值'));
   valueInput.value = value;
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'icon-button project-env-toggle';
+  toggle.textContent = t('显示');
+  toggle.title = t('显示值');
+  toggle.addEventListener('click', () => {
+    const visible = valueInput.type === 'text';
+    valueInput.type = visible ? 'password' : 'text';
+    toggle.textContent = visible ? t('显示') : t('隐藏');
+    toggle.title = visible ? t('显示值') : t('隐藏值');
+  });
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'icon-button project-env-remove';
@@ -1885,7 +1945,7 @@ function addProjectEnvRow(name = '', value = ''): void {
   remove.title = t('移除');
   remove.setAttribute('aria-label', t('移除'));
   remove.addEventListener('click', () => row.remove());
-  row.append(nameInput, valueInput, remove);
+  row.append(nameInput, valueInput, toggle, remove);
   projectEnvList.append(row);
 }
 
@@ -1973,6 +2033,196 @@ async function saveProjectConfigForm(): Promise<void> {
   }
 }
 
+let configTemplates: ConfigTemplate[] = [];
+
+function templateLabel(template: ConfigTemplate): string {
+  const parts = [
+    template.model || t('跟随应用默认'),
+    template.thinking || t('跟随应用默认'),
+    template.autoStart === null ? t('跟随全局自动启动') : template.autoStart ? t('打开项目时自动启动') : t('仅手动启动'),
+  ];
+  return `${template.name} · ${parts.join(' / ')}`;
+}
+
+function renderTemplateManager(): void {
+  projectTemplateList.replaceChildren();
+  if (!configTemplates.length) {
+    const empty = document.createElement('p');
+    empty.className = 'note';
+    empty.textContent = t('还没有保存的模板。');
+    projectTemplateList.append(empty);
+    return;
+  }
+  for (const template of configTemplates) {
+    const item = document.createElement('div');
+    item.className = 'template-item';
+    const text = document.createElement('div');
+    text.className = 'template-text';
+    const title = document.createElement('strong');
+    title.textContent = template.name;
+    const meta = document.createElement('span');
+    meta.className = 'note';
+    meta.textContent = [
+      template.model || t('跟随应用默认'),
+      template.thinking || t('跟随应用默认'),
+      template.autoStart === null ? t('跟随全局自动启动') : template.autoStart ? t('打开项目时自动启动') : t('仅手动启动'),
+    ].join(' · ');
+    text.append(title, meta);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'ghost danger';
+    remove.textContent = t('删除');
+    remove.addEventListener('click', () => void deleteConfigTemplate(template));
+    item.append(text, remove);
+    projectTemplateList.append(item);
+  }
+}
+
+function renderTemplateOptions(): void {
+  const previous = projectTemplateSelect.value;
+  projectTemplateSelect.replaceChildren();
+  if (!configTemplates.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = t('暂无模板');
+    projectTemplateSelect.append(option);
+    projectTemplateSelect.disabled = true;
+    projectTemplateApplyButton.disabled = true;
+  } else {
+    projectTemplateSelect.disabled = false;
+    projectTemplateApplyButton.disabled = false;
+    for (const template of configTemplates) {
+      const option = document.createElement('option');
+      option.value = template.id;
+      option.textContent = templateLabel(template);
+      projectTemplateSelect.append(option);
+    }
+    if (configTemplates.some((item) => item.id === previous)) projectTemplateSelect.value = previous;
+  }
+  renderTemplateManager();
+}
+
+async function refreshConfigTemplates(): Promise<void> {
+  try {
+    const result = await api.listConfigTemplates();
+    configTemplates = result.ok ? result.templates ?? [] : [];
+  } catch {
+    configTemplates = [];
+  }
+  renderTemplateOptions();
+}
+
+async function deleteConfigTemplate(template: ConfigTemplate): Promise<void> {
+  if (!window.confirm(t('删除模板“{name}”？', { name: template.name }))) return;
+  const result = await api.deleteConfigTemplate(template.id);
+  if (!result.ok) {
+    toast('删除模板失败：{error}', { error: t(result.error ?? '未知错误') });
+    return;
+  }
+  configTemplates = result.templates ?? [];
+  renderTemplateOptions();
+  toast('模板已删除');
+}
+
+async function applyConfigTemplateToProject(): Promise<void> {
+  if (!currentCwd) {
+    toast('先选择项目目录');
+    return;
+  }
+  const id = projectTemplateSelect.value;
+  if (!id) return;
+  const result = await api.applyConfigTemplate({ cwd: currentCwd, id });
+  if (!result.ok) {
+    toast('应用模板失败：{error}', { error: t(result.error ?? '未知错误') });
+    return;
+  }
+  await loadProjectConfig(currentCwd);
+  toast('已应用模板');
+}
+
+async function saveCurrentAsTemplate(): Promise<void> {
+  const name = projectTemplateNameInput.value.trim();
+  if (!name) {
+    toast('先填写模板名称');
+    projectTemplateNameInput.focus();
+    return;
+  }
+  const autoStartValue = projectConfigAutoStartSelect.value;
+  const result = await api.saveConfigTemplate({
+    name,
+    model: projectConfigModelInput.value.trim(),
+    thinking: projectConfigThinkingSelect.value,
+    autoStart: autoStartValue === 'auto' ? true : autoStartValue === 'manual' ? false : null,
+  });
+  if (!result.ok) {
+    toast('保存模板失败：{error}', { error: t(result.error ?? '未知错误') });
+    return;
+  }
+  projectTemplateNameInput.value = '';
+  await refreshConfigTemplates();
+  if (result.template) projectTemplateSelect.value = result.template.id;
+  toast(result.replaced ? '模板已更新' : '模板已保存');
+}
+
+async function exportProjectConfigFile(): Promise<void> {
+  if (!currentCwd) {
+    toast('先选择项目目录');
+    return;
+  }
+  const result = await api.exportProjectConfig(currentCwd);
+  if (result.canceled) return;
+  if (!result.ok) {
+    toast('导出配置失败：{error}', { error: t(result.error ?? '未知错误') });
+    return;
+  }
+  toast('配置已导出');
+}
+
+async function importProjectConfigFile(): Promise<void> {
+  if (!currentCwd) {
+    toast('先选择项目目录');
+    return;
+  }
+  const result = await api.importProjectConfig(currentCwd);
+  if (result.canceled) return;
+  if (!result.ok) {
+    toast('导入配置失败：{error}', { error: t(result.error ?? '未知错误') });
+    return;
+  }
+  await loadProjectConfig(currentCwd);
+  toast('配置已导入，环境变量未改动');
+}
+
+async function importProjectDotEnv(): Promise<void> {
+  if (!currentCwd) {
+    toast('先选择项目目录');
+    return;
+  }
+  const result = await api.importDotEnv(currentCwd);
+  if (result.canceled) return;
+  if (!result.ok) {
+    toast('导入 .env 失败：{error}', { error: t(result.error ?? '未知错误') });
+    return;
+  }
+  await loadProjectConfig(currentCwd);
+  toast('已导入 {count} 个环境变量', { count: result.added ?? 0 });
+}
+
+async function resetProjectConfigForm(): Promise<void> {
+  if (!currentCwd) {
+    toast('先选择项目目录');
+    return;
+  }
+  if (!window.confirm(t('重置项目配置会删除项目内的 .pi/workbench.json，并清除本机保存的环境变量。继续？'))) return;
+  const result = await api.resetProjectConfig(currentCwd);
+  if (!result.ok) {
+    toast('重置失败：{error}', { error: t(result.error ?? '未知错误') });
+    return;
+  }
+  await loadProjectConfig(currentCwd);
+  toast('项目配置已重置');
+}
+
 function applyAppDefaults(defaults: AppDefaults): void {
   projectDefaultsModelInput.value = defaults.model;
   projectDefaultsThinkingSelect.value = defaults.thinking;
@@ -2032,6 +2282,7 @@ function setProject(cwd: string): void {
   rememberLastProject(cwd);
   projectPathElement.textContent = cwd;
   cwdElement.textContent = cwd;
+  refreshComposerContext();
   startButton.disabled = running;
   openFolderButton.disabled = false;
   openVSCodeButton.disabled = false;
@@ -5006,6 +5257,44 @@ stopRunButton.addEventListener('click', () => {
   toast('已发送中断');
   audit('中断当前生成');
 });
+
+const quickPromptSources: Record<string, string> = {
+  continue: '继续上次未完成的任务：先检查项目当前状态和最近改动，说明接下来要做什么，然后继续执行。',
+  explain: '简要说明这个项目的结构、技术栈和关键入口，按文件路径列出。',
+  fix: '检查终端里最近的报错，定位根因并给出最小修复方案；先说明方案，等我确认后再改代码。',
+  summary: '总结当前工作区未提交的改动：按文件说明改了什么、为什么，并指出风险。',
+};
+
+function refreshComposerContext(): void {
+  const leaf = currentCwd.split(/[\\/]/).filter(Boolean).pop();
+  ctxProjectButton.textContent = leaf || t('未绑定项目');
+  ctxProjectButton.title = currentCwd || t('切换到项目面板');
+  ctxProjectButton.dataset.active = String(Boolean(currentCwd));
+  ctxModelButton.textContent = activeModelElement.textContent || t('模型 —');
+  ctxModelButton.dataset.active = String(Boolean(shownModel));
+  ctxToolsButton.dataset.active = String(Boolean(currentCwd));
+}
+
+ctxProjectButton.addEventListener('click', () => activateTab('tab-project'));
+ctxModelButton.addEventListener('click', () => activateTab('tab-model'));
+ctxToolsButton.addEventListener('click', () => {
+  activateTab('tab-tools');
+  document.querySelector<HTMLButtonElement>('.dock-tab[data-dock="permissions"]')?.click();
+});
+for (const button of ctxQuickButtons) {
+  button.addEventListener('click', () => {
+    const source = quickPromptSources[button.dataset.quick ?? ''];
+    if (!source) return;
+    const prompt = t(source);
+    const existing = composerInput.value.trim();
+    composerInput.value = existing ? `${existing}\n${prompt}` : prompt;
+    composerInput.selectionStart = composerInput.selectionEnd = composerInput.value.length;
+    composerInput.focus();
+    resizeComposer();
+    updateComposerState();
+    toast('已填入输入框，按 Enter 发送');
+  });
+}
 $('composer-attach').addEventListener('click', () => void pickAttachments());
 $('attach-media').addEventListener('click', () => void pickAttachments());
 $('composer-commands').addEventListener('click', openCommandPalette);
@@ -5819,6 +6108,15 @@ startButton.addEventListener('click', () => {
 
 projectEnvAddButton.addEventListener('click', () => addProjectEnvRow());
 projectConfigSaveButton.addEventListener('click', () => void saveProjectConfigForm());
+projectTemplateApplyButton.addEventListener('click', () => void applyConfigTemplateToProject());
+projectConfigSaveTemplateButton.addEventListener('click', () => void saveCurrentAsTemplate());
+projectEnvImportButton.addEventListener('click', () => void importProjectDotEnv());
+projectConfigExportButton.addEventListener('click', () => void exportProjectConfigFile());
+projectConfigImportButton.addEventListener('click', () => void importProjectConfigFile());
+projectConfigResetButton.addEventListener('click', () => void resetProjectConfigForm());
+projectTemplateSelect.disabled = true;
+projectTemplateApplyButton.disabled = true;
+void refreshConfigTemplates();
 projectDefaultsSaveButton.addEventListener('click', () => void saveProjectDefaults());
 projectDefaultsPresetSelect.addEventListener('change', () => {
   projectDefaultsWorkspaceOnly.checked = projectDefaultsPresetSelect.value !== 'full-access';
@@ -6018,6 +6316,7 @@ function relocalize(): void {
   else if (versionMissing) versionElement.textContent = t('Pi 未找到');
   if (shownModel) activeModelElement.textContent = t('模型 {model}', { model: shownModel });
   else if (!running) activeModelElement.textContent = t('模型 —');
+  refreshComposerContext();
   setState(stateStatus, stateSource, stateVars);
   if (hintSource) setTerminalHint(hintSource, hintVars);
   updateModeNote();
@@ -6153,6 +6452,7 @@ panels = initPanels({
   routerEnabled: () => routerEnabled,
   routeForTask: (text) => routeForTask(text),
 });
+bootLog('panels');
 
 const LAYOUT_KEY = 'pi-layout-widths';
 const DEFAULT_LAYOUT = { left: 300, right: 340 };
@@ -6288,11 +6588,15 @@ async function hydrateLiveSessions(): Promise<void> {
 }
 
 void (async () => {
+  bootLog('hydrate:start');
   await hydrateLiveSessions();
+  bootLog('hydrate:live');
   await refreshProjects();
+  bootLog('hydrate:projects');
   const smokeCwd = new URLSearchParams(window.location.search).get('smokeCwd');
   if (smokeCwd) setProject(smokeCwd);
   const result = await api.locate();
+  bootLog('hydrate:locate');
   if (result.ok && result.install) {
     detectedVersion = result.install.version;
     versionMissing = false;
@@ -6309,6 +6613,7 @@ void (async () => {
   }
   const environment = await refreshEnvironment();
   if (environment) syncVersionFromEnvironment(environment);
+  bootLog('hydrate:environment');
   void refreshModels();
   void refreshProviders();
   void loadCatalog();
@@ -6343,5 +6648,6 @@ void (async () => {
   window.requestAnimationFrame(() => {
     doFit();
     composerInput.focus();
+    window.requestAnimationFrame(() => bootLog('first-paint'));
   });
 })();

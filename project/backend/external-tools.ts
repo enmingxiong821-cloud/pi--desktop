@@ -6,6 +6,7 @@ import {
   copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync,
   renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -237,38 +238,47 @@ function knownToolDirs(): string[] {
   ]);
 }
 
-function findInWingetPackages(exeName: string): string | undefined {
+let wingetIndex: Promise<Map<string, string>> | null = null;
+
+/** 一次性异步建立 winget 包目录索引，避免每个工具重复同步遍历数万条目。 */
+function wingetPackageIndex(): Promise<Map<string, string>> {
+  if (wingetIndex) return wingetIndex;
+  wingetIndex = (async () => {
+    const map = new Map<string, string>();
+    const root = process.env.LOCALAPPDATA
+      ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Packages')
+      : undefined;
+    if (!root) return map;
+    let visited = 0;
+    const walk = async (dir: string, depth: number): Promise<void> => {
+      if (depth > 4 || visited > 4000) return;
+      let entries;
+      try {
+        entries = await readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        if (visited++ > 4000) return;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full, depth + 1);
+        } else if (entry.isFile()) {
+          const key = entry.name.toLowerCase();
+          if (!map.has(key)) map.set(key, full);
+        }
+      }
+    };
+    await walk(root, 0);
+    return map;
+  })();
+  return wingetIndex;
+}
+
+async function findInWingetPackages(exeName: string): Promise<string | undefined> {
   if (!IS_WIN) return undefined;
-  const root = process.env.LOCALAPPDATA
-    ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Packages')
-    : undefined;
-  if (!root) return undefined;
-  let visited = 0;
-  const walk = (dir: string, depth: number): string | undefined => {
-    if (depth > 4 || visited > 4000) return undefined;
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return undefined;
-    }
-    for (const entry of entries) {
-      visited += 1;
-      if (entry.isFile() && entry.name.toLowerCase() === exeName.toLowerCase()) {
-        return path.join(dir, entry.name);
-      }
-      if (entry.isDirectory()) {
-        const found = walk(path.join(dir, entry.name), depth + 1);
-        if (found) return found;
-      }
-    }
-    return undefined;
-  };
-  try {
-    return walk(root, 0);
-  } catch {
-    return undefined;
-  }
+  const map = await wingetPackageIndex();
+  return map.get(exeName.toLowerCase());
 }
 
 async function uvBinDir(): Promise<string | undefined> {
@@ -303,7 +313,7 @@ async function resolveExecutable(names: string[]): Promise<string | undefined> {
   }
   if (IS_WIN) {
     for (const name of names) {
-      const found = findInWingetPackages(name);
+      const found = await findInWingetPackages(name);
       if (found) return found;
     }
   }

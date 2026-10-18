@@ -1,6 +1,6 @@
 {
   "name": "pi-desktop-poc",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "description": "Pi 桌面工作台：真实 Pi TUI + 图形辅助，多项目会话、模型路由、联网抓取、逆向分析与安全审计",
@@ -23,8 +23,9 @@
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "i18n:check": "node .smoke/i18n-missing.mjs",
+    "test:config-share": "node .smoke/config-share-test.mjs",
     "smoke": "node scripts/pty-smoke.mjs",
-    "verify": "npm run typecheck && npm run i18n:check && npm run build",
+    "verify": "npm run typecheck && npm run i18n:check && npm run test:config-share && npm run build",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",

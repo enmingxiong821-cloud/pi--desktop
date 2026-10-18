@@ -2,6 +2,8 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, shell } f
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import inspector from 'node:inspector';
+import os from 'node:os';
 import path from 'node:path';
 import { AutomationStore, type AutomationJob, type RunResult } from './automation.js';
 import {
@@ -72,7 +74,55 @@ import {
 import type { AuthorizationInput } from './security-guard.js';
 import { applyGlobalTokenSavings, usageReport } from './usage.js';
 import { configureAppDefaults, loadAppDefaults, saveAppDefaults } from './app-defaults.js';
-import { configureProjectConfig, readProjectConfig, saveProjectConfig } from './project-config.js';
+import { configureProjectConfig, readProjectConfig, resetProjectConfig, saveProjectConfig } from './project-config.js';
+import {
+  applyConfigTemplate,
+  configureConfigShare,
+  deleteConfigTemplate,
+  exportProjectConfig,
+  importDotEnvFile,
+  importProjectConfig,
+  listConfigTemplates,
+  saveConfigTemplate,
+} from './config-share.js';
+
+const bootStartedAt = Date.now();
+
+function bootLog(label: string): void {
+  if (process.env.PI_DESKTOP_PROFILE === '1') {
+    console.log(`[boot:main] ${label} ${Date.now() - bootStartedAt}ms`);
+  }
+}
+
+if (process.env.PI_DESKTOP_PROFILE === '1') {
+  let lastTick = Date.now();
+  const heartbeat = setInterval(() => {
+    const now = Date.now();
+    const drift = now - lastTick - 250;
+    if (drift > 250) bootLog(`loop-stall ${drift}ms`);
+    lastTick = now;
+  }, 250);
+  heartbeat.unref();
+
+  const profiler = new inspector.Session();
+  profiler.connect();
+  profiler.post('Profiler.enable');
+  profiler.post('Profiler.start');
+  (globalThis as Record<string, unknown>).__piProfiler = profiler;
+
+  const rawHandle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = ((channel: string, listener: (event: unknown, ...args: unknown[]) => unknown) => {
+    rawHandle(channel, async (event, ...args) => {
+      const started = Date.now();
+      try {
+        return await listener(event, ...args);
+      } finally {
+        const elapsed = Date.now() - started;
+        if (elapsed > 100) bootLog(`ipc ${channel} ${elapsed}ms`);
+      }
+    });
+  }) as typeof ipcMain.handle;
+}
 
 interface ProjectRecord {
   path: string;
@@ -717,14 +767,41 @@ function createWindow(): void {
     },
   });
 
-  win.loadFile(path.join(__dirname, '../renderer/index.html'), process.env.PI_DESKTOP_SMOKE === '1'
-    ? {
-      query: {
-        smokeCwd: process.env.PI_DESKTOP_SMOKE_CWD || process.cwd(),
-        smokeIsolated: process.env.PI_DESKTOP_SMOKE_REAL === '1' ? '0' : '1',
-      },
-    }
-    : undefined);
+  const loadQuery: Record<string, string> = {};
+  if (process.env.PI_DESKTOP_SMOKE === '1') {
+    loadQuery.smokeCwd = process.env.PI_DESKTOP_SMOKE_CWD || process.cwd();
+    loadQuery.smokeIsolated = process.env.PI_DESKTOP_SMOKE_REAL === '1' ? '0' : '1';
+  }
+  if (process.env.PI_DESKTOP_PROFILE === '1') loadQuery.profile = '1';
+  win.loadFile(
+    path.join(__dirname, '../renderer/index.html'),
+    Object.keys(loadQuery).length ? { query: loadQuery } : undefined,
+  );
+  win.webContents.once('dom-ready', () => bootLog('dom-ready'));
+  win.webContents.once('did-finish-load', () => bootLog('did-finish-load'));
+  if (process.env.PI_DESKTOP_PROFILE === '1') {
+    win.webContents.on('did-start-loading', () => bootLog('did-start-loading'));
+    win.webContents.on('did-stop-loading', () => bootLog('did-stop-loading'));
+    win.webContents.on('render-process-gone', (_event, details) => bootLog(`render-gone ${details.reason}`));
+    win.on('unresponsive', () => bootLog('unresponsive'));
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        const profiler = (globalThis as Record<string, unknown>).__piProfiler as inspector.Session | undefined;
+        if (!profiler) return;
+        profiler.post('Profiler.stop', (stopError, result) => {
+          if (stopError) return;
+          try {
+            const file = path.join(os.tmpdir(), 'pi-desktop-main.cpuprofile');
+            writeFileSync(file, JSON.stringify((result as { profile: unknown }).profile));
+            bootLog(`cpuprofile ${file}`);
+          } catch {
+            // 采样文件写失败不影响启动
+          }
+          profiler.disconnect();
+        });
+      }, 2000);
+    });
+  }
   win.on('closed', () => {
     win = null;
     stopSession();
@@ -884,9 +961,9 @@ ipcMain.handle('pi:add-mcp', (_event, input: unknown) => addMcpServer(input as P
 
 ipcMain.handle('project:git-status', (_event, cwd: unknown) => gitStatus(cwd));
 
-ipcMain.handle('catalog:list', () => {
+ipcMain.handle('catalog:list', async () => {
   try {
-    return { ok: true, catalog: listCatalog(), agents: detectAgents() };
+    return { ok: true, catalog: listCatalog(), agents: await detectAgents() };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
   }
@@ -935,9 +1012,9 @@ ipcMain.handle('catalog:import-skill-url', async (_event, input: unknown) => {
   });
 });
 
-ipcMain.handle('agents:list', (_event, refresh: unknown) => {
+ipcMain.handle('agents:list', async (_event, refresh: unknown) => {
   try {
-    return { ok: true, agents: detectAgents(Boolean(refresh)) };
+    return { ok: true, agents: await detectAgents(Boolean(refresh)) };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
   }
@@ -1052,9 +1129,9 @@ ipcMain.handle('automation:delete-channel', (_event, id: unknown) => ({
 
 ipcMain.handle('automation:test-channel', (_event, id: unknown) => automationStore().testChannel(String(id ?? '')));
 
-ipcMain.handle('tools:list-apps', (_event, refresh: unknown) => {
+ipcMain.handle('tools:list-apps', async (_event, refresh: unknown) => {
   try {
-    return { ok: true, apps: appCatalog(refresh === true) };
+    return { ok: true, apps: await appCatalog(refresh === true) };
   } catch (error) {
     return { ok: false, apps: [], error: errorMessage(error) };
   }
@@ -1079,9 +1156,9 @@ ipcMain.handle('tools:save-link', (_event, input: unknown) => saveCustomLink(inp
 
 ipcMain.handle('tools:remove-link', (_event, id: unknown) => removeCustomLink(id));
 
-ipcMain.handle('tools:open-app', (_event, id: unknown, target: unknown) => {
+ipcMain.handle('tools:open-app', async (_event, id: unknown, target: unknown) => {
   try {
-    return openLocalApp(id, target);
+    return await openLocalApp(id, target);
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
   }
@@ -1265,7 +1342,7 @@ ipcMain.handle('tools:pick-analyze-path', async () => {
   return result.canceled || !picked ? { ok: false } : { ok: true, path: picked };
 });
 
-function openLocalApp(id: unknown, target: unknown): { ok: boolean; error?: string } {
+async function openLocalApp(id: unknown, target: unknown): Promise<{ ok: boolean; error?: string }> {
   if (typeof id !== 'string') return { ok: false, error: t('未知应用') };
   const resolved = typeof target === 'string' && target.trim() ? safeOpenTarget(target) : undefined;
   // 开始菜单扫描出来的程序走独立启动路径，只能使用扫描缓存里的 ID。
@@ -1286,7 +1363,7 @@ function openLocalApp(id: unknown, target: unknown): { ok: boolean; error?: stri
     }
     return { ok: false, error: t('该平台暂未内置此应用，请用「打开路径」') };
   }
-  const catalogApp = appCatalog().find((item) => item.id === id);
+  const catalogApp = (await appCatalog()).find((item) => item.id === id);
   if (catalogApp) return launchLocalApp(id, resolved);
 
   const launches: Record<string, { command: string; args: string[] }> = {
@@ -1389,6 +1466,53 @@ ipcMain.handle('permissions:get', (_event, cwd: unknown) => readProjectPermissio
 ipcMain.handle('permissions:save', (_event, input: unknown) => saveProjectPermissions(input));
 ipcMain.handle('project:config', (_event, cwd: unknown) => readProjectConfig(cwd));
 ipcMain.handle('project:config-save', (_event, input: unknown) => saveProjectConfig(input));
+ipcMain.handle('project:config-reset', (_event, cwd: unknown) => resetProjectConfig(cwd));
+
+ipcMain.handle('project:config-export', async (event, cwd: unknown) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const options = {
+    title: t('导出项目配置'),
+    defaultPath: path.join(app.getPath('documents'), 'pi-workbench-config.json'),
+    filters: [{ name: 'JSON', extensions: ['json'] }, { name: t('所有文件'), extensions: ['*'] }],
+  };
+  const picked = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
+  if (picked.canceled || !picked.filePath) return { ok: false, canceled: true };
+  return exportProjectConfig(cwd, picked.filePath);
+});
+
+ipcMain.handle('project:config-import', async (event, cwd: unknown) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const options = {
+    title: t('导入项目配置'),
+    properties: ['openFile' as const],
+    filters: [{ name: 'JSON', extensions: ['json'] }, { name: t('所有文件'), extensions: ['*'] }],
+  };
+  const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+  const picked = result.filePaths[0];
+  if (result.canceled || !picked) return { ok: false, canceled: true };
+  return importProjectConfig(cwd, picked);
+});
+
+ipcMain.handle('project:env-import', async (event, cwd: unknown) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const options = {
+    title: t('导入 .env 环境变量'),
+    properties: ['openFile' as const],
+    filters: [{ name: '.env', extensions: ['env'] }, { name: t('所有文件'), extensions: ['*'] }],
+  };
+  const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+  const picked = result.filePaths[0];
+  if (result.canceled || !picked) return { ok: false, canceled: true };
+  return importDotEnvFile(cwd, picked);
+});
+
+ipcMain.handle('config:templates', () => listConfigTemplates());
+ipcMain.handle('config:template-save', (_event, input: unknown) => saveConfigTemplate(input));
+ipcMain.handle('config:template-apply', (_event, input: unknown) => {
+  const source = input !== null && typeof input === 'object' ? input as Record<string, unknown> : {};
+  return applyConfigTemplate(source.cwd, source.id);
+});
+ipcMain.handle('config:template-delete', (_event, id: unknown) => deleteConfigTemplate(id));
 ipcMain.handle('app:defaults', () => loadAppDefaults());
 ipcMain.handle('app:defaults-save', (_event, input: unknown) => {
   const result = saveAppDefaults(input);
@@ -1594,12 +1718,15 @@ if (!singleInstance) {
   });
 
   app.whenReady().then(() => {
+    bootLog('whenReady');
     setBackendLocale(app.getLocale());
     configureCustomAgents(path.join(app.getPath('userData'), 'custom-agents.json'));
     configureCustomApps(path.join(app.getPath('userData'), 'custom-apps.json'));
     configureCustomLinks(path.join(app.getPath('userData'), 'custom-links.json'));
     configureAppDefaults(app.getPath('userData'));
     configureProjectConfig(app.getPath('userData'));
+    configureConfigShare(app.getPath('userData'));
+    bootLog('configured');
     if (loadAppDefaults().memorySkill) {
       try {
         ensureMemorySkill();
@@ -1607,15 +1734,21 @@ if (!singleInstance) {
         // 记忆 Skill 装配失败不阻塞启动
       }
     }
+    bootLog('memory-skill');
     try {
       ensureBundledSkills();
     } catch {
       // 预置 Skill 装配失败不阻塞启动，用户仍可在能力页手动安装
     }
+    bootLog('bundled-skills');
     ensureDesktopShortcut();
+    bootLog('shortcut');
     installMediaProtocol();
     automationStore().start();
+    bootLog('automation');
     createWindow();
+    bootLog('createWindow');
+    setTimeout(() => bootLog('timer-300ms'), 300);
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });

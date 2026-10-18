@@ -5413,10 +5413,13 @@ export function initPanels(deps: PanelDeps): PanelsController {
     renderChannelPicker([...automationChannels.querySelectorAll<HTMLInputElement>('input:checked')].map((input) => input.value));
   }
 
-  void loadCatalog();
-  void refreshAgents(false);
-  void loadCustomLinks();
-  void refreshVisual();
+  // 首屏绘制前不与终端、环境探测争抢 CPU；市场与 Agent 探测延后到启动动画期间完成。
+  window.setTimeout(() => {
+    void loadCatalog();
+    void refreshAgents(false);
+    void loadCustomLinks();
+    void refreshVisual();
+  }, 400);
   renderRoom();
 
   return {

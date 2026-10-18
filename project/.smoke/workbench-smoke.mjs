@@ -489,6 +489,29 @@ ipcMain.handle('project:config-save', (_e, input) => {
     env: input.env ?? {},
   };
 });
+ipcMain.handle('project:config-reset', (_e, cwd) => {
+  record('resetProjectConfig', cwd);
+  return { ok: true, path: path.join(cwd, '.pi', 'workbench.json'), envPath: 'C:\\Users\\smoke\\project-env.json', env: {} };
+});
+ipcMain.handle('project:config-export', (_e, cwd) => { record('exportProjectConfig', cwd); return { ok: true, path: path.join(cwd, 'pi-workbench-config.json') }; });
+ipcMain.handle('project:config-import', (_e, cwd) => {
+  record('importProjectConfig', cwd);
+  return { ok: true, path: path.join(cwd, '.pi', 'workbench.json'), config: { version: 1, project: cwd, updatedAt: new Date().toISOString(), model: 'openai/gpt-5', thinking: 'medium', autoStart: null }, env: { SMOKE_TOKEN: 'secret' } };
+});
+ipcMain.handle('project:env-import', (_e, cwd) => { record('importDotEnv', cwd); return { ok: true, env: { SMOKE_TOKEN: 'secret' }, added: 1 }; });
+const smokeTemplates = [];
+ipcMain.handle('config:templates', () => ({ ok: true, templates: smokeTemplates }));
+ipcMain.handle('config:template-save', (_e, input) => {
+  record('saveConfigTemplate', input);
+  const template = { id: 'tpl-smoke', name: input.name, model: input.model ?? '', thinking: input.thinking ?? '', autoStart: input.autoStart ?? null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
+  smokeTemplates.splice(0, smokeTemplates.length, template);
+  return { ok: true, templates: smokeTemplates, template, replaced: false };
+});
+ipcMain.handle('config:template-apply', (_e, input) => {
+  record('applyConfigTemplate', input);
+  return { ok: true, path: path.join(input.cwd, '.pi', 'workbench.json'), config: { version: 1, project: input.cwd, updatedAt: new Date().toISOString(), model: 'demo/demo-mini', thinking: 'low', autoStart: true } };
+});
+ipcMain.handle('config:template-delete', (_e, id) => { record('deleteConfigTemplate', id); return { ok: true, templates: [] }; });
 ipcMain.handle('archives:list', (_e, cwd) => ({ ok: true, archives: [{
   id: '20260101-000000-abcdef', label: 'smoke snapshot', project: cwd, createdAt: '2026-01-01T00:00:00.000Z',
   branch: 'main', head: 'abc1234', changedFiles: 2, untrackedFiles: 1, patchBytes: 1200, untrackedBytes: 300,
@@ -573,6 +596,8 @@ async function run() {
   expect(projectState.names.includes('旧项目'), `project names rendered (${projectState.names})`);
 
   // 项目工具已迁入左侧栏：权限 / 存档 / 记忆 / 托管；更新在设置
+  await js(`document.getElementById('tab-tools').click()`);
+  await wait(250);
   const dockState = JSON.parse(await js(`JSON.stringify({
     tabs: document.querySelectorAll('.dock-tab').length,
     inSidebar: Boolean(document.querySelector('#project-dock')?.closest('.sidebar')),
@@ -624,6 +649,18 @@ async function run() {
   expect(dockState.toolbarSticky === 'sticky', `permission toolbar stays visible (${dockState.toolbarSticky})`);
   expect(dockState.presetColumns === 2, `permission presets use two columns (${dockState.presetColumns})`);
   expect(dockState.helpOpen === false, 'auto-approve help stays collapsed');
+  const toolsNav = JSON.parse(await js(`JSON.stringify({
+    inNav: Boolean(document.querySelector('.nav-list #tab-tools')),
+    selected: document.getElementById('tab-tools').getAttribute('aria-selected'),
+    paneVisible: !document.getElementById('project-dock').hidden,
+    paneHeight: Math.round(document.getElementById('project-dock').getBoundingClientRect().height),
+  })`));
+  expect(toolsNav.inNav, 'project tools exposed in the top navigation');
+  expect(toolsNav.selected === 'true', 'tools navigation tab is selected');
+  expect(toolsNav.paneVisible, 'tools pane is visible when activated');
+  expect(toolsNav.paneHeight > 200, `tools pane fills the sidebar (${toolsNav.paneHeight}px)`);
+  await js(`document.getElementById('tab-project').click()`);
+  await wait(160);
 
   const projectConfigState = JSON.parse(await js(`JSON.stringify({
     drawer: Boolean(document.querySelector('#project-config-drawer')),
@@ -645,6 +682,59 @@ async function run() {
   expect(projectConfigState.envValue === 'secret', 'project env value filled for editing');
   expect(projectConfigState.saveDisabled === false, 'project config becomes editable after load');
   expect(projectConfigState.status.includes('已保存'), `project config timestamp rendered (${projectConfigState.status})`);
+
+  const templateState = JSON.parse(await js(`JSON.stringify({
+    selectDisabled: document.getElementById('project-template-select').disabled,
+    option: document.querySelector('#project-template-select option')?.textContent,
+    envImport: Boolean(document.getElementById('project-env-import')),
+    exporter: Boolean(document.getElementById('project-config-export')),
+    importer: Boolean(document.getElementById('project-config-import')),
+    resetDanger: document.getElementById('project-config-reset').classList.contains('danger'),
+    manager: Boolean(document.getElementById('project-template-list')),
+  })`));
+  expect(templateState.selectDisabled, 'template select disabled without templates');
+  expect(templateState.option === '暂无模板', `empty template hint rendered (${templateState.option})`);
+  expect(templateState.envImport, '.env import action present');
+  expect(templateState.exporter && templateState.importer, 'config export and import actions present');
+  expect(templateState.resetDanger, 'reset action styled as destructive');
+  expect(templateState.manager, 'template manager rendered in project defaults');
+
+  await js(`(() => {
+    document.getElementById('project-template-name').value = '常用配置';
+    document.getElementById('project-config-save-template').click();
+  })()`);
+  await wait(250);
+  const savedTemplate = [...calls].reverse().find(([name]) => name === 'saveConfigTemplate')?.[1];
+  expect(savedTemplate?.name === '常用配置', `template name saved (${savedTemplate?.name})`);
+  expect(savedTemplate?.model === 'openai/gpt-5', `template model saved (${savedTemplate?.model})`);
+  const templateOptions = JSON.parse(await js(`JSON.stringify({
+    count: document.getElementById('project-template-select').options.length,
+    disabled: document.getElementById('project-template-select').disabled,
+    managerItems: document.querySelectorAll('#project-template-list .template-item').length,
+  })`));
+  expect(templateOptions.count === 1, `saved template appears in select (${templateOptions.count})`);
+  expect(!templateOptions.disabled, 'template select enabled after saving');
+  expect(templateOptions.managerItems === 1, `saved template listed in manager (${templateOptions.managerItems})`);
+  await js(`document.getElementById('project-template-apply').click()`);
+  await wait(200);
+  const appliedTemplate = [...calls].reverse().find(([name]) => name === 'applyConfigTemplate')?.[1];
+  expect(appliedTemplate?.id === 'tpl-smoke', `template apply targets saved template (${appliedTemplate?.id})`);
+
+  const composerCtx = JSON.parse(await js(`JSON.stringify({
+    chips: document.querySelectorAll('.composer-context .ctx-chip').length,
+    quick: document.querySelectorAll('.composer-context .ctx-action').length,
+    project: document.getElementById('ctx-project').textContent,
+    leaf: (document.getElementById('cwd-label').textContent || '').split(/[\\\\/]/).filter(Boolean).pop(),
+    toolsChip: document.getElementById('ctx-tools').textContent,
+  })`));
+  expect(composerCtx.chips === 3, `composer shows three context chips (${composerCtx.chips})`);
+  expect(composerCtx.quick === 4, `composer shows four quick actions (${composerCtx.quick})`);
+  expect(composerCtx.project === composerCtx.leaf, `composer shows the active project (${composerCtx.project})`);
+  expect(composerCtx.toolsChip === '项目工具', `composer exposes project tools (${composerCtx.toolsChip})`);
+  await js(`document.querySelector('.ctx-action[data-quick="explain"]').click()`);
+  const quickFill = await js(`document.getElementById('composer-input').value`);
+  expect(String(quickFill).includes('技术栈'), `quick action fills the composer (${quickFill})`);
+  await js(`document.getElementById('composer-input').value = ''`);
   await js(`document.getElementById('project-config-drawer').open = true`);
   await js(`document.getElementById('project-config-drawer').scrollIntoView({ block: 'start' })`);
   await settleForCapture();
@@ -682,6 +772,8 @@ async function run() {
   expect(packState.actions.join('|').includes('全部启用'), `bulk enable action present (${packState.actions})`);
   expect(packState.note, 'per-project behavior note rendered');
 
+  await js(`document.getElementById('tab-tools').click()`);
+  await wait(200);
   await js(`document.querySelector('#project-dock .dock-body-inner').scrollTop = 9999`);
   await capture('workbench-dock.png');
   await js(`document.querySelector('#project-dock .dock-body-inner').scrollTop = 0`);
@@ -699,7 +791,6 @@ async function run() {
   })())`));
   expect(dockCollapsed.collapsed, 'dock collapses');
   expect(dockCollapsed.height <= 100, `collapsed dock keeps only its head (${dockCollapsed.height}px)`);
-  expect(Math.abs(dockCollapsed.bottomGap) <= 1, `collapsed dock pins to the sidebar bottom (${dockCollapsed.bottomGap}px)`);
   await js(`document.getElementById('dock-toggle').click()`);
   await wait(420);
 

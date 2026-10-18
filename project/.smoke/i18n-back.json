@@ -10,7 +10,8 @@
     "能力",
     "会话",
     "搜索",
-    "安全"
+    "安全",
+    "项目工具"
   ],
   "state": "未启动",
   "model": "模型 —",
@@ -41,7 +42,7 @@
     "×"
   ],
   "moduleBindingLabel": "本项目模型",
-  "moduleBindingValue": "m-mvdq34a3-lkfg",
+  "moduleBindingValue": "m-mvdt1hwb-0f0b",
   "moduleBindingOptions": [
     "Pi 默认",
     "快速修复 · demo/mini"

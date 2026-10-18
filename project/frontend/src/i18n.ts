@@ -1512,6 +1512,59 @@ const EN: Record<string, string> = {
   '项目配置已保存': 'Project configuration saved',
   '读取默认值失败：{error}': 'Failed to read defaults: {error}',
   '项目默认值已保存': 'Project defaults saved',
+  '显示': 'Show',
+  '隐藏': 'Hide',
+  '显示值': 'Show value',
+  '隐藏值': 'Hide value',
+  '还没有保存的模板。': 'No saved templates yet.',
+  '暂无模板': 'No templates',
+  '删除模板“{name}”？': 'Delete template "{name}"?',
+  '删除模板失败：{error}': 'Failed to delete template: {error}',
+  '模板已删除': 'Template deleted',
+  '应用模板失败：{error}': 'Failed to apply template: {error}',
+  '已应用模板': 'Template applied',
+  '先填写模板名称': 'Enter a template name first',
+  '保存模板失败：{error}': 'Failed to save template: {error}',
+  '导出配置失败：{error}': 'Failed to export configuration: {error}',
+  '配置已导出': 'Configuration exported',
+  '导入配置失败：{error}': 'Failed to import configuration: {error}',
+  '配置已导入，环境变量未改动': 'Configuration imported; environment variables unchanged',
+  '导入 .env 失败：{error}': 'Failed to import .env: {error}',
+  '已导入 {count} 个环境变量': 'Imported {count} environment variables',
+  '重置项目配置会删除项目内的 .pi/workbench.json，并清除本机保存的环境变量。继续？':
+    'Resetting the project configuration deletes .pi/workbench.json and clears environment variables stored on this device. Continue?',
+  '重置失败：{error}': 'Reset failed: {error}',
+  '项目配置已重置': 'Project configuration reset',
+  '配置模板': 'Configuration templates',
+  '应用模板': 'Apply template',
+  '模板名称': 'Template name',
+  '存为模板': 'Save as template',
+  '从 .env 导入': 'Import from .env',
+  '导出配置': 'Export configuration',
+  '导入配置': 'Import configuration',
+  '重置项目配置': 'Reset project configuration',
+  // terminal composer context
+  '切换到项目面板': 'Switch to the project panel',
+  '切换到模型面板': 'Switch to the model panel',
+  '打开项目工具（权限 / 存档 / 记忆 / 托管）': 'Open project tools (permissions / archives / memory / autopilot)',
+  '快捷指令': 'Quick actions',
+  '继续上次': 'Continue',
+  '解释项目': 'Explain project',
+  '修复报错': 'Fix errors',
+  '总结改动': 'Summarize changes',
+  '已填入输入框，按 Enter 发送': 'Added to the composer — press Enter to send',
+  '继续上次未完成的任务：先检查项目当前状态和最近改动，说明接下来要做什么，然后继续执行。':
+    'Continue the unfinished task: first check the project state and recent changes, explain what comes next, then proceed.',
+  '简要说明这个项目的结构、技术栈和关键入口，按文件路径列出。':
+    'Briefly describe this project: structure, tech stack and key entry points, listed by file path.',
+  '检查终端里最近的报错，定位根因并给出最小修复方案；先说明方案，等我确认后再改代码。':
+    'Check the latest errors in the terminal, find the root cause and propose a minimal fix. Explain the plan first and wait for my confirmation before changing code.',
+  '总结当前工作区未提交的改动：按文件说明改了什么、为什么，并指出风险。':
+    'Summarize the uncommitted changes in this workspace: per file, what changed and why, plus any risks.',
+  '导出的配置只包含模型、推理度与启动方式，不含环境变量值；模板保存在本机。':
+    'Exported configuration contains only the model, reasoning level and startup mode — never environment variable values. Templates are stored on this device.',
+  '模板保存在本机，只含模型、推理度与启动方式，不含环境变量值；可在项目配置里应用。':
+    'Templates are stored on this device with only the model, reasoning level and startup mode — never environment variable values. Apply them from a project configuration.',
 };
 
 let current: Locale = 'zh-CN';

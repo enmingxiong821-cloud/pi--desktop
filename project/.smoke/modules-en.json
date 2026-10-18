@@ -10,7 +10,8 @@
     "Capabilities",
     "Sessions",
     "Search",
-    "Security"
+    "Security",
+    "Project tools"
   ],
   "state": "Not started",
   "model": "Model —",
@@ -41,7 +42,7 @@
     "×"
   ],
   "moduleBindingLabel": "Model for this project",
-  "moduleBindingValue": "m-mvdq34a3-lkfg",
+  "moduleBindingValue": "m-mvdt1hwb-0f0b",
   "moduleBindingOptions": [
     "Pi default",
     "快速修复 · demo/mini"

@@ -1,0 +1,73 @@
+name: 缺陷报告
+description: 报告可复现的问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先搜索已有 issue。涉及密钥、漏洞或未授权访问的问题请不要公开提交，按 SECURITY.md 私下报告。
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 应用内右下角或关于页显示的版本号
+      placeholder: 1.5.0
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响范围
+      options:
+        - 终端 / Pi 会话
+        - 项目与配置
+        - 模型与供应商接入
+        - 自动化 / 协作
+        - 搜索 / 抓取 / 逆向
+        - 安全审计 / 授权渗透
+        - 外观与布局
+        - 打包与安装
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 选择项目 …
+        2. 打开 …
+        3. 看到 …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      description: 如有报错，请附上文字或截图；请先打码密钥与个人信息。
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境
+      placeholder: |
+        Windows 11 26200
+        Node 24 / Pi 版本
+        安装版或 portable
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认
+      options:
+        - label: 我已搜索过现有 issue
+          required: true
+        - label: 内容中不包含真实密钥、Token 或他人隐私
+          required: true

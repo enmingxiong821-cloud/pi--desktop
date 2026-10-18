@@ -23,11 +23,11 @@ node node_modules/electron/install.js
 
 ## 功能
 
-左侧导航包含八个模块，设置在右上角齿轮浮层（`Ctrl+,`）：
+左侧导航包含九个入口，设置在右上角齿轮浮层（`Ctrl+,`）：
 
 | 模块 | 内容 |
 | --- | --- |
-| 项目 | 选择/切换项目目录、多项目会话树（可同时运行多个项目）、最近项目（标记路径失效）、从 VS Code / Cursor / TRAE / Windsurf / JetBrains 导入最近项目、Git 分支与变更、项目级 Skill/MCP；左栏「项目工具」集中权限、存档、长期记忆与托管；「项目配置」抽屉可设置当前项目的默认模型、推理度、启动方式与本机环境变量 |
+| 项目 | 选择/切换项目目录、多项目会话树（可同时运行多个项目）、最近项目（标记路径失效）、从 VS Code / Cursor / TRAE / Windsurf / JetBrains 导入最近项目、Git 分支与变更、项目级 Skill/MCP；「项目配置」抽屉可设置当前项目的默认模型、推理度、启动方式、本机环境变量，并支持配置模板、导入导出与从 `.env` 批量导入 |
 | 模型 | 按厂商强弱分层排序，点击厂商展开模型；第三方 API / 中转站接入整合在同一面板；支持搜索与设为默认 |
 | 自动化 | 定时任务（cron、间隔、每日、每周）与消息通道（Webhook、企业微信、飞书、Telegram），支持手动运行与执行记录 |
 | 协作 | 检测 Claude、Codex、Grok、Gemini、Trae、WorkBuddy、TRAE Agent、Qwen、OpenCode、Goose、Cursor、Aider、Cline、Crush、Kiro、Continue、Droid、Crow、Crow5、Amp、OpenHands；**会议室**可拖入软件卡片与 Agent；主管可自动分配或手动指定；CLI 直接无头执行，桌面版打开应用并复制任务；支持常用 CLI 快速配置与自定义 Agent |
@@ -35,6 +35,7 @@ node node_modules/electron/install.js
 | 会话 | Pi 会话按日期分组、搜索与恢复 |
 | 搜索 | 全网实时检索（DuckDuckGo 免配置 / SearXNG）；抓取支持自动（搜索结果作种子）与指定网页两种模式；本机文件/项目逆向分析接入 radare2 triage；抓取与逆向默认关闭，由用户开关 |
 | 安全 | 代码审计（Semgrep / Trivy / gitleaks，支持 SARIF / JSON 导出）、授权渗透（被动基线 + 逐次授权后的 Nuclei 主动扫描）、带哈希链的审计日志 |
+| 项目工具 | 权限预设与自动同意、项目存档与恢复、长期记忆检索、任务托管；与终端输入区联动，可一键回到权限设置 |
 
 右上角齿轮集中市场与设置：Skills / MCP / 在线目录一站式安装；外观（深色/浅色/跟随系统、强调色预设与自定义、紧凑布局、启动动画及预览）、新项目默认值（权限预设、自动同意、默认模型与推理度、记忆 Skill）、环境探测、一键配置 Pi、桌面快捷方式、语言切换、打开 Pi 配置 / 项目 `.pi` / 数据目录与本机工具入口。
 
@@ -44,6 +45,7 @@ node node_modules/electron/install.js
 
 - 同一项目内可直接打开 VS Code、资源管理器、浏览器或任意本地路径。
 - 底栏可调「推理度」与「聪明程度」：推理度映射 Pi `--thinking`（off → max，越高越慢、消耗越多）；聪明程度按当前 provider 的模型选型（快速 / 均衡 / 最强），均支持「自动」。运行中修改推理度会在新会话生效，聪明程度通过 `/model` 立即切换。
+- 终端输入区上方常驻项目、模型与项目工具入口；「继续上次 / 解释项目 / 修复报错 / 总结改动」快捷指令会把整理好的提示词填入输入框，确认后再按 Enter 发送，不会自动产生模型调用。
 - 顶栏齿轮或 `Ctrl+,` 打开设置；主题、强调色、紧凑布局与启动动画保存在本机 `localStorage`，不上传。
 - 自定义 Agent 使用参数模板（`{prompt}` / `{cwd}`）接入本机 CLI；自定义软件选择本机可执行文件后归入对应分类。
 - 中英文界面切换，界面文案与后端错误信息同时生效。
@@ -73,7 +75,7 @@ Windows 中文 IME 的 composition 事件仍需人工操作验证，脚本无法
 ## 自动验证
 
 ```bash
-npm run verify                              # 类型检查 + i18n 校验 + 构建
+npm run verify                              # 类型检查 + i18n 校验 + 配置共享测试 + 构建
 npx electron .smoke/i18n-smoke.mjs          # 中英文界面与指令注入
 npx electron .smoke/workbench-smoke.mjs     # 项目配置/模型/市场/自动化/协作/会话/安全/工作区
 ```
@@ -117,4 +119,10 @@ project/
 
 - Windows 中文 IME 的 composition 事件依赖真实输入法，自动化脚本无法覆盖。
 - 自动化任务使用应用内调度器，应用退出后停止；跨重启的定时执行需要系统计划任务配合。
+
+## 参与与支持
+
+- 变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+- 提交问题或建议前请先读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- 安全问题的报告方式见 [SECURITY.md](SECURITY.md)。请勿在公开 issue 中披露未修复的漏洞或任何密钥。
 - Agent 协作依赖本机已安装并登录的命令行工具；只有桌面版的 Agent 不能自动执行，也不能任主管，运行时会打开应用并把任务复制到剪贴板。

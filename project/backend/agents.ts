@@ -1,9 +1,18 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFile, spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { clipboard } from 'electron';
 import { t } from './i18n.js';
 import { searchForPrompt } from './tools.js';
+
+/** 异步执行探测命令，避免 where / PowerShell 阻塞主进程事件循环。 */
+function runProbe(command: string, args: string[], timeout = 8000, shell = false): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    execFile(command, args, { encoding: 'utf8', timeout, windowsHide: true, shell, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+      resolve({ ok: !error, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') });
+    });
+  });
+}
 
 export type AgentInstallKind = 'npm' | 'winget' | 'script' | 'pip' | 'uv' | 'manual';
 
@@ -593,7 +602,7 @@ export function configureCustomAgents(storePath: string): void {
   detectionCache = null;
 }
 
-export function saveCustomAgent(input: unknown): { ok: boolean; agent?: AgentInfo; error?: string } {
+export async function saveCustomAgent(input: unknown): Promise<{ ok: boolean; agent?: AgentInfo; error?: string }> {
   if (!customStorePath) return { ok: false, error: t('自定义 Agent 存储尚未初始化') };
   if (customAgents.length >= CUSTOM_AGENT_LIMIT) {
     return { ok: false, error: t('自定义 Agent 数量已达上限（{count}）', { count: CUSTOM_AGENT_LIMIT }) };
@@ -636,7 +645,7 @@ export function saveCustomAgent(input: unknown): { ok: boolean; agent?: AgentInf
   customArgs.set(record.id, record.args);
   persistCustomAgents();
   detectionCache = null;
-  return { ok: true, agent: detectAgents(true).find((agent) => agent.id === id) };
+  return { ok: true, agent: (await detectAgents(true)).find((agent) => agent.id === id) };
 }
 
 export function removeCustomAgent(id: unknown): { ok: boolean; error?: string } {
@@ -717,45 +726,49 @@ function resolvePattern(value: string): string | null {
 }
 
 /** 从开始菜单解析快捷方式目标，覆盖装在任意盘符的桌面应用。 */
-function resolveShortcut(name: string): string | null {
-  if (process.platform !== 'win32') return null;
+function resolveShortcut(name: string): Promise<string | null> {
+  if (process.platform !== 'win32') return Promise.resolve(null);
   if (!shortcutCache || Date.now() - shortcutCache.at > 300_000) {
-    const names = [...new Set(AGENTS.map((agent) => agent.shortcut).filter((item): item is string => Boolean(item)))];
-    const list = names.map((item) => `'${item.replace(/'/g, "''")}'`).join(',');
-    const script = [
-      "$ErrorActionPreference='SilentlyContinue'",
-      '$shell=New-Object -ComObject WScript.Shell',
-      '$roots=@("$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs","$env:ProgramData\\Microsoft\\Windows\\Start Menu\\Programs")',
-      `foreach($n in @(${list})){`,
-      '  foreach($r in $roots){',
-      '    $f=Get-ChildItem -LiteralPath $r -Filter ($n+".lnk") -Recurse -File | Select-Object -First 1',
-      '    if($f){ Write-Output ($n+"|"+$shell.CreateShortcut($f.FullName).TargetPath); break }',
-      '  }',
-      '}',
-    ].join('\n');
-    const targets = new Map<string, string>();
-    try {
-      const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-        encoding: 'utf8',
-        timeout: 8000,
-        windowsHide: true,
+    if (!shortcutLoading) {
+      shortcutLoading = loadShortcuts().finally(() => {
+        shortcutLoading = null;
       });
-      for (const line of (result.stdout || '').split(/\r?\n/)) {
-        const split = line.indexOf('|');
-        if (split <= 0) continue;
-        const key = line.slice(0, split).trim();
-        const target = line.slice(split + 1).trim();
-        if (key && isFile(target)) targets.set(key, target);
-      }
-    } catch {
-      // 快捷方式不可用时保持空表
     }
-    shortcutCache = { at: Date.now(), targets };
+    return shortcutLoading.then(() => shortcutCache?.targets.get(name) ?? null);
   }
-  return shortcutCache.targets.get(name) ?? null;
+  return Promise.resolve(shortcutCache.targets.get(name) ?? null);
 }
 
-function resolveDesktopPath(agent: AgentDefinition): string | null {
+let shortcutLoading: Promise<void> | null = null;
+
+/** 一次性解析全部 Agent 的开始菜单快捷方式，结果缓存五分钟。 */
+async function loadShortcuts(): Promise<void> {
+  const names = [...new Set(AGENTS.map((agent) => agent.shortcut).filter((item): item is string => Boolean(item)))];
+  const list = names.map((item) => `'${item.replace(/'/g, "''")}'`).join(',');
+  const script = [
+    "$ErrorActionPreference='SilentlyContinue'",
+    '$shell=New-Object -ComObject WScript.Shell',
+    '$roots=@("$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs","$env:ProgramData\\Microsoft\\Windows\\Start Menu\\Programs")',
+    `foreach($n in @(${list})){`,
+    '  foreach($r in $roots){',
+    '    $f=Get-ChildItem -LiteralPath $r -Filter ($n+".lnk") -Recurse -File | Select-Object -First 1',
+    '    if($f){ Write-Output ($n+"|"+$shell.CreateShortcut($f.FullName).TargetPath); break }',
+    '  }',
+    '}',
+  ].join('\n');
+  const targets = new Map<string, string>();
+  const result = await runProbe('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], 8000);
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const split = line.indexOf('|');
+    if (split <= 0) continue;
+    const key = line.slice(0, split).trim();
+    const target = line.slice(split + 1).trim();
+    if (key && isFile(target)) targets.set(key, target);
+  }
+  shortcutCache = { at: Date.now(), targets };
+}
+
+async function resolveDesktopPath(agent: AgentDefinition): Promise<string | null> {
   for (const pattern of agent.appPaths ?? []) {
     const found = resolvePattern(pattern);
     if (found) return found;
@@ -763,9 +776,9 @@ function resolveDesktopPath(agent: AgentDefinition): string | null {
   return agent.shortcut ? resolveShortcut(agent.shortcut) : null;
 }
 
-function resolveAgentCliPath(agent: AgentDefinition): string | null {
+async function resolveAgentCliPath(agent: AgentDefinition): Promise<string | null> {
   for (const candidate of [agent.command, ...(agent.commands ?? [])]) {
-    const resolved = resolveCommand(candidate);
+    const resolved = await resolveCommand(candidate);
     if (resolved) return resolved;
   }
   for (const pattern of agent.binPaths ?? []) {
@@ -773,7 +786,7 @@ function resolveAgentCliPath(agent: AgentDefinition): string | null {
     if (resolved) return resolved;
   }
   if (agent.cliSibling) {
-    const desktop = resolveDesktopPath(agent);
+    const desktop = await resolveDesktopPath(agent);
     if (desktop) {
       const sibling = path.join(path.dirname(desktop), agent.cliSibling);
       if (isFile(sibling)) return sibling;
@@ -786,59 +799,58 @@ function isBatchFile(file: string): boolean {
   return /\.(cmd|bat)$/i.test(file);
 }
 
-function resolveCommand(command: string): string | null {
-  try {
-    const finder = process.platform === 'win32' ? 'where' : 'which';
-    const result = spawnSync(finder, [command], { encoding: 'utf8', timeout: 4000, windowsHide: true });
-    if (result.status !== 0 || !result.stdout) return null;
-    const first = result.stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
-    return first && existsSync(first) ? first : null;
-  } catch {
-    return null;
-  }
+async function resolveCommand(command: string): Promise<string | null> {
+  const finder = process.platform === 'win32' ? 'where' : 'which';
+  const result = await runProbe(finder, [command], 4000);
+  if (!result.ok || !result.stdout) return null;
+  const first = result.stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+  return first && existsSync(first) ? first : null;
 }
 
-function readVersion(command: string, args: string[]): string | undefined {
-  try {
-    const result = spawnSync(command, args, {
-      encoding: 'utf8',
-      timeout: 8000,
-      windowsHide: true,
-      shell: isBatchFile(command),
-    });
-    const text = `${result.stdout || ''}${result.stderr || ''}`.trim();
-    if (result.error || !text) return undefined;
-    return text.split(/\r?\n/)[0].slice(0, 120);
-  } catch {
-    return undefined;
-  }
+async function readVersion(command: string, args: string[]): Promise<string | undefined> {
+  const result = await runProbe(command, args, 8000, isBatchFile(command));
+  const text = `${result.stdout}${result.stderr}`.trim();
+  if (!result.ok || !text) return undefined;
+  return text.split(/\r?\n/)[0].slice(0, 120);
 }
 
-export function detectAgents(refresh = false): AgentInfo[] {
+let detectionInFlight: Promise<AgentInfo[]> | null = null;
+
+export async function detectAgents(refresh = false): Promise<AgentInfo[]> {
   if (!refresh && detectionCache && Date.now() - detectionCache.at < 60_000) return detectionCache.agents;
-  const agents = [...AGENTS, ...customAgents].map((agent) => {
-    const resolved = resolveAgentCliPath(agent);
-    const desktopPath = resolveDesktopPath(agent);
-    const cliInstalled = Boolean(resolved);
-    const desktopInstalled = Boolean(desktopPath);
-    return {
-      ...agent,
-      installed: cliInstalled || desktopInstalled,
-      runnable: cliInstalled && Boolean(buildArgs(agent.id, 'ping', process.cwd())),
-      cliInstalled,
-      desktopInstalled,
-      desktopPath: desktopPath ?? undefined,
-      path: resolved ?? undefined,
-      version: resolved ? readVersion(resolved, agent.versionArgs) : undefined,
-    };
-  });
-  detectionCache = { at: Date.now(), agents };
-  return agents;
+  if (detectionInFlight) return detectionInFlight;
+  const task = (async () => {
+    const agents = await Promise.all([...AGENTS, ...customAgents].map(async (agent) => {
+      const resolved = await resolveAgentCliPath(agent);
+      const desktopPath = await resolveDesktopPath(agent);
+      const cliInstalled = Boolean(resolved);
+      const desktopInstalled = Boolean(desktopPath);
+      return {
+        ...agent,
+        installed: cliInstalled || desktopInstalled,
+        runnable: cliInstalled && Boolean(buildArgs(agent.id, 'ping', process.cwd())),
+        cliInstalled,
+        desktopInstalled,
+        desktopPath: desktopPath ?? undefined,
+        path: resolved ?? undefined,
+        version: resolved ? await readVersion(resolved, agent.versionArgs) : undefined,
+      };
+    }));
+    detectionCache = { at: Date.now(), agents };
+    return agents;
+  })();
+  detectionInFlight = task;
+  try {
+    return await task;
+  } finally {
+    if (detectionInFlight === task) detectionInFlight = null;
+  }
 }
+
 
 /** 打开 Agent 的桌面版，并把当前项目目录作为参数传入。 */
-export function openAgentApp(agentId: string, cwd?: string): { ok: boolean; error?: string } {
-  const agent = detectAgents().find((item) => item.id === agentId);
+export async function openAgentApp(agentId: string, cwd?: string): Promise<{ ok: boolean; error?: string }> {
+  const agent = (await detectAgents()).find((item) => item.id === agentId);
   if (!agent) return { ok: false, error: t('未知 Agent') };
   if (!agent.desktopPath) return { ok: false, error: t('未检测到 {name} 桌面版', { name: agent.name }) };
   const target = typeof cwd === 'string' && cwd.trim() && existsSync(cwd) ? path.resolve(cwd) : '';
@@ -980,13 +992,13 @@ function extractSummary(raw: string): string {
   return text.slice(-4000);
 }
 
-export function runAgent(
+export async function runAgent(
   request: AgentRunRequest,
   onEvent: (event: AgentEvent) => void,
 ): Promise<{ ok: boolean; runId: string; summary: string; error?: string }> {
   const prompt = typeof request.prompt === 'string' ? request.prompt.slice(0, MAX_PROMPT) : '';
   if (!prompt.trim()) return Promise.resolve({ ok: false, runId: '', summary: '', error: t('提示词为空') });
-  const agent = detectAgents().find((item) => item.id === request.agentId);
+  const agent = (await detectAgents()).find((item) => item.id === request.agentId);
   if (!agent) return Promise.resolve({ ok: false, runId: '', summary: '', error: t('未知 Agent') });
   if (!agent.runnable || !agent.path) {
     if (agent.desktopInstalled) {
@@ -1075,7 +1087,7 @@ export async function installAgent(
 ): Promise<AgentInstallResult> {
   const agent = AGENTS.find((item) => item.id === agentId);
   if (!agent) return { ok: false, agentId, output: '', error: t('未知 Agent') };
-  if (resolveAgentCliPath(agent)) {
+  if (await resolveAgentCliPath(agent)) {
     return { ok: true, agentId, output: t('{name} 已安装', { name: agent.name }) };
   }
   const spec = agent.install;
@@ -1139,9 +1151,16 @@ export async function installAgent(
     child.on('close', (code) => {
       clearTimeout(timer);
       if (code === 0) {
-        const installed = Boolean(resolveCommand(agent.command)
-          || (agent.commands ?? []).some((item) => resolveCommand(item)));
-        finish(installed, installed ? undefined : t('安装命令已结束，但仍未检测到可执行文件，请重开终端或检查 PATH'));
+        void (async () => {
+          let installed = false;
+          for (const candidate of [agent.command, ...(agent.commands ?? [])]) {
+            if (await resolveCommand(candidate)) {
+              installed = true;
+              break;
+            }
+          }
+          finish(installed, installed ? undefined : t('安装命令已结束，但仍未检测到可执行文件，请重开终端或检查 PATH'));
+        })();
         return;
       }
       finish(false, t('安装失败，退出码 {code}', { code: String(code) }));
@@ -1251,9 +1270,9 @@ function rankAgents(
     .sort((left, right) => right.score - left.score || left.agent.name.localeCompare(right.agent.name));
 }
 
-export function suggestTeam(task: string, cwd = ''): TeamSuggestion {
+export async function suggestTeam(task: string, cwd = ''): Promise<TeamSuggestion> {
   const kind = classifyTeamTask(typeof task === 'string' ? task : '', cwd);
-  const installed = detectAgents().filter((agent) => agent.installed);
+  const installed = (await detectAgents()).filter((agent) => agent.installed);
   const scored = rankAgents(installed, kind);
   const members = scored.slice(0, 3).map((item) => item.agent.id);
   const supervisor = scored.find((item) => item.agent.runnable)?.agent.id ?? '';
@@ -1275,13 +1294,13 @@ export function suggestTeam(task: string, cwd = ''): TeamSuggestion {
 }
 
 /** 桌面版参与者无法无头执行：打开应用并把任务放进剪贴板，由用户粘贴。 */
-function desktopHandoff(
+async function desktopHandoff(
   agent: AgentInfo,
   prompt: string,
   cwd: string,
   onEvent: (event: AgentEvent) => void,
-): { ok: boolean; summary: string } {
-  const opened = openAgentApp(agent.id, cwd);
+): Promise<{ ok: boolean; summary: string }> {
+  const opened = await openAgentApp(agent.id, cwd);
   if (opened.ok) clipboard.writeText(prompt);
   const text = opened.ok
     ? t('已打开 {name}，任务已复制到剪贴板，请在应用中粘贴执行。', { name: agent.name })
@@ -1296,7 +1315,7 @@ export async function runTeam(
 ): Promise<TeamResult> {
   const task = typeof request.task === 'string' ? request.task.trim().slice(0, MAX_PROMPT) : '';
   if (!task) return { ok: false, summaries: [], error: t('填写协作任务') };
-  const installed = detectAgents().filter((agent) => agent.installed);
+  const installed = (await detectAgents()).filter((agent) => agent.installed);
   if (!installed.length) return { ok: false, summaries: [], error: t('未检测到任何可用 Agent') };
 
   const requested = new Set(Array.isArray(request.agentIds) ? request.agentIds.filter((id) => typeof id === 'string') : []);
@@ -1313,7 +1332,7 @@ export async function runTeam(
   const webBlock = webLines.length
     ? ['以下是刚检索到的实时网络结果（可能含噪音，引用时注明来源）：', ...webLines].join('\n')
     : '';
-  const suggested = requested.size ? null : suggestTeam(task, cwd);
+  const suggested = requested.size ? null : await suggestTeam(task, cwd);
   const members = requested.size
     ? installed.filter((agent) => requested.has(agent.id))
     : (suggested?.members.length
@@ -1364,7 +1383,7 @@ export async function runTeam(
       ].filter((line) => line !== '').join('\n');
       const result = agent.runnable
         ? await runAgent({ agentId: agent.id, prompt: workerPrompt, cwd }, onEvent)
-        : desktopHandoff(agent, workerPrompt, cwd, onEvent);
+        : await desktopHandoff(agent, workerPrompt, cwd, onEvent);
       summaries.push({ agentId: agent.id, ok: result.ok, text: result.summary });
     });
 
@@ -1393,12 +1412,12 @@ export async function runTeam(
     ].filter((line) => line !== '').join('\n');
     const result = agent.runnable
       ? await runAgent({ agentId: agent.id, prompt, cwd }, onEvent)
-      : desktopHandoff(agent, prompt, cwd, onEvent);
+      : await desktopHandoff(agent, prompt, cwd, onEvent);
     summaries.push({ agentId: agent.id, ok: result.ok, text: result.summary });
   });
   return { ok: summaries.some((item) => item.ok), summaries };
 }
 
-export function agentCatalog(): AgentInfo[] {
+export async function agentCatalog(): Promise<AgentInfo[]> {
   return detectAgents();
 }

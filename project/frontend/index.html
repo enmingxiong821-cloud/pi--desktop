@@ -60,6 +60,10 @@
           <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg>
           <span class="tab-label" data-i18n="安全">安全</span>
         </button>
+        <button role="tab" id="tab-tools" class="nav-wide" aria-controls="project-dock" aria-selected="false">
+          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.1 2.1-2.1-2.1z"/><path d="M6 21h.01"/></svg>
+          <span class="tab-label" data-i18n="项目工具">项目工具</span>
+        </button>
       </nav>
 
       <div class="pane-stack">
@@ -128,13 +132,29 @@
                 <option value="manual" data-i18n="仅手动启动">仅手动启动</option>
               </select>
             </label>
+            <div class="group-label"><span data-i18n="配置模板">配置模板</span></div>
+            <div class="config-share-row">
+              <select id="project-template-select" aria-label="配置模板" data-i18n-aria-label="配置模板"></select>
+              <button id="project-template-apply" class="ghost" type="button" data-i18n="应用模板">应用模板</button>
+            </div>
+            <div class="config-share-row">
+              <input id="project-template-name" type="text" maxlength="40" spellcheck="false" placeholder="模板名称" data-i18n-placeholder="模板名称">
+              <button id="project-config-save-template" class="ghost" type="button" data-i18n="存为模板">存为模板</button>
+            </div>
             <div class="group-label"><span data-i18n="环境变量">环境变量</span></div>
             <div id="project-env-list" class="project-env-list"></div>
             <button id="project-env-add" class="ghost" type="button" data-i18n="添加变量">添加变量</button>
+            <button id="project-env-import" class="ghost" type="button" data-i18n="从 .env 导入">从 .env 导入</button>
             <div class="dock-toolbar">
               <button id="project-config-save" class="primary" type="button" data-i18n="保存项目配置">保存项目配置</button>
             </div>
+            <div class="config-share-actions">
+              <button id="project-config-export" class="ghost" type="button" data-i18n="导出配置">导出配置</button>
+              <button id="project-config-import" class="ghost" type="button" data-i18n="导入配置">导入配置</button>
+              <button id="project-config-reset" class="ghost danger" type="button" data-i18n="重置项目配置">重置项目配置</button>
+            </div>
             <p id="project-config-status" class="note"></p>
+            <p class="note" data-i18n="导出的配置只包含模型、推理度与启动方式，不含环境变量值；模板保存在本机。">导出的配置只包含模型、推理度与启动方式，不含环境变量值；模板保存在本机。</p>
             <p class="note" data-i18n="环境变量只在启动 Pi 时注入；值以密码形式输入，工作台不会写入日志或项目文件。">环境变量只在启动 Pi 时注入；值以密码形式输入，工作台不会写入日志或项目文件。</p>
           </details>
         </section>
@@ -659,9 +679,7 @@
           </div>
         </section>
 
-      </div>
-
-      <section id="project-dock" class="project-dock sidebar-tools" aria-label="项目工具" data-i18n-aria-label="项目工具">
+        <section id="project-dock" role="tabpanel" class="pane project-dock sidebar-tools" aria-label="项目工具" data-i18n-aria-label="项目工具" hidden>
         <div class="dock-head">
           <span class="dock-title" data-i18n="项目工具">项目工具</span>
           <div class="dock-tabs" role="tablist" aria-label="项目工具" data-i18n-aria-label="项目工具">
@@ -760,6 +778,7 @@
           </div>
         </div>
       </section>
+      </div>
     </aside>
 
     <div id="resizer-left" class="resizer" role="separator" aria-orientation="vertical" tabindex="0" aria-label="调整左侧栏宽度" data-i18n-aria-label="调整左侧栏宽度" title="拖动调整左侧栏宽度，双击恢复默认" data-i18n-title="拖动调整左侧栏宽度，双击恢复默认"></div>
@@ -792,6 +811,18 @@
       <div id="terminal-hint" class="terminal-hint" data-i18n="选择一个项目，然后点击「新会话」">选择一个项目，然后点击「新会话」</div>
       <button id="scroll-bottom" class="scroll-bottom" hidden data-i18n="↓ 回到底部">↓ 回到底部</button>
       <div id="composer" class="composer">
+        <div id="composer-context" class="composer-context">
+          <button id="ctx-project" class="ctx-chip" type="button" title="切换到项目面板" data-i18n-title="切换到项目面板" data-i18n="未绑定项目">未绑定项目</button>
+          <button id="ctx-model" class="ctx-chip" type="button" title="切换到模型面板" data-i18n-title="切换到模型面板" data-i18n="模型 —">模型 —</button>
+          <button id="ctx-tools" class="ctx-chip" type="button" title="打开项目工具（权限 / 存档 / 记忆 / 托管）" data-i18n-title="打开项目工具（权限 / 存档 / 记忆 / 托管）" data-i18n="项目工具">项目工具</button>
+          <span class="ctx-spacer"></span>
+          <div class="ctx-quick" role="group" aria-label="快捷指令" data-i18n-aria-label="快捷指令">
+            <button type="button" class="ctx-action" data-quick="continue" data-i18n="继续上次">继续上次</button>
+            <button type="button" class="ctx-action" data-quick="explain" data-i18n="解释项目">解释项目</button>
+            <button type="button" class="ctx-action" data-quick="fix" data-i18n="修复报错">修复报错</button>
+            <button type="button" class="ctx-action" data-quick="summary" data-i18n="总结改动">总结改动</button>
+          </div>
+        </div>
         <div id="attachment-bar" class="attachment-bar" hidden></div>
         <textarea id="composer-input" rows="2" spellcheck="false"
           placeholder="输入消息，Enter 发送，Shift+Enter 换行；可粘贴图片或拖入任意文件"
@@ -1254,6 +1285,9 @@
     <label class="toggle"><input type="checkbox" id="project-defaults-memory-skill" checked> <span data-i18n="启动时自动装配记忆 Skill">启动时自动装配记忆 Skill</span></label>
     <p class="note" data-i18n="关闭只停止自动装配，不会删除已经安装的记忆 Skill 或已有记忆数据。">关闭只停止自动装配，不会删除已经安装的记忆 Skill 或已有记忆数据。</p>
     <p id="project-defaults-status" class="note"></p>
+    <div class="group-label"><span data-i18n="配置模板">配置模板</span></div>
+    <p class="note" data-i18n="模板保存在本机，只含模型、推理度与启动方式，不含环境变量值；可在项目配置里应用。">模板保存在本机，只含模型、推理度与启动方式，不含环境变量值；可在项目配置里应用。</p>
+    <div id="project-template-list" class="template-list"></div>
   </section>
   <section id="pane-provider" role="tabpanel" class="pane" hidden>
     <div class="pane-head">

@@ -1,8 +1,8 @@
 {
   "startOptions": {
     "cwd": "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project",
-    "cols": 87,
-    "rows": 27,
+    "cols": 79,
+    "rows": 25,
     "isolated": false,
     "model": "demo/mini",
     "thinking": "high"
@@ -43,21 +43,21 @@
       }
     ],
     "bindingLabel": "本项目模型",
-    "bindingValue": "m-mvdq34a3-lkfg",
+    "bindingValue": "m-mvdt1hwb-0f0b",
     "bindingOptions": [
       {
         "value": "",
         "text": "Pi 默认"
       },
       {
-        "value": "m-mvdq34a3-lkfg",
+        "value": "m-mvdt1hwb-0f0b",
         "text": "快速修复 · demo/mini"
       }
     ],
     "bindingDisabled": false,
     "storedModules": [
       {
-        "id": "m-mvdq34a3-lkfg",
+        "id": "m-mvdt1hwb-0f0b",
         "name": "快速修复",
         "provider": "demo",
         "model": "mini",
@@ -65,7 +65,7 @@
       }
     ],
     "storedBindings": {
-      "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project": "m-mvdq34a3-lkfg"
+      "C:\\Users\\Caspian6610\\Desktop\\pi desktop\\project": "m-mvdt1hwb-0f0b"
     },
     "preview": "/model demo/mini",
     "toast": "模块已暂存，启动 Pi 后发送"
@@ -82,7 +82,8 @@
       "Capabilities",
       "Sessions",
       "Search",
-      "Security"
+      "Security",
+      "Project tools"
     ],
     "state": "Not started",
     "model": "Model —",
@@ -113,7 +114,7 @@
       "×"
     ],
     "moduleBindingLabel": "Model for this project",
-    "moduleBindingValue": "m-mvdq34a3-lkfg",
+    "moduleBindingValue": "m-mvdt1hwb-0f0b",
     "moduleBindingOptions": [
       "Pi default",
       "快速修复 · demo/mini"
