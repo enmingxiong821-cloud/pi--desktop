@@ -107,6 +107,26 @@ ipcMain.handle('permissions:get', () => ({ ok: true, path: '.pi/workbench-permis
 ipcMain.handle('permissions:save', (_event, input) => ({ ok: true, path: '.pi/workbench-permissions.json', permissions: { rules: input.rules, allowPaths: input.allowPaths ?? [], denyPaths: input.denyPaths ?? [] } }));
 ipcMain.handle('permissions:guard-status', () => ({ installed: false, path: 'C:\\Users\\smoke\\.pi\\agent\\extensions\\workbench-permissions.ts' }));
 ipcMain.handle('permissions:guard', () => ({ ok: true, installed: true, path: 'C:\\Users\\smoke\\.pi\\agent\\extensions\\workbench-permissions.ts' }));
+ipcMain.handle('app:defaults', () => ({
+  version: 1, permissionPreset: 'standard', autoApprove: false, workspaceOnly: true,
+  model: '', thinking: '', memorySkill: true,
+}));
+ipcMain.handle('app:defaults-save', (_event, input) => ({
+  ok: true, defaults: {
+    version: 1, permissionPreset: 'standard', autoApprove: false, workspaceOnly: true,
+    model: '', thinking: '', memorySkill: true, ...input,
+  },
+}));
+ipcMain.handle('project:config', (_event, cwd) => ({
+  ok: true, path: `${cwd}/.pi/workbench.json`,
+  config: { version: 1, project: cwd, updatedAt: '', model: '', thinking: '', autoStart: null },
+  env: {},
+}));
+ipcMain.handle('project:config-save', (_event, input) => ({
+  ok: true, path: `${input.cwd}/.pi/workbench.json`,
+  config: { version: 1, project: input.cwd, updatedAt: new Date().toISOString(), model: input.model ?? '', thinking: input.thinking ?? '', autoStart: null },
+  env: input.env ?? {},
+}));
 ipcMain.handle('archives:list', () => ({ ok: true, archives: [] }));
 ipcMain.handle('archives:create', () => ({ ok: true }));
 ipcMain.handle('archives:restore', () => ({ ok: true }));
@@ -372,7 +392,7 @@ async function run() {
 
   expectText(zhSnap.lang === 'zh-CN', 'zh lang attribute');
   expectText(zhSnap.title === 'Pi 工作台', 'zh title');
-  expectText(zhSnap.tabs.join('|') === '项目|模型|自动化|协作|能力|会话|搜索', 'zh tabs');
+  expectText(zhSnap.tabs.join('|') === '项目|模型|自动化|协作|能力|会话|搜索|安全', 'zh tabs');
   expectText(zhSnap.modeNote.startsWith('真实配置'), 'zh mode note');
   expectText(zhSnap.preview === '选择模型后生成命令', 'zh command preview');
   expectText(zhSnap.composerPlaceholder.includes('输入消息'), 'zh composer placeholder');
@@ -382,7 +402,7 @@ async function run() {
   expectText(en.lang === 'en', 'en lang attribute');
   expectText(en.title === 'Pi Workbench', 'en title');
   expectText(en.brand === 'Pi Workbench', 'en brand');
-  expectText(en.tabs.join('|') === 'Project|Models|Automation|Team|Capabilities|Sessions|Search', 'en tabs');
+  expectText(en.tabs.join('|') === 'Project|Models|Automation|Team|Capabilities|Sessions|Search|Security', 'en tabs');
   expectText(en.state === 'Not started', 'en process state');
   expectText(en.modeNote.startsWith('Real config'), 'en mode note');
   expectText(en.modeNote.includes('extensions/MCP/Skills'), 'en mode note body');
@@ -408,7 +428,7 @@ async function run() {
 
   expectText(back.lang === 'zh-CN', 'back lang attribute');
   expectText(back.title === 'Pi 工作台', 'back title');
-  expectText(back.tabs.join('|') === '项目|模型|自动化|协作|能力|会话|搜索', 'back tabs');
+  expectText(back.tabs.join('|') === '项目|模型|自动化|协作|能力|会话|搜索|安全', 'back tabs');
   expectText(back.state === '未启动', 'back process state');
   expectText(back.cwd === root, 'back cwd label');
   expectText(back.composerPlaceholder.includes('输入消息'), 'back composer placeholder');

@@ -4,6 +4,8 @@
 
 已确认方向：打开后使用真正的 Pi TUI，旁边提供图形辅助，并按当前项目和任务在授权范围内自主选择/调用 Skills 与 MCP；不以模拟终端输出代替真实执行。文档入口：`doc/README.md`，实现蓝图：`doc/design-blueprint.md`，开发交接：`doc/development-handoff.md`。
 
+![Pi 工作台](project/.smoke/workbench-project-config.png)
+
 ## 下载与安装
 
 Windows 安装包与免安装版见仓库 Releases：
@@ -27,6 +29,7 @@ Windows 安装包与免安装版见仓库 Releases：
 - Electron + node-pty + xterm.js：真实 Pi TUI、中文输入、窗口缩放、WebGL 渲染与输出合批。
 - 多项目会话树：同时运行多个项目，按项目展开、切换与新建会话。
 - 项目权限：预设与逐项规则、自动同意、路径例外、全局护栏；凭据外传、破坏性命令与系统目录始终拦截。
+- 项目配置与应用默认值：项目页可设置模型、推理度、启动方式与本机环境变量；设置页定义新项目默认值。优先级为本次启动 > 项目配置 > 应用默认值，密钥只存本机。
 - 模型厂商分组（国内 / 国外 / 免费）、按任务类型强偏好与总控自动选模、模型一键切换。
 - 多 Agent 协作：自动组队、主管规划与并行执行结构可视化。
 - 能力包按项目真实开关，Skill / MCP 管理与市场、任务状态、VS Code 联动。
@@ -69,12 +72,17 @@ python utils/verify-prototype.py
 ```sh
 cd project
 npm install
-npm run build
+npm run verify   # 类型检查 + i18n 校验 + 构建
 npm start        # 开发运行
 npm run dist:win # 打包 Windows 安装版与免安装版
 ```
 
-自动化验证：`npm run smoke` 覆盖 PTY 链路；`.smoke/i18n-smoke.mjs` 覆盖界面与中英文切换。
+自动化验证：`npm run smoke` 覆盖 PTY 链路；`.smoke/i18n-smoke.mjs` 覆盖界面与中英文切换；
+`.smoke/workbench-smoke.mjs` 覆盖工作台主流程（需先构建）。
+
+配置存放：项目级设置写入项目内 `.pi/workbench.json`，可随仓库共享且不含密钥；项目环境变量只写本机
+`userData/project-env.json`。应用级默认值写本机 `userData/app-defaults.json`。
+启动参数优先级为：本次启动显式选择 > 项目配置 > 应用默认值。
 
 ## 目录
 

@@ -349,6 +349,14 @@ const EN: Record<string, string> = {
   '主动扫描超时，已终止': 'Active scan timed out and was terminated',
   '主动扫描已停止': 'Active scan stopped',
   '主动扫描完成': 'Active scan finished',
+  '应用设置尚未初始化': 'App settings are not initialized yet',
+  '环境变量格式无效': 'Invalid environment variable format',
+  '环境变量最多 {count} 个': 'At most {count} environment variables are allowed',
+  '环境变量名无效：{name}': 'Invalid environment variable name: {name}',
+  '环境变量值无效：{name}': 'Invalid value for environment variable: {name}',
+  '项目配置解析失败：{error}': 'Failed to parse project configuration: {error}',
+  '项目配置写入失败：{error}': 'Failed to write project configuration: {error}',
+  '环境变量写入失败：{error}': 'Failed to write environment variables: {error}',
 };
 
 let current: Locale = 'zh-CN';

@@ -23,6 +23,8 @@ export interface PiLaunchOptions {
   sessionPath?: string;
   model?: string;
   thinking?: string;
+  // 项目级环境变量：仅由后端从本机 userData 读取，渲染进程无法直接注入。
+  env?: Record<string, string>;
 }
 
 export interface PiSession {
@@ -143,6 +145,10 @@ function buildEnv(options: PiLaunchOptions, install: PiInstall): NodeJS.ProcessE
   if (install.installRoot) env.PI_MANAGED_INSTALL_ROOT = install.installRoot;
   // 真实配置会话需要联网刷新模型目录，否则新接入的 provider 不会出现在 /model 中。
   if (options.isolated) env.PI_OFFLINE = '1';
+  // 用户为项目显式配置的变量最后写入，可覆盖上面的默认值。
+  for (const [key, value] of Object.entries(options.env ?? {})) {
+    if (key && !value.includes('\u0000')) env[key] = value;
+  }
   env.TERM = 'xterm-256color';
   env.COLORTERM = 'truecolor';
   return env;

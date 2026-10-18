@@ -36,6 +36,8 @@ import type { ArchiveMeta, ArchiveResult } from './archives.js';
 import type { MemoryHit, MemorySearchResult, MemoryStats, MemoryWriteResult } from './memory.js';
 import type { HabitEvent, HabitSummary } from './habits.js';
 import type { PermissionResult, ProjectPermissions } from './permissions.js';
+import type { AppDefaults, AppDefaultsResult } from './app-defaults.js';
+import type { ProjectConfigInput, ProjectConfigResult } from './project-config.js';
 import type { UpdateCheckResult, UpdateSettings } from './updater.js';
 
 export interface LocateResult {
@@ -290,6 +292,12 @@ const api = {
     ipcRenderer.invoke('permissions:guard'),
   permissionGuardStatus: (): Promise<{ installed: boolean; path: string }> =>
     ipcRenderer.invoke('permissions:guard-status'),
+  getProjectConfig: (cwd: string): Promise<ProjectConfigResult> => ipcRenderer.invoke('project:config', cwd),
+  saveProjectConfig: (input: ProjectConfigInput): Promise<ProjectConfigResult> =>
+    ipcRenderer.invoke('project:config-save', input),
+  getAppDefaults: (): Promise<AppDefaults> => ipcRenderer.invoke('app:defaults'),
+  saveAppDefaults: (input: Partial<AppDefaults>): Promise<AppDefaultsResult> =>
+    ipcRenderer.invoke('app:defaults-save', input),
   listArchives: (cwd: string): Promise<{ ok: boolean; archives?: ArchiveMeta[]; path?: string; error?: string }> =>
     ipcRenderer.invoke('archives:list', cwd),
   createArchive: (input: { cwd: string; label?: string }): Promise<ArchiveResult> =>

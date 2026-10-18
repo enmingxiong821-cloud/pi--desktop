@@ -1472,6 +1472,46 @@ const EN: Record<string, string> = {
   'QQ 群正在创建；建好后会在这里公布群号。':
     'A QQ group is being set up; its group number will be published here.',
   '已复制：{value}': 'Copied: {value}',
+  // project configuration / app defaults
+  '项目配置': 'Project configuration',
+  '这些设置随项目保存在 .pi/workbench.json，可随仓库共享；环境变量只保存在本机，不写入项目文件。':
+    'These settings live in .pi/workbench.json and can be shared with the repository; environment variables stay on this device and are never written to project files.',
+  '默认模型': 'Default model',
+  'provider/model，例如 openai/gpt-5.4': 'provider/model, e.g. openai/gpt-5.4',
+  '项目默认推理度': 'Project default reasoning level',
+  '跟随应用默认': 'Follow app default',
+  '启动方式': 'Launch mode',
+  '项目启动方式': 'Project launch mode',
+  '跟随全局自动启动': 'Follow global auto-start',
+  '打开项目时自动启动': 'Start automatically when opening the project',
+  '仅手动启动': 'Manual start only',
+  '添加变量': 'Add variable',
+  '保存项目配置': 'Save project configuration',
+  '环境变量只在启动 Pi 时注入；值以密码形式输入，工作台不会写入日志或项目文件。':
+    'Environment variables are injected only when starting Pi; values are entered as passwords and are never written to logs or project files.',
+  '项目默认': 'Project defaults',
+  '项目默认值': 'Project defaults',
+  '保存项目默认': 'Save project defaults',
+  '新项目在没有自己的 .pi/workbench.json 或权限文件时使用这些默认值；已保存的项目配置优先。':
+    'New projects use these defaults when they have no .pi/workbench.json or permission file of their own; saved project configuration takes precedence.',
+  'provider/model；留空交给 Pi 选择': 'provider/model; leave blank to let Pi choose',
+  '新项目默认推理度': 'Default reasoning level for new projects',
+  '新项目权限预设': 'Permission preset for new projects',
+  '自动同意（新项目）': 'Auto-approve (new projects)',
+  '启动时自动装配记忆 Skill': 'Install the memory Skill automatically at startup',
+  '关闭只停止自动装配，不会删除已经安装的记忆 Skill 或已有记忆数据。':
+    'Turning this off only stops automatic installation; it does not delete an installed memory Skill or existing memory data.',
+  '环境变量名': 'Environment variable name',
+  '值（仅本机保存）': 'Value (stored on this device only)',
+  '环境变量值': 'Environment variable value',
+  '移除': 'Remove',
+  '已保存项目配置 · {time}': 'Project configuration saved · {time}',
+  '项目配置加载失败：{error}': 'Failed to load project configuration: {error}',
+  '环境变量名不能为空': 'Environment variable name cannot be empty',
+  '环境变量名不能重复：{name}': 'Duplicate environment variable name: {name}',
+  '项目配置已保存': 'Project configuration saved',
+  '读取默认值失败：{error}': 'Failed to read defaults: {error}',
+  '项目默认值已保存': 'Project defaults saved',
 };
 
 let current: Locale = 'zh-CN';

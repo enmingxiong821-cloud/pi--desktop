@@ -219,6 +219,36 @@ interface PermissionResult {
   error?: string;
 }
 
+type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+interface ProjectWorkConfig {
+  version: 1;
+  project: string;
+  updatedAt: string;
+  model: string;
+  thinking: ThinkingLevel | '';
+  autoStart: boolean | null;
+}
+
+interface ProjectConfigResult {
+  ok: boolean;
+  path?: string;
+  envPath?: string;
+  config?: ProjectWorkConfig;
+  env?: Record<string, string>;
+  error?: string;
+}
+
+interface AppDefaults {
+  version: 1;
+  permissionPreset: 'readonly' | 'standard' | 'auto-edit' | 'full-auto' | 'full-access';
+  autoApprove: boolean;
+  workspaceOnly: boolean;
+  model: string;
+  thinking: ThinkingLevel | '';
+  memorySkill: boolean;
+}
+
 interface ArchiveMeta {
   id: string;
   label: string;
@@ -688,6 +718,16 @@ interface PiDesktopApi {
   savePermissions(input: { cwd: string; rules: PermissionRules; workspaceOnly?: boolean; autoApprove?: boolean; allowPaths?: string[]; denyPaths?: string[] }): Promise<PermissionResult>;
   installPermissionGuard(): Promise<{ ok: boolean; path?: string; installed?: boolean; error?: string }>;
   permissionGuardStatus(): Promise<{ installed: boolean; path: string }>;
+  getProjectConfig(cwd: string): Promise<ProjectConfigResult>;
+  saveProjectConfig(input: {
+    cwd: string;
+    model?: string;
+    thinking?: string;
+    autoStart?: boolean | null | 'follow' | 'auto' | 'manual';
+    env?: Record<string, string>;
+  }): Promise<ProjectConfigResult>;
+  getAppDefaults(): Promise<AppDefaults>;
+  saveAppDefaults(input: Partial<AppDefaults>): Promise<{ ok: boolean; defaults?: AppDefaults; error?: string }>;
   listArchives(cwd: string): Promise<{ ok: boolean; archives?: ArchiveMeta[]; path?: string; error?: string }>;
   createArchive(input: { cwd: string; label?: string }): Promise<ArchiveResult>;
   restoreArchive(input: { cwd: string; id: string }): Promise<ArchiveResult>;
@@ -1119,6 +1159,13 @@ const startButton = $<HTMLButtonElement>('start-pi');
 const stopButton = $<HTMLButtonElement>('stop-pi');
 const openFolderButton = $<HTMLButtonElement>('open-folder');
 const openVSCodeButton = $<HTMLButtonElement>('open-vscode');
+const projectConfigModelInput = $<HTMLInputElement>('project-config-model');
+const projectConfigThinkingSelect = $<HTMLSelectElement>('project-config-thinking');
+const projectConfigAutoStartSelect = $<HTMLSelectElement>('project-config-autostart');
+const projectEnvList = $('project-env-list');
+const projectEnvAddButton = $<HTMLButtonElement>('project-env-add');
+const projectConfigSaveButton = $<HTMLButtonElement>('project-config-save');
+const projectConfigStatus = $('project-config-status');
 const sessionSearchInput = $<HTMLInputElement>('session-search');
 let sessionCache: SessionEntry[] = [];
 const collapsedSessionGroups = new Set<string>();
@@ -1224,6 +1271,14 @@ const aboutElectron = $('about-electron');
 const aboutPlatform = $('about-platform');
 const openProviderSettingsButton = $<HTMLButtonElement>('open-provider-settings');
 const copyDiagnosticsButton = $<HTMLButtonElement>('copy-diagnostics');
+const projectDefaultsSaveButton = $<HTMLButtonElement>('project-defaults-save');
+const projectDefaultsModelInput = $<HTMLInputElement>('project-defaults-model');
+const projectDefaultsThinkingSelect = $<HTMLSelectElement>('project-defaults-thinking');
+const projectDefaultsPresetSelect = $<HTMLSelectElement>('project-defaults-preset');
+const projectDefaultsAutoApprove = $<HTMLInputElement>('project-defaults-auto-approve');
+const projectDefaultsWorkspaceOnly = $<HTMLInputElement>('project-defaults-workspace-only');
+const projectDefaultsMemorySkill = $<HTMLInputElement>('project-defaults-memory-skill');
+const projectDefaultsStatus = $('project-defaults-status');
 
 let appVersion = '';
 let appElectron = '';
@@ -1382,6 +1437,7 @@ function selectSettingsSection(id: string): void {
   animatePaneEntry(shown, from === to || from < 0 ? 0 : to > from ? 1 : -1);
   if (id === 'settings-tab-market') panels?.refreshMarket();
   if (id === 'settings-tab-provider') void refreshProviders();
+  if (id === 'settings-tab-project') void refreshAppDefaults();
   if (id === 'settings-tab-about') void loadAppInfo();
 }
 
@@ -1787,8 +1843,188 @@ document.querySelectorAll<HTMLButtonElement>('.workspace-tabs [role=tab]').forEa
   });
 });
 
+let activeProjectConfigCwd = '';
+let activeProjectConfig: ProjectConfigResult | null = null;
+let projectConfigReady: Promise<void> = Promise.resolve();
+
+function clearProjectConfigForm(): void {
+  projectConfigModelInput.value = '';
+  projectConfigThinkingSelect.value = '';
+  projectConfigAutoStartSelect.value = 'follow';
+  projectEnvList.replaceChildren();
+  projectConfigStatus.textContent = '';
+  projectConfigModelInput.disabled = true;
+  projectConfigThinkingSelect.disabled = true;
+  projectConfigAutoStartSelect.disabled = true;
+  projectConfigSaveButton.disabled = true;
+  projectEnvAddButton.disabled = true;
+}
+
+function addProjectEnvRow(name = '', value = ''): void {
+  const row = document.createElement('div');
+  row.className = 'project-env-row';
+  const nameInput = document.createElement('input');
+  nameInput.className = 'project-env-name';
+  nameInput.type = 'text';
+  nameInput.spellcheck = false;
+  nameInput.placeholder = 'KEY';
+  nameInput.setAttribute('aria-label', t('环境变量名'));
+  nameInput.value = name;
+  const valueInput = document.createElement('input');
+  valueInput.className = 'project-env-value';
+  valueInput.type = 'password';
+  valueInput.autocomplete = 'new-password';
+  valueInput.spellcheck = false;
+  valueInput.placeholder = t('值（仅本机保存）');
+  valueInput.setAttribute('aria-label', t('环境变量值'));
+  valueInput.value = value;
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'icon-button project-env-remove';
+  remove.textContent = '×';
+  remove.title = t('移除');
+  remove.setAttribute('aria-label', t('移除'));
+  remove.addEventListener('click', () => row.remove());
+  row.append(nameInput, valueInput, remove);
+  projectEnvList.append(row);
+}
+
+function renderProjectConfig(result: ProjectConfigResult): void {
+  const config = result.config;
+  projectConfigModelInput.value = config?.model ?? '';
+  projectConfigThinkingSelect.value = config?.thinking ?? '';
+  projectConfigAutoStartSelect.value = config?.autoStart === true ? 'auto' : config?.autoStart === false ? 'manual' : 'follow';
+  projectEnvList.replaceChildren();
+  for (const [name, value] of Object.entries(result.env ?? {})) addProjectEnvRow(name, value);
+  projectConfigStatus.textContent = result.error
+    ? t(result.error)
+    : config?.updatedAt
+      ? t('已保存项目配置 · {time}', { time: new Date(config.updatedAt).toLocaleString() })
+      : '';
+  projectConfigSaveButton.disabled = false;
+  projectEnvAddButton.disabled = false;
+  projectConfigModelInput.disabled = false;
+  projectConfigThinkingSelect.disabled = false;
+  projectConfigAutoStartSelect.disabled = false;
+}
+
+async function loadProjectConfig(cwd: string): Promise<void> {
+  try {
+    const result = await api.getProjectConfig(cwd);
+    if (cwd !== currentCwd) return;
+    activeProjectConfig = result.ok ? result : null;
+    activeProjectConfigCwd = result.ok ? cwd : '';
+    renderProjectConfig(result);
+  } catch (error) {
+    if (cwd !== currentCwd) return;
+    activeProjectConfig = null;
+    activeProjectConfigCwd = '';
+    clearProjectConfigForm();
+    projectConfigStatus.textContent = t('项目配置加载失败：{error}', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function saveProjectConfigForm(): Promise<void> {
+  if (!currentCwd) {
+    toast('先选择项目目录');
+    return;
+  }
+  const env: Record<string, string> = {};
+  for (const row of Array.from(projectEnvList.querySelectorAll<HTMLElement>('.project-env-row'))) {
+    const name = row.querySelector<HTMLInputElement>('.project-env-name')?.value.trim() ?? '';
+    const value = row.querySelector<HTMLInputElement>('.project-env-value')?.value ?? '';
+    if (!name && !value) continue;
+    if (!name) {
+      toast('环境变量名不能为空');
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(env, name)) {
+      toast('环境变量名不能重复：{name}', { name });
+      return;
+    }
+    env[name] = value;
+  }
+  projectConfigSaveButton.disabled = true;
+  try {
+    const result = await api.saveProjectConfig({
+      cwd: currentCwd,
+      model: projectConfigModelInput.value.trim(),
+      thinking: projectConfigThinkingSelect.value,
+      autoStart: projectConfigAutoStartSelect.value as 'follow' | 'auto' | 'manual',
+      env,
+    });
+    if (!result.ok) {
+      projectConfigStatus.textContent = t(result.error ?? '保存失败');
+      toast('保存失败：{error}', { error: t(result.error ?? '未知错误') });
+      return;
+    }
+    activeProjectConfig = result;
+    activeProjectConfigCwd = currentCwd;
+    renderProjectConfig(result);
+    toast('项目配置已保存');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    projectConfigStatus.textContent = t('保存失败：{error}', { error: message });
+    toast('保存失败：{error}', { error: message });
+  } finally {
+    projectConfigSaveButton.disabled = false;
+  }
+}
+
+function applyAppDefaults(defaults: AppDefaults): void {
+  projectDefaultsModelInput.value = defaults.model;
+  projectDefaultsThinkingSelect.value = defaults.thinking;
+  projectDefaultsPresetSelect.value = defaults.permissionPreset;
+  projectDefaultsAutoApprove.checked = defaults.autoApprove;
+  projectDefaultsWorkspaceOnly.checked = defaults.workspaceOnly;
+  projectDefaultsMemorySkill.checked = defaults.memorySkill;
+}
+
+async function refreshAppDefaults(): Promise<void> {
+  try {
+    applyAppDefaults(await api.getAppDefaults());
+  } catch (error) {
+    projectDefaultsStatus.textContent = t('读取默认值失败：{error}', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function saveProjectDefaults(): Promise<void> {
+  projectDefaultsSaveButton.disabled = true;
+  try {
+    const result = await api.saveAppDefaults({
+      permissionPreset: projectDefaultsPresetSelect.value as AppDefaults['permissionPreset'],
+      autoApprove: projectDefaultsAutoApprove.checked,
+      workspaceOnly: projectDefaultsWorkspaceOnly.checked,
+      model: projectDefaultsModelInput.value.trim(),
+      thinking: projectDefaultsThinkingSelect.value as ThinkingLevel | '',
+      memorySkill: projectDefaultsMemorySkill.checked,
+    });
+    if (!result.ok) {
+      projectDefaultsStatus.textContent = t('保存失败：{error}', { error: t(result.error ?? '未知错误') });
+      return;
+    }
+    if (result.defaults) applyAppDefaults(result.defaults);
+    projectDefaultsStatus.textContent = t('项目默认值已保存');
+    toast('项目默认值已保存');
+  } catch (error) {
+    projectDefaultsStatus.textContent = t('保存失败：{error}', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    projectDefaultsSaveButton.disabled = false;
+  }
+}
+
 function setProject(cwd: string): void {
   currentCwd = cwd;
+  activeProjectConfig = null;
+  activeProjectConfigCwd = '';
+  clearProjectConfigForm();
+  projectConfigReady = loadProjectConfig(cwd);
   const key = keyFor(cwd);
   expandedProjects.add(key);
   const live = liveByKey.get(key);
@@ -2149,6 +2385,10 @@ async function createDesktopShortcut(): Promise<void> {
 }
 
 function autoStartEnabled(): boolean {
+  const config = activeProjectConfig?.config;
+  if (currentCwd && activeProjectConfigCwd === currentCwd && typeof config?.autoStart === 'boolean') {
+    return config.autoStart;
+  }
   return autoStartCheckbox.checked;
 }
 
@@ -2163,6 +2403,7 @@ function rememberLastProject(cwd: string): void {
 async function openExternalProject(projectPath: string): Promise<void> {
   setProject(projectPath);
   void refreshProjects();
+  await projectConfigReady;
   const live = liveByKey.get(keyFor(projectPath));
   if (autoStartEnabled() && !versionMissing && live?.status !== 'running') void startSession();
 }
@@ -5576,6 +5817,15 @@ startButton.addEventListener('click', () => {
   void startSession();
 });
 
+projectEnvAddButton.addEventListener('click', () => addProjectEnvRow());
+projectConfigSaveButton.addEventListener('click', () => void saveProjectConfigForm());
+projectDefaultsSaveButton.addEventListener('click', () => void saveProjectDefaults());
+projectDefaultsPresetSelect.addEventListener('change', () => {
+  projectDefaultsWorkspaceOnly.checked = projectDefaultsPresetSelect.value !== 'full-access';
+});
+projectConfigSaveButton.disabled = true;
+projectEnvAddButton.disabled = true;
+
 stopButton.addEventListener('click', async () => {
   await api.stopPi(activeLiveKey());
 });
@@ -6074,8 +6324,12 @@ void (async () => {
       setProject(lastProject);
       void refreshProjects();
     }
-    if (autoStartEnabled() && currentCwd && !versionMissing) void startSession();
+    // 项目配置里的「启动方式」优先于全局开关，等配置读取完再决定是否自动启动。
+    void projectConfigReady.then(() => {
+      if (autoStartEnabled() && currentCwd && !versionMissing) void startSession();
+    });
   }
+  void refreshAppDefaults();
   if (new URLSearchParams(window.location.search).has('smokeCwd')) {
     (window as unknown as { __piSmoke?: unknown }).__piSmoke = {
       attach: (item: MediaItem) => addAttachments([item]),

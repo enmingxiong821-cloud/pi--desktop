@@ -9,7 +9,8 @@
     "协作",
     "能力",
     "会话",
-    "搜索"
+    "搜索",
+    "安全"
   ],
   "state": "未启动",
   "model": "模型 —",
@@ -40,7 +41,7 @@
     "×"
   ],
   "moduleBindingLabel": "本项目模型",
-  "moduleBindingValue": "m-mvdl8puv-o391",
+  "moduleBindingValue": "m-mvdq34a3-lkfg",
   "moduleBindingOptions": [
     "Pi 默认",
     "快速修复 · demo/mini"

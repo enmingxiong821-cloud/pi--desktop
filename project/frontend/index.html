@@ -100,6 +100,43 @@
             <label class="toggle"><input type="checkbox" id="isolated-mode"> <span data-i18n="隔离模式">隔离模式</span></label>
             <p id="mode-note" class="note" data-i18n="真实配置：使用本机 Pi 配置与授权，扩展/MCP/Skills 全部加载；对话可能联网并产生费用。">真实配置：使用本机 Pi 配置与授权，扩展/MCP/Skills 全部加载；对话可能联网并产生费用。</p>
           </details>
+          <details id="project-config-drawer" class="drawer project-config">
+            <summary data-i18n="项目配置">项目配置</summary>
+            <p class="note" data-i18n="这些设置随项目保存在 .pi/workbench.json，可随仓库共享；环境变量只保存在本机，不写入项目文件。">这些设置随项目保存在 .pi/workbench.json，可随仓库共享；环境变量只保存在本机，不写入项目文件。</p>
+            <label class="field">
+              <span data-i18n="默认模型">默认模型</span>
+              <input id="project-config-model" type="text" spellcheck="false" placeholder="provider/model，例如 openai/gpt-5.4" data-i18n-placeholder="provider/model，例如 openai/gpt-5.4">
+            </label>
+            <label class="field">
+              <span data-i18n="推理度">推理度</span>
+              <select id="project-config-thinking" aria-label="项目默认推理度" data-i18n-aria-label="项目默认推理度">
+                <option value="" data-i18n="跟随应用默认">跟随应用默认</option>
+                <option value="off" data-i18n="关闭（最快）">关闭（最快）</option>
+                <option value="minimal" data-i18n="极低">极低</option>
+                <option value="low" data-i18n="低">低</option>
+                <option value="medium" data-i18n="中">中</option>
+                <option value="high" data-i18n="高">高</option>
+                <option value="xhigh" data-i18n="极高">极高</option>
+                <option value="max" data-i18n="最高（最慢）">最高（最慢）</option>
+              </select>
+            </label>
+            <label class="field">
+              <span data-i18n="启动方式">启动方式</span>
+              <select id="project-config-autostart" aria-label="项目启动方式" data-i18n-aria-label="项目启动方式">
+                <option value="follow" data-i18n="跟随全局自动启动">跟随全局自动启动</option>
+                <option value="auto" data-i18n="打开项目时自动启动">打开项目时自动启动</option>
+                <option value="manual" data-i18n="仅手动启动">仅手动启动</option>
+              </select>
+            </label>
+            <div class="group-label"><span data-i18n="环境变量">环境变量</span></div>
+            <div id="project-env-list" class="project-env-list"></div>
+            <button id="project-env-add" class="ghost" type="button" data-i18n="添加变量">添加变量</button>
+            <div class="dock-toolbar">
+              <button id="project-config-save" class="primary" type="button" data-i18n="保存项目配置">保存项目配置</button>
+            </div>
+            <p id="project-config-status" class="note"></p>
+            <p class="note" data-i18n="环境变量只在启动 Pi 时注入；值以密码形式输入，工作台不会写入日志或项目文件。">环境变量只在启动 Pi 时注入；值以密码形式输入，工作台不会写入日志或项目文件。</p>
+          </details>
         </section>
 
         <section id="pane-model" role="tabpanel" class="pane" hidden>
@@ -1062,6 +1099,7 @@
       <div class="settings-layout">
         <nav class="settings-nav" role="tablist" aria-label="设置分类" data-i18n-aria-label="设置分类">
           <button role="tab" id="settings-tab-general" aria-controls="pane-settings" aria-selected="true" data-i18n="通用">通用</button>
+          <button role="tab" id="settings-tab-project" aria-controls="pane-project-defaults" aria-selected="false" data-i18n="项目默认">项目默认</button>
           <button role="tab" id="settings-tab-provider" aria-controls="pane-provider" aria-selected="false" data-i18n="接入">接入</button>
           <button role="tab" id="settings-tab-market" aria-controls="pane-market" aria-selected="false" data-i18n="市场">市场</button>
           <button role="tab" id="settings-tab-about" aria-controls="pane-about" aria-selected="false" data-i18n="关于">关于</button>
@@ -1176,6 +1214,46 @@
       <div id="update-list" class="update-list"></div>
       <p class="note" data-i18n="工作台更新来自 GitHub Releases，Pi 更新来自 npm。下载与安装都需要你点击确认；自动下载只在发现新版本时把安装包存到 Downloads/Pi-Workbench-updates。">工作台更新来自 GitHub Releases，Pi 更新来自 npm。下载与安装都需要你点击确认；自动下载只在发现新版本时把安装包存到 Downloads/Pi-Workbench-updates。</p>
     </div>
+  </section>
+  <section id="pane-project-defaults" role="tabpanel" class="pane" hidden>
+    <div class="pane-head">
+      <span class="summary" data-i18n="项目默认值">项目默认值</span>
+      <button id="project-defaults-save" class="primary" data-i18n="保存项目默认">保存项目默认</button>
+    </div>
+    <p class="note" data-i18n="新项目在没有自己的 .pi/workbench.json 或权限文件时使用这些默认值；已保存的项目配置优先。">新项目在没有自己的 .pi/workbench.json 或权限文件时使用这些默认值；已保存的项目配置优先。</p>
+    <label class="field">
+      <span data-i18n="默认模型">默认模型</span>
+      <input id="project-defaults-model" type="text" spellcheck="false" placeholder="provider/model；留空交给 Pi 选择" data-i18n-placeholder="provider/model；留空交给 Pi 选择">
+    </label>
+    <label class="field">
+      <span data-i18n="默认推理度">默认推理度</span>
+      <select id="project-defaults-thinking" aria-label="新项目默认推理度" data-i18n-aria-label="新项目默认推理度">
+        <option value="" data-i18n="Pi 默认">Pi 默认</option>
+        <option value="off" data-i18n="关闭（最快）">关闭（最快）</option>
+        <option value="minimal" data-i18n="极低">极低</option>
+        <option value="low" data-i18n="低">低</option>
+        <option value="medium" data-i18n="中">中</option>
+        <option value="high" data-i18n="高">高</option>
+        <option value="xhigh" data-i18n="极高">极高</option>
+        <option value="max" data-i18n="最高（最慢）">最高（最慢）</option>
+      </select>
+    </label>
+    <label class="field">
+      <span data-i18n="新项目权限预设">新项目权限预设</span>
+      <select id="project-defaults-preset" aria-label="新项目权限预设" data-i18n-aria-label="新项目权限预设">
+        <option value="readonly" data-i18n="只读">只读</option>
+        <option value="standard" data-i18n="标准">标准</option>
+        <option value="auto-edit" data-i18n="自动编辑">自动编辑</option>
+        <option value="full-auto" data-i18n="完全自动">完全自动</option>
+        <option value="full-access" data-i18n="完全访问">完全访问</option>
+      </select>
+    </label>
+    <label class="toggle"><input type="checkbox" id="project-defaults-auto-approve"> <span data-i18n="自动同意（新项目）">自动同意（新项目）</span></label>
+    <label class="toggle"><input type="checkbox" id="project-defaults-workspace-only" checked> <span data-i18n="自动模式仅允许写入项目目录">自动模式仅允许写入项目目录</span></label>
+    <div class="group-label"><span data-i18n="长期记忆">长期记忆</span></div>
+    <label class="toggle"><input type="checkbox" id="project-defaults-memory-skill" checked> <span data-i18n="启动时自动装配记忆 Skill">启动时自动装配记忆 Skill</span></label>
+    <p class="note" data-i18n="关闭只停止自动装配，不会删除已经安装的记忆 Skill 或已有记忆数据。">关闭只停止自动装配，不会删除已经安装的记忆 Skill 或已有记忆数据。</p>
+    <p id="project-defaults-status" class="note"></p>
   </section>
   <section id="pane-provider" role="tabpanel" class="pane" hidden>
     <div class="pane-head">

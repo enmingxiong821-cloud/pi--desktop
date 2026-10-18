@@ -2387,3 +2387,24 @@ body.settings-open { overflow: hidden; }
 .sev-tag-medium { color: #c9a54e; border-color: #6b5b34; }
 .sev-tag-low { color: #6c9bd1; border-color: #35506d; }
 .sev-tag-info { color: var(--muted); }
+
+/* ---------- 项目配置 ---------- */
+.project-config .note { margin: 0; }
+.project-env-list { display: flex; flex-direction: column; gap: 6px; }
+.project-env-list:empty { display: none; }
+.project-env-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.project-env-row input { min-width: 0; width: 100%; }
+.project-env-name, .project-env-value {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+}
+.project-env-remove { flex: none; }
+@media (max-width: 520px) {
+  .project-env-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .project-env-name { grid-column: 1 / -1; }
+}

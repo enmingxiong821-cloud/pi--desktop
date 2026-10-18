@@ -71,6 +71,8 @@ import {
 } from './pentest.js';
 import type { AuthorizationInput } from './security-guard.js';
 import { applyGlobalTokenSavings, usageReport } from './usage.js';
+import { configureAppDefaults, loadAppDefaults, saveAppDefaults } from './app-defaults.js';
+import { configureProjectConfig, readProjectConfig, saveProjectConfig } from './project-config.js';
 
 interface ProjectRecord {
   path: string;
@@ -364,6 +366,14 @@ function startSession(options: StartOptions): { ok: boolean; key?: string; isola
       throw new Error(t('推理度无效'));
     }
 
+    // 优先级：本次启动显式选择 > 项目配置 > 应用默认值。
+    const projectConfig = readProjectConfig(options.cwd);
+    const project = projectConfig.ok ? projectConfig.config : undefined;
+    const defaults = loadAppDefaults();
+    const launchModel = model || project?.model || defaults.model;
+    const launchThinking = thinking || project?.thinking || defaults.thinking;
+    const projectEnv = projectConfig.ok ? projectConfig.env : undefined;
+
     const next = spawnPi({
       cwd: options.cwd,
       cols: Number(options.cols) || 120,
@@ -371,8 +381,9 @@ function startSession(options: StartOptions): { ok: boolean; key?: string; isola
       agentDir,
       isolated,
       sessionPath,
-      model: model || undefined,
-      thinking: thinking || undefined,
+      model: launchModel || undefined,
+      thinking: launchThinking || undefined,
+      env: projectEnv,
     });
     const live: LiveSession = {
       session: next,
@@ -1376,6 +1387,20 @@ ipcMain.handle('env:update-pi', () => updatePi());
 
 ipcMain.handle('permissions:get', (_event, cwd: unknown) => readProjectPermissions(cwd));
 ipcMain.handle('permissions:save', (_event, input: unknown) => saveProjectPermissions(input));
+ipcMain.handle('project:config', (_event, cwd: unknown) => readProjectConfig(cwd));
+ipcMain.handle('project:config-save', (_event, input: unknown) => saveProjectConfig(input));
+ipcMain.handle('app:defaults', () => loadAppDefaults());
+ipcMain.handle('app:defaults-save', (_event, input: unknown) => {
+  const result = saveAppDefaults(input);
+  if (result.ok && result.defaults?.memorySkill) {
+    try {
+      ensureMemorySkill();
+    } catch {
+      // 记忆 Skill 装配失败不影响默认值保存
+    }
+  }
+  return result;
+});
 ipcMain.handle('permissions:guard', () => ({
   ...installPermissionGuard(),
   installed: guardInstalled(),
@@ -1573,10 +1598,14 @@ if (!singleInstance) {
     configureCustomAgents(path.join(app.getPath('userData'), 'custom-agents.json'));
     configureCustomApps(path.join(app.getPath('userData'), 'custom-apps.json'));
     configureCustomLinks(path.join(app.getPath('userData'), 'custom-links.json'));
-    try {
-      ensureMemorySkill();
-    } catch {
-      // 记忆 Skill 装配失败不阻塞启动
+    configureAppDefaults(app.getPath('userData'));
+    configureProjectConfig(app.getPath('userData'));
+    if (loadAppDefaults().memorySkill) {
+      try {
+        ensureMemorySkill();
+      } catch {
+        // 记忆 Skill 装配失败不阻塞启动
+      }
     }
     try {
       ensureBundledSkills();

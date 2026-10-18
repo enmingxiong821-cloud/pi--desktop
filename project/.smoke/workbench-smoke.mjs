@@ -455,6 +455,40 @@ ipcMain.handle('permissions:save', (_e, input) => { record('savePermissions', in
   return { ok: true, permissions: { version: 1, project: input.cwd, updatedAt: new Date().toISOString(), rules: input.rules, allowPaths: input.allowPaths ?? [], denyPaths: input.denyPaths ?? [], workspaceOnly: input.workspaceOnly !== false, autoApprove: input.autoApprove === true } }; });
 ipcMain.handle('permissions:guard-status', () => ({ installed: false, path: 'C:\\Users\\smoke\\.pi\\agent\\extensions\\workbench-permissions.ts' }));
 ipcMain.handle('permissions:guard', () => ({ ok: true, installed: true, path: 'C:\\Users\\smoke\\.pi\\agent\\extensions\\workbench-permissions.ts' }));
+
+const stubAppDefaults = {
+  version: 1, permissionPreset: 'standard', autoApprove: false, workspaceOnly: true,
+  model: '', thinking: '', memorySkill: true,
+};
+ipcMain.handle('app:defaults', () => stubAppDefaults);
+ipcMain.handle('app:defaults-save', (_e, input) => {
+  record('saveAppDefaults', input);
+  return { ok: true, defaults: { ...stubAppDefaults, ...input } };
+});
+ipcMain.handle('project:config', (_e, cwd) => ({
+  ok: true,
+  path: path.join(cwd, '.pi', 'workbench.json'),
+  envPath: 'C:\\Users\\smoke\\project-env.json',
+  config: {
+    version: 1, project: cwd, updatedAt: '2026-01-01T00:00:00.000Z',
+    model: 'openai/gpt-5', thinking: 'medium', autoStart: null,
+  },
+  env: { SMOKE_TOKEN: 'secret' },
+}));
+ipcMain.handle('project:config-save', (_e, input) => {
+  record('saveProjectConfig', input);
+  const autoStart = input.autoStart === 'auto' ? true : input.autoStart === 'manual' ? false : null;
+  return {
+    ok: true,
+    path: path.join(input.cwd, '.pi', 'workbench.json'),
+    envPath: 'C:\\Users\\smoke\\project-env.json',
+    config: {
+      version: 1, project: input.cwd, updatedAt: new Date().toISOString(),
+      model: input.model ?? '', thinking: input.thinking ?? '', autoStart,
+    },
+    env: input.env ?? {},
+  };
+});
 ipcMain.handle('archives:list', (_e, cwd) => ({ ok: true, archives: [{
   id: '20260101-000000-abcdef', label: 'smoke snapshot', project: cwd, createdAt: '2026-01-01T00:00:00.000Z',
   branch: 'main', head: 'abc1234', changedFiles: 2, untrackedFiles: 1, patchBytes: 1200, untrackedBytes: 300,
@@ -591,6 +625,46 @@ async function run() {
   expect(dockState.presetColumns === 2, `permission presets use two columns (${dockState.presetColumns})`);
   expect(dockState.helpOpen === false, 'auto-approve help stays collapsed');
 
+  const projectConfigState = JSON.parse(await js(`JSON.stringify({
+    drawer: Boolean(document.querySelector('#project-config-drawer')),
+    model: document.getElementById('project-config-model').value,
+    thinking: document.getElementById('project-config-thinking').value,
+    autoStart: document.getElementById('project-config-autostart').value,
+    envName: document.querySelector('#project-env-list .project-env-name')?.value,
+    envType: document.querySelector('#project-env-list .project-env-value')?.type,
+    envValue: document.querySelector('#project-env-list .project-env-value')?.value,
+    saveDisabled: document.getElementById('project-config-save').disabled,
+    status: document.getElementById('project-config-status').textContent,
+  })`));
+  expect(projectConfigState.drawer, 'project configuration drawer rendered');
+  expect(projectConfigState.model === 'openai/gpt-5', `project model loaded (${projectConfigState.model})`);
+  expect(projectConfigState.thinking === 'medium', `project thinking loaded (${projectConfigState.thinking})`);
+  expect(projectConfigState.autoStart === 'follow', `project launch mode loaded (${projectConfigState.autoStart})`);
+  expect(projectConfigState.envName === 'SMOKE_TOKEN', `project env name rendered (${projectConfigState.envName})`);
+  expect(projectConfigState.envType === 'password', `project env value stays masked (${projectConfigState.envType})`);
+  expect(projectConfigState.envValue === 'secret', 'project env value filled for editing');
+  expect(projectConfigState.saveDisabled === false, 'project config becomes editable after load');
+  expect(projectConfigState.status.includes('已保存'), `project config timestamp rendered (${projectConfigState.status})`);
+  await js(`document.getElementById('project-config-drawer').open = true`);
+  await js(`document.getElementById('project-config-drawer').scrollIntoView({ block: 'start' })`);
+  await settleForCapture();
+  await wait(150);
+  await capture('workbench-project-config.png');
+  await js(`document.getElementById('project-config-drawer').open = false`);
+
+  await js(`(() => {
+    document.getElementById('project-config-model').value = 'demo/demo-mini';
+    document.getElementById('project-config-autostart').value = 'manual';
+    document.getElementById('project-env-add').click();
+    document.getElementById('project-config-save').click();
+  })()`);
+  await wait(300);
+  const projectConfigSave = [...calls].reverse().find(([name]) => name === 'saveProjectConfig')?.[1];
+  expect(projectConfigSave?.model === 'demo/demo-mini', `project model saved (${projectConfigSave?.model})`);
+  expect(projectConfigSave?.autoStart === 'manual', `project launch mode saved (${projectConfigSave?.autoStart})`);
+  expect(projectConfigSave?.env?.SMOKE_TOKEN === 'secret', 'project env saved');
+  expect(Object.keys(projectConfigSave?.env ?? {}).length === 1, 'blank env row is skipped');
+
   const packState = JSON.parse(await js(`JSON.stringify({
     toolbar: Boolean(document.querySelector('#capability-packs .pack-toolbar')),
     groups: document.querySelectorAll('#capability-packs .pack-group').length,
@@ -699,6 +773,42 @@ async function run() {
   expect(updateState.inSettings, 'update controls live in the settings pane');
   expect(updateState.items === 2, `update list shows app and Pi (${updateState.items})`);
   expect(updateState.downloadVisible, 'download button appears when an asset exists');
+
+  // 设置 → 项目默认：应用级默认值与新项目权限预设
+  await js(`document.getElementById('open-settings').click()`);
+  await js(`document.getElementById('settings-tab-project').click()`);
+  await wait(300);
+  const defaultState = JSON.parse(await js(`JSON.stringify({
+    visible: document.getElementById('pane-project-defaults').hidden === false,
+    model: document.getElementById('project-defaults-model').value,
+    thinking: document.getElementById('project-defaults-thinking').value,
+    preset: document.getElementById('project-defaults-preset').value,
+    autoApprove: document.getElementById('project-defaults-auto-approve').checked,
+    workspaceOnly: document.getElementById('project-defaults-workspace-only').checked,
+    memorySkill: document.getElementById('project-defaults-memory-skill').checked,
+    save: Boolean(document.getElementById('project-defaults-save')),
+  })`));
+  expect(defaultState.visible, 'project defaults pane opens from settings');
+  expect(defaultState.model === '' && defaultState.thinking === '', 'default model and thinking start empty');
+  expect(defaultState.preset === 'standard', `standard permission preset is the default (${defaultState.preset})`);
+  expect(defaultState.autoApprove === false, 'default auto-approve is off');
+  expect(defaultState.workspaceOnly === true, 'default workspace boundary is on');
+  expect(defaultState.memorySkill === true, 'memory skill is installed by default');
+  expect(defaultState.save, 'project defaults save button rendered');
+  await settleForCapture();
+  await capture('workbench-project-defaults.png');
+  await js(`(() => {
+    const preset = document.getElementById('project-defaults-preset');
+    preset.value = 'full-access';
+    preset.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('project-defaults-save').click();
+  })()`);
+  await wait(300);
+  const defaultSave = [...calls].reverse().find(([name]) => name === 'saveAppDefaults')?.[1];
+  expect(defaultSave?.permissionPreset === 'full-access', `default preset saved (${defaultSave?.permissionPreset})`);
+  expect(defaultSave?.workspaceOnly === false, 'full access preset lifts the default boundary');
+  expect(defaultSave?.memorySkill === true, 'memory skill choice saved');
+  await js(`document.getElementById('settings-close').click()`);
 
   // 从其他编辑器导入最近项目
   await js(`document.getElementById('import-projects-drawer').open = true`);

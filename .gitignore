@@ -17,6 +17,11 @@ bin-release/
 # should NOT be excluded as they contain compiler settings and other important
 # information for Eclipse / Flash Builder.
 
-# Internal assistant workspaces
+# Local tool workspaces
 .opencode/
+.claude/
 .github/instructions/
+
+# Local tool caches
+.ruff_cache/
+__pycache__/

@@ -1,6 +1,7 @@
 // 项目权限策略：按项目保存到 .pi/workbench-permissions.json，供工作台与 Pi 启动时读取。
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { loadAppDefaults, permissionPresetRules } from './app-defaults.js';
 import { realAgentDir } from './config.js';
 import { t } from './i18n.js';
 
@@ -59,9 +60,9 @@ function cleanPaths(value: unknown): string[] {
     .slice(0, 100);
 }
 
-function cleanRules(value: unknown): PermissionRules {
+function cleanRules(value: unknown, base: PermissionRules = DEFAULTS): PermissionRules {
   const source = value !== null && typeof value === 'object' ? value as Record<string, unknown> : {};
-  const rules = { ...DEFAULTS };
+  const rules = { ...base };
   for (const key of Object.keys(DEFAULTS) as (keyof PermissionRules)[]) {
     const level = source[key];
     if (typeof level === 'string' && LEVELS.includes(level as PermissionLevel)) {
@@ -76,13 +77,15 @@ export function readProjectPermissions(cwd: unknown): PermissionResult {
   const root = path.resolve(cwd);
   if (!existsSync(root)) return { ok: false, error: t('项目目录不存在') };
   const file = projectFile(root);
+  // 没有项目权限文件时，新项目使用应用设置里的默认预设。
+  const defaults = loadAppDefaults();
   const fallback: ProjectPermissions = {
     version: 1,
     project: root,
     updatedAt: '',
-    rules: { ...DEFAULTS },
-    workspaceOnly: true,
-    autoApprove: false,
+    rules: permissionPresetRules(defaults.permissionPreset),
+    workspaceOnly: defaults.workspaceOnly,
+    autoApprove: defaults.autoApprove,
     allowPaths: [],
     denyPaths: [],
   };
@@ -114,11 +117,12 @@ export function saveProjectPermissions(input: unknown): PermissionResult {
   if (!cwd.trim()) return { ok: false, error: t('先选择项目目录') };
   const root = path.resolve(cwd);
   if (!existsSync(root)) return { ok: false, error: t('项目目录不存在') };
+  const defaults = loadAppDefaults();
   const permissions: ProjectPermissions = {
     version: 1,
     project: root,
     updatedAt: new Date().toISOString(),
-    rules: cleanRules(source.rules),
+    rules: cleanRules(source.rules, permissionPresetRules(defaults.permissionPreset)),
     workspaceOnly: source.workspaceOnly !== false,
     autoApprove: source.autoApprove === true,
     allowPaths: cleanPaths(source.allowPaths),
